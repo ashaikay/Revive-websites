@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initFAQAccordion();
   initQuoteForm();
   initSmoothScroll();
+  initVideoPlayer();
 });
 
 // =============================================
@@ -438,6 +439,166 @@ if (typeof module !== 'undefined' && module.exports) {
     initScrollReveal,
     initFAQAccordion,
     initQuoteForm,
-    initSmoothScroll
+    initSmoothScroll,
+    initVideoPlayer
   };
+}
+
+// =============================================
+// VIDEO PLAYER CONTROLS
+// =============================================
+
+function initVideoPlayer() {
+  const video = document.getElementById('showcase-video');
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  const bigPlayBtn = document.getElementById('bigPlayBtn');
+  const videoOverlay = document.getElementById('videoOverlay');
+  const muteBtn = document.getElementById('muteBtn');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const progressBar = document.getElementById('progressBar');
+  const videoProgress = document.querySelector('.video-progress');
+  const videoTime = document.getElementById('videoTime');
+  const videoWrapper = document.querySelector('.video-wrapper');
+
+  if (!video) return;
+
+  // Play/Pause functionality
+  function togglePlay() {
+    if (video.paused) {
+      video.play();
+    } else {
+      video.pause();
+    }
+  }
+
+  // Update play/pause button icons
+  function updatePlayButton() {
+    const playIcon = playPauseBtn.querySelector('.play-icon');
+    const pauseIcon = playPauseBtn.querySelector('.pause-icon');
+    
+    if (video.paused) {
+      playIcon.classList.remove('hidden');
+      pauseIcon.classList.add('hidden');
+      videoOverlay.classList.remove('hidden');
+      videoWrapper.classList.remove('playing');
+    } else {
+      playIcon.classList.add('hidden');
+      pauseIcon.classList.remove('hidden');
+      videoOverlay.classList.add('hidden');
+      videoWrapper.classList.add('playing');
+    }
+  }
+
+  // Format time in M:SS format
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Update progress bar and time display
+  function updateProgress() {
+    const percent = (video.currentTime / video.duration) * 100;
+    progressBar.style.width = `${percent}%`;
+    videoTime.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+  }
+
+  // Seek video on progress bar click
+  function seekVideo(e) {
+    const rect = videoProgress.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    video.currentTime = percent * video.duration;
+  }
+
+  // Toggle mute
+  function toggleMute() {
+    video.muted = !video.muted;
+    const volumeIcon = muteBtn.querySelector('.volume-icon');
+    const mutedIcon = muteBtn.querySelector('.muted-icon');
+    
+    if (video.muted) {
+      volumeIcon.classList.add('hidden');
+      mutedIcon.classList.remove('hidden');
+    } else {
+      volumeIcon.classList.remove('hidden');
+      mutedIcon.classList.add('hidden');
+    }
+  }
+
+  // Toggle fullscreen
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      if (videoWrapper.requestFullscreen) {
+        videoWrapper.requestFullscreen();
+      } else if (videoWrapper.webkitRequestFullscreen) {
+        videoWrapper.webkitRequestFullscreen();
+      } else if (videoWrapper.mozRequestFullScreen) {
+        videoWrapper.mozRequestFullScreen();
+      } else if (videoWrapper.msRequestFullscreen) {
+        videoWrapper.msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+    }
+  }
+
+  // Event listeners
+  playPauseBtn?.addEventListener('click', togglePlay);
+  bigPlayBtn?.addEventListener('click', togglePlay);
+  videoOverlay?.addEventListener('click', togglePlay);
+  muteBtn?.addEventListener('click', toggleMute);
+  fullscreenBtn?.addEventListener('click', toggleFullscreen);
+  videoProgress?.addEventListener('click', seekVideo);
+  
+  video.addEventListener('play', updatePlayButton);
+  video.addEventListener('pause', updatePlayButton);
+  video.addEventListener('timeupdate', updateProgress);
+  video.addEventListener('loadedmetadata', () => {
+    videoTime.textContent = `0:00 / ${formatTime(video.duration)}`;
+  });
+  
+  // Reset on video end
+  video.addEventListener('ended', () => {
+    video.currentTime = 0;
+    updatePlayButton();
+  });
+
+  // Keyboard controls
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    const videoSection = document.querySelector('.video-showcase');
+    const rect = videoSection?.getBoundingClientRect();
+    const isVisible = rect && rect.top < window.innerHeight && rect.bottom > 0;
+    
+    if (isVisible) {
+      switch (e.key.toLowerCase()) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'm':
+          toggleMute();
+          break;
+        case 'f':
+          toggleFullscreen();
+          break;
+        case 'arrowleft':
+          video.currentTime = Math.max(0, video.currentTime - 5);
+          break;
+        case 'arrowright':
+          video.currentTime = Math.min(video.duration, video.currentTime + 5);
+          break;
+      }
+    }
+  });
 }
