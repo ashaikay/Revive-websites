@@ -6,9 +6,11 @@ This repository contains the existing Revive Websites marketing website and the 
 
 The existing Revive marketing website is production-sensitive and must remain protected.
 
-The current development stage is:
+The current development stage must be determined from REVIVE_AI_MASTER.
 
-Phase 1 — Architecture
+Do not rely on a hardcoded phase number in this file.
+
+At the start of any substantial task, consult the current project-control documentation in REVIVE_AI_MASTER to identify the active phase, completed checkpoints, and next authorised work.
 
 The Phase 0 protection/baseline work has already been completed.
 
