@@ -1,5 +1,15 @@
 # Security Register
 
+## Phase 4C Durable Execution Control Plane - PRODUCTION APPLIED + VERIFIED
+
+- Durable dry-run attempts use workspace-scoped unique idempotency keys plus transaction advisory locking. Approval authority is bound to action version and deterministic material fingerprint.
+- Owner/admin are the only approval and preparation roles. Members retain proposal access but cannot authorize; viewers are read-only; suspended users, outsiders, and cross-tenant access are denied.
+- Missing workspace policy is disabled. New policy defaults are disabled, supervised, and zero-cost. Platform execution remains false independently of database state.
+- Ordinary authenticated clients cannot insert/update/delete execution evidence, provider usage, or audit evidence. Anonymous authority-table privileges are removed; backend result recording is service-role-only.
+- A client-set custom session variable was rejected as spoofable during review. Trusted transitions now use database-role provenance and explicit function ACLs.
+- Local attack matrix passed 42/42. Production-safe verification passed 25/25 after deployment, with all fixtures rolled back and protected quote/Telegram evidence unchanged.
+- No policy, execution attempt, provider usage, provider call, external communication, payment action, or production execution was created. Platform execution remains false.
+
 ## Phase 4B Trusted Execution Boundary Security - PASS (local/non-durable)
 
 - The trusted boundary accepts minimal identifiers and separately supplied authenticated actor context; it derives active membership/role, workspace-owned action, approval, capability, configuration, safety, jurisdiction, and cost inputs from trusted dependencies.

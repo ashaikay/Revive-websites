@@ -592,7 +592,22 @@
 - Focused Phase 4B tests passed 21/21; adjacent regression bundle passed 42/42; full suite passed 141/141; build passed; `npm audit` reported 0 vulnerabilities.
 - No migration, RLS change, Supabase deployment/write, provider call, external action, Execute control, legacy quote/Telegram, or `rev-business-verify` change occurred.
 
-**Stop condition:** Phase 4C is not started. Durable execution records, idempotency, approval binding, locking, audit persistence, and role-restricted database writes require explicit migration/security approval.
+## Phase 4C: Durable Execution Control Plane PRODUCTION APPLIED + VERIFIED
+
+**Date:** 2026-09-14
+**Production status:** Migration `20260914183000` applied and verified on `ntbowgutwyyhhnmkadlv`
+
+- Drafted additive workspace policy, action-version/approval-fingerprint, durable dry-run attempt, provider-usage, audit, RLS, ACL, trigger, and RPC controls.
+- Missing policy means disabled; defaults are `execution_enabled = false`, `always_ask`, and zero provider-cost ceilings.
+- Owner/admin may approve and prepare dry runs; members may propose ordinary work but cannot authorize; viewers are read-only; suspended users and outsiders are denied.
+- Local migration/catalog, 42/42 Auth/RLS/ACL attacks, adjacent regression, guarded and empty-state rollback, 7/7 focused tests, 148/148 full tests, build, and audit all passed.
+- Platform execution remains false. No provider, external action, Execute control, remote migration, production write, quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
+
+- Production-safe verification passed 25/25 inside a transaction ending in rollback; no fixtures, policies, execution attempts, or usage events persisted.
+- Protected quote/Telegram fingerprint and Telegram Edge Function metadata were unchanged before/after.
+- Final application validation passed 148/148 tests, build, and zero-vulnerability audit.
+
+**Stop condition:** Do not activate execution, a provider, external communication, payments, or an Execute control without separate explicit authorization.
 
 **Objective:** Build lead management and outreach workflow
 

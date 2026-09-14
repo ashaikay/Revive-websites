@@ -1,10 +1,16 @@
 # Risks and Blockers
 
+## Phase 4C production deployment - RESOLVED (APPLIED + VERIFIED)
+
+Migration `20260914183000` was applied once to the exact existing project after backup and preflight. Production verification passed 25/25 and protected quote/Telegram evidence was unchanged. No verification fixture persisted.
+
+Execution and providers remain disabled. The active blocker is capability activation: no real execution, provider, external communication, payment action, or Execute control is authorized. Once real execution, usage, approval-binding, or policy data exists, destructive rollback is prohibited; disable and forward-fix instead.
+
 ## Phase 4B trusted execution boundary - COMPLETE WITH EXPLICIT LIMITS
 
 The local boundary now derives workspace authority, action/approval state, capability, configuration, safety, jurisdiction, and cost before returning a non-executing dry-run envelope. Approval fingerprints prevent changed action content from reusing an old approval. Real execution and provider invocation remain disabled.
 
-Idempotency and approval fingerprints are currently in-memory/domain-only and do not survive process restart or coordinate multiple instances. Existing `rev_actions_tenant` and `approvals_tenant` policies also permit writes by any active member rather than execution-specific roles. Phase 4C must add reviewed durable records, uniqueness/locking, audit persistence, and role-restricted policies or trusted RPCs before any execution activation.
+Phase 4C now provides deployed durable records, uniqueness/locking, persisted approval binding, trusted audit writes, and role-specific policies/RPCs. Capability activation remains separately gated.
 
 ## Phase 3G commercial intelligence boundary - ACTIVE BY DESIGN
 

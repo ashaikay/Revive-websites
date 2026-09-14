@@ -27,10 +27,24 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 4B — Trusted Execution Boundary Complete (PASS). Trusted code now resolves workspace authority, action/approval state, configuration, capability, safety, jurisdiction, and cost before producing a non-executing dry-run envelope.
+Phase 4C — Execution Control Plane production migration applied and verified (PASS). Execution and providers remain disabled.
 
 ## Current Objective
-Establish a testable trust boundary for future execution while keeping provider invocation and real execution disabled.
+Hold at the Phase 4C checkpoint. Any first real REV capability, provider activation, external communication, or execution UI requires separate authorization.
+
+## Phase 4C Local Rehearsal
+- Drafted `20260914183000_rev_execution_control_plane.sql` and its guarded rollback companion.
+- Rehearsed only against local Supabase project `revive-app`; no linked push, remote SQL, or production mutation occurred.
+- Local attack matrix passed 42/42; catalog ACL/RLS audit, rollback evidence guard, empty-state rollback, adjacent attack regression, 7/7 focused tests, 148/148 full tests, build, and zero-vulnerability audit all passed.
+- Durable records remain dry-run infrastructure only. Platform execution is false, no provider was called, and no Execute control exists.
+- See `REVIVE_AI_MASTER/PHASE_4C_LOCAL_REHEARSAL_REPORT.md`.
+
+## Phase 4C Production Closeout
+- Applied only migration `20260914183000` to `Revive Websites` / `ntbowgutwyyhhnmkadlv` after a credential-safe production baseline.
+- Production security verification passed 25/25 and rolled back all transaction-local fixtures. Control-plane tables remain empty and workspace execution policies remain unseeded/default OFF.
+- Protected quote/Telegram before/after fingerprint matched exactly; Edge Function metadata was unchanged.
+- Full tests passed 148/148; build passed; `npm audit` reported 0 vulnerabilities.
+- `PLATFORM_EXECUTION_ENABLED = false`; no Execute button, provider call, external communication, payment action, or production execution attempt occurred.
 
 ## Phase 4B Closeout
 - Validation: 21/21 focused Phase 4B tests passed; adjacent approval/policy/control-centre bundle passed 42/42; full validation passed 141/141; build passed; `npm audit` reported 0 vulnerabilities.

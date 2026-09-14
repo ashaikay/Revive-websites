@@ -1,3 +1,10 @@
+## 2026-09-14 - Phase 4C Execution Control Plane (PRODUCTION APPLIED + VERIFIED)
+
+- Applied only `20260914183000_rev_execution_control_plane.sql` to `Revive Websites` / `ntbowgutwyyhhnmkadlv` after exact-target, migration-history, artifact-hash, execution-disable, and credential-safe backup gates passed.
+- Added disabled-by-default workspace policy, version/fingerprint-bound approvals, durable dry-run attempts, idempotency locking, cost ceilings, append-only usage/audit controls, role-specific RLS, and explicit ACLs.
+- Production-safe transaction-rolled-back verification passed 25/25; local attack matrix passed 42/42; focused contracts passed 7/7; full suite passed 148/148; build passed; audit reported 0 vulnerabilities.
+- Public quotes, quote indexes/RLS, Telegram trigger, and Telegram Edge Function were byte-fingerprint/version/hash unchanged. Execution and providers remain disabled; no Execute control, provider call, external communication, payment action, or production execution attempt occurred.
+
 ## 2026-09-14 - Phase 4B Trusted Execution Boundary (PASS; execution disabled)
 
 - Added minimal trusted request/auth/config/envelope contracts and a workspace-scoped boundary that resolves authority and policy inputs from repositories/configuration.

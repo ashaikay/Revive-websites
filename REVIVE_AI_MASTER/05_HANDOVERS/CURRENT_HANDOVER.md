@@ -25,12 +25,18 @@ Do not enable live writes or connect the remaining operational modules. No privi
 - No RLS, policy, schema, membership, or migration change was made; legacy `public.quotes` and Telegram were untouched.
 - Non-blocking tracked follow-up: `POST /auth/v1/logout?scope=global` repeatedly reports `net::ERR_ABORTED` in the browser console. Session/tenant state clearing was unaffected each time; no code was changed to silence it. See `RISKS_AND_BLOCKERS.md`.
 
-# Current Handover — Phase 4B Complete
+# Current Handover — Phase 4C Production Migration Applied + Verified
 
 **Date:** 2026-09-14  
-**Completed Phase:** Phase 4B — Trusted Execution Boundary
-**Current Phase:** Phase 4B closeout complete; Phase 4C not started
-**Status:** Phase 4B complete PASS; 141/141 tests passed, build passed, and `npm audit` reported 0 vulnerabilities
+**Completed checkpoint:** Phase 4C Execution Control Plane production migration
+**Current Phase:** Phase 4C complete; first real capability not authorized
+**Status:** Production verification 25/25 PASS; local attacks 42/42; 148/148 full tests; build PASS; `npm audit` 0 vulnerabilities
+
+The additive migration is `revive-app/supabase/migrations/20260914183000_rev_execution_control_plane.sql`; its guarded companion is `REVIVE_AI_MASTER/rollback/20260914183000_rev_execution_control_plane_rollback.sql`. The detailed evidence is in `REVIVE_AI_MASTER/PHASE_4C_LOCAL_REHEARSAL_REPORT.md`.
+
+The migration adds disabled-by-default workspace execution policy, action-version/fingerprint approval binding, durable dry-run attempts, provider-usage evidence, idempotency locking, role-specific RLS, exact ACLs, and trusted RPCs. It was applied once to `Revive Websites` / `ntbowgutwyyhhnmkadlv` and verified with a transaction-rolled-back production matrix.
+
+Execution remains disabled with no Execute control and no provider invocation. Public quotes and Telegram remained unchanged. Do not activate a first capability, provider, external communication, or payment action without separate explicit authorization. Do not use destructive rollback after evidence exists; disable and forward-fix.
 
 Phase 4B adds a local trusted boundary that accepts minimal identifiers, resolves authenticated workspace authority and all policy inputs internally, binds approvals to deterministic action fingerprints, validates transition state, and returns only a disabled dry-run envelope. In-memory idempotency is explicitly non-durable and no provider is invoked.
 

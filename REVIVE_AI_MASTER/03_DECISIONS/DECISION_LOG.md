@@ -1,5 +1,18 @@
 # Decision Log
 
+## 2026-09-14 - Keep Phase 4C durable authority local and disabled pending production approval
+- **Decision:** Draft and rehearse the durable execution control plane only on isolated local Supabase; do not deploy it or activate execution/providers.
+- **Authority:** Active owners/admins may decide approvals and prepare dry-run attempts. Members may propose ordinary work but cannot authorize execution; viewers are read-only.
+- **Trust boundary:** Database roles, explicit ACLs, role-specific RLS, bound approval fingerprints, action versions, and durable idempotency control authority. Client-set custom session variables are not trusted.
+- **Rollback:** Destructive rollback is allowed only before any Phase 4C policy, binding, version, execution, or usage evidence exists. After evidence exists, disable and forward-fix.
+- **Consequences:** Local rehearsal is PASS, but production Phase 4C remains incomplete and requires separate preflight and deployment approval.
+
+## 2026-09-14 - Apply Phase 4C controls without activating execution
+- **Decision:** Apply only reviewed migration `20260914183000` to existing project `ntbowgutwyyhhnmkadlv` after all production preflight and backup gates passed.
+- **Verification:** Production-safe 25-assertion RLS/ACL/approval/idempotency/append-only matrix passed inside a rolled-back transaction; protected quote/Telegram evidence remained identical.
+- **Boundary:** No workspace policy was seeded, no execution attempt or provider usage persisted, platform execution remains false, and no provider or external action was invoked.
+- **Consequences:** The durable control plane is installed. The first real capability remains a separate authorization decision.
+
 ## 2026-09-14 - Keep discovery provider-independent and mock-only in Phase 3F.1
 - **Decision:** REV owns routing, qualification, evidence, cost control, compliance, deduplication, and conversion boundaries; providers only supply normalized evidence.
 - **Chosen option:** Capability-based `DiscoveryProvider` contract and registry behind `DiscoveryRouter`, with deterministic mock data as the only active provider.
