@@ -4,6 +4,16 @@
 **Phase:** 1 — Architecture Definition  
 **Status:** Phase 4A Owner Control Centre foundation complete; execution disabled
 
+## Phase 4B Trusted Execution Boundary
+
+`TrustedExecutionBoundaryService` accepts only request/workspace/action identifiers plus a separate authenticated actor context. It resolves active workspace membership and role, the workspace-owned action, the matching approval, deterministic approval fingerprint, capability, workspace execution-preparation switch, provider configuration, audience safety, jurisdiction, autonomy, and cost inputs from trusted repositories/configuration before invoking the existing policy and dry-run planner.
+
+Approval binding covers the action identity and material proposed content. Approval decisions capture that fingerprint; missing or changed fingerprints require fresh approval. Approved actions must still be in the `approved` / `not_executed` transition state. Viewer, inactive, outsider, cross-workspace, unsafe, unsupported, unconfigured, disabled-capability, and cost-denied requests cannot become dry-run-ready.
+
+The result is always a non-executing envelope with `executionEnabled: false` and `providerInvoked: false`. Request replay is idempotent only within one process and is explicitly marked non-durable. Phase 4C must add durable job/idempotency/approval-binding/audit storage and database-backed concurrency controls before any execution path exists.
+
+Current `rev_actions_tenant` and `approvals_tenant` RLS policies permit broad writes by any active member. Phase 4B does not change or rely on those policies for execution authority; role-restricted write policies/RPCs require separate Phase 4C migration review.
+
 ## Phase 4A Owner Control Centre Boundary
 
 HOME is backed by a dedicated workspace-scoped read model over the existing repository interfaces. It aggregates concise owner-facing priorities, proposed/in-progress work, unresolved approvals, policy-derived readiness, recovery/revenue categories, recent action results, available usage information, and owner-relevant safety status. REV remains the detailed work and approval surface; GROWTH remains the detailed commercial intelligence surface.

@@ -1,3 +1,10 @@
+## 2026-09-14 - Phase 4B Trusted Execution Boundary (PASS; execution disabled)
+
+- Added minimal trusted request/auth/config/envelope contracts and a workspace-scoped boundary that resolves authority and policy inputs from repositories/configuration.
+- Added deterministic approval fingerprints, stale-approval and transition checks, workspace/capability/safety/jurisdiction/cost gates, and conflict-detecting process-local idempotency.
+- Every envelope remains non-executing (`executionEnabled: false`, `providerInvoked: false`). Added 21 focused tests; full suite passed 141/141, build passed, and audit reported 0 vulnerabilities.
+- No migration, RLS change, Supabase deployment/write, provider call, external action, Execute control, quote/Telegram, or `rev-business-verify` change. Durable controls and RLS hardening remain Phase 4C work.
+
 ## 2026-09-14 - Phase 4A Owner Control Centre Foundation (PASS; read-model only)
 
 - Added a dedicated workspace-scoped Owner Control Centre read model aggregating existing action, approval, policy, commercial intelligence, recovery, opportunity, and usage boundaries.

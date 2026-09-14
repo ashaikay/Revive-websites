@@ -1,4 +1,4 @@
-import { Id, REVActionRecord } from './models';
+import { Id, MemberRole, REVActionRecord } from './models';
 import { CommercialRoute } from './commercialIntelligence';
 
 export type CapabilityRiskClass = 'read_only' | 'prepare_only' | 'internal_write' | 'external_communication' | 'financial' | 'high_risk';
@@ -54,7 +54,10 @@ export interface ExecutionPolicyInput {
   countryCode?: string;
   jurisdiction?: string;
   autonomyMode?: AutonomyMode;
+  usagePlan?: 'free' | 'paid';
   workspaceExecutionEnabled?: boolean;
+  actorRole?: MemberRole;
+  approvalFingerprintValid?: boolean;
 }
 
 export interface ExecutionPolicyResult {
@@ -76,4 +79,44 @@ export interface DryRunExecutionPlan {
   expectedSideEffects: string[];
   reasons: string[];
   executionEnabled: false;
+}
+
+export interface TrustedExecutionRequest {
+  requestId: Id;
+  workspaceId: Id;
+  actionId: Id;
+}
+
+export interface TrustedActorContext {
+  actorUserId: Id;
+}
+
+export interface TrustedExecutionConfiguration {
+  workspaceExecutionEnabled: boolean;
+  providerConfigured: boolean;
+  estimatedExternalCost: number;
+  countryCode?: string;
+  jurisdiction?: string;
+  autonomyMode: AutonomyMode;
+  audienceSafety: 'allowed' | 'review_required' | 'prohibited';
+  usagePlan: 'free' | 'paid';
+}
+
+export interface TrustedDryRunEnvelope {
+  requestId: Id;
+  workspaceId: Id;
+  actionId: Id;
+  actorUserId: Id;
+  actorRole: MemberRole;
+  approvalId?: Id;
+  approvalFingerprint: string;
+  approvalFingerprintValid: boolean;
+  plan: DryRunExecutionPlan;
+  providerInvoked: false;
+  executionEnabled: false;
+  idempotency: {
+    replayed: boolean;
+    durable: false;
+    limitation: string;
+  };
 }

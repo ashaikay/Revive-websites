@@ -27,10 +27,19 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 4A — Owner Control Centre Foundation Complete (PASS). HOME now provides one workspace-scoped owner view of priorities, REV work, approvals, readiness, money signals, results, usage availability, and system safety status.
+Phase 4B — Trusted Execution Boundary Complete (PASS). Trusted code now resolves workspace authority, action/approval state, configuration, capability, safety, jurisdiction, and cost before producing a non-executing dry-run envelope.
 
 ## Current Objective
-Give owners a concise, truthful command centre over existing REV intelligence without adding execution, persistence, provider, or database capabilities.
+Establish a testable trust boundary for future execution while keeping provider invocation and real execution disabled.
+
+## Phase 4B Closeout
+- Validation: 21/21 focused Phase 4B tests passed; adjacent approval/policy/control-centre bundle passed 42/42; full validation passed 141/141; build passed; `npm audit` reported 0 vulnerabilities.
+- Caller input is limited to request, workspace, and action identifiers. Authenticated actor context is separate, and active membership/role, action, approval, capability, workspace settings, safety, jurisdiction, provider state, and cost are resolved inside the boundary.
+- Approval decisions capture a deterministic action fingerprint. Missing or stale fingerprints require fresh approval, and invalid lifecycle/execution transitions are blocked.
+- Idempotency is scoped by actor, workspace, and request ID, but is process-local and explicitly non-durable. Durable jobs, fingerprints, locks, and audit persistence remain Phase 4C work.
+- Every result is a dry-run envelope with `executionEnabled: false` and `providerInvoked: false`. No Execute control, provider call, external communication, or financial action was added.
+- No migration, RLS change, Supabase deployment, production write, legacy quote/Telegram change, or `rev-business-verify` change occurred.
+- Phase 4C is NOT STARTED and requires explicit approval and migration/security review.
 
 ## Phase 4A Closeout
 - Validation: 10/10 focused Phase 4A tests passed; the focused HOME bundle passed 15/15; full validation passed 120/120; build passed; `npm audit` reported 0 vulnerabilities.
@@ -39,7 +48,7 @@ Give owners a concise, truthful command centre over existing REV intelligence wi
 - Potential Value, Recoverable Value, Pipeline Value, Won Revenue, REV Recovered, and REV Generated remain separate. Action completion does not create revenue.
 - Execution remains disabled, no Execute control exists, and approved actions remain `APPROVED — NOT EXECUTED`.
 - No migration, Supabase deployment, provider call, production write, legacy quote/Telegram change, or `rev-business-verify` change occurred.
-- Next phases: Phase 4B and Phase 4C are NOT STARTED and require explicit approval.
+- Next phase: Phase 4B was subsequently completed. Phase 4C is NOT STARTED and requires explicit approval.
 
 ## Phase 3H Closeout
 - Validation: 110/110 tests passed; build passed; `npm audit` reported 0 vulnerabilities.

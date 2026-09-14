@@ -2,6 +2,7 @@ import { DataProvider } from '@/domain/repositories';
 import { ApprovalDecision, ApprovalRecord } from '@/domain/models';
 import { BusinessMemoryService } from './businessMemoryService';
 import { recordAudit } from './auditService';
+import { fingerprintActionForApproval } from './trustedExecutionBoundaryService';
 
 export class ApprovalService {
   private readonly memory: BusinessMemoryService;
@@ -19,7 +20,7 @@ export class ApprovalService {
     if (!action) throw new Error(`REV action ${approval.revActionId} was not found in workspace ${workspaceId}`);
 
     const decidedAt = new Date().toISOString();
-    const updatedApproval = this.provider.approvals.save({ ...approval, decision, decidedBy, decidedAt, notes });
+    const updatedApproval = this.provider.approvals.save({ ...approval, decision, decidedBy, decidedAt, notes, actionFingerprint: fingerprintActionForApproval(action) });
     this.provider.actions.save({ ...action, status: decision === 'approved' || decision === 'edited' ? 'approved' : 'rejected', executionStatus: 'not_executed', approvedAt: decision === 'approved' || decision === 'edited' ? decidedAt : undefined });
     this.memory.record({
       workspaceId, eventType: decision === 'rejected' ? 'ACTION_REJECTED' : 'ACTION_APPROVED', entityType: 'rev_action', entityId: action.id,

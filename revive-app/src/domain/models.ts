@@ -228,6 +228,7 @@ export interface ApprovalRecord {
   workspaceId: Id;
   revActionId: Id;
   requestedAt: string;
+  actionFingerprint?: string;
   decidedAt?: string;
   decidedBy?: Id;
   decision?: ApprovalDecision;

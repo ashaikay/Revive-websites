@@ -25,12 +25,16 @@ Do not enable live writes or connect the remaining operational modules. No privi
 - No RLS, policy, schema, membership, or migration change was made; legacy `public.quotes` and Telegram were untouched.
 - Non-blocking tracked follow-up: `POST /auth/v1/logout?scope=global` repeatedly reports `net::ERR_ABORTED` in the browser console. Session/tenant state clearing was unaffected each time; no code was changed to silence it. See `RISKS_AND_BLOCKERS.md`.
 
-# Current Handover — Phase 4A Complete
+# Current Handover — Phase 4B Complete
 
 **Date:** 2026-09-14  
-**Completed Phase:** Phase 4A — Owner Control Centre Foundation
-**Current Phase:** Phase 4A closeout complete; Phase 4B and Phase 4C not started
-**Status:** Phase 4A complete PASS; 120/120 tests passed, build passed, and `npm audit` reported 0 vulnerabilities
+**Completed Phase:** Phase 4B — Trusted Execution Boundary
+**Current Phase:** Phase 4B closeout complete; Phase 4C not started
+**Status:** Phase 4B complete PASS; 141/141 tests passed, build passed, and `npm audit` reported 0 vulnerabilities
+
+Phase 4B adds a local trusted boundary that accepts minimal identifiers, resolves authenticated workspace authority and all policy inputs internally, binds approvals to deterministic action fingerprints, validates transition state, and returns only a disabled dry-run envelope. In-memory idempotency is explicitly non-durable and no provider is invoked.
+
+Execution remains disabled with no Execute control. No migration, RLS change, Supabase deployment/write, provider call, external communication, financial action, legacy quote/Telegram, or `rev-business-verify` change occurred. Phase 4C requires separate approval for durable execution/idempotency/approval/audit controls and role-restricted database writes.
 
 HOME now uses a dedicated workspace-scoped read model for TODAY, REV work, approvals, derived READY/BLOCKED status, Money REV Found, recent results, cost/usage availability, and system status. Mock mode uses deterministic repository fixtures; live mode exposes truthful unavailable states and never falls back to mock data. REV remains the detailed work/approval surface and GROWTH remains the detailed commercial surface.
 

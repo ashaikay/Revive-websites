@@ -27,7 +27,7 @@
 | 3G.2 | Execution Readiness & Capability Policy | Capability registry, policy gates, autonomy model, kill switches, dry-run planner | ✅ Complete (PASS; execution disabled) |
 | 3H | REV RECOVER Real Recovery Intelligence Foundation | Existing-data recovery signals, potential/recoverable value, prioritization, GROWTH recovery surface | ✅ Complete (PASS; 110/110 tests, build PASS, audit 0; execution disabled) |
 | 4A | Owner Control Centre Foundation | Workspace-scoped owner read model, priorities, approvals, derived readiness, money/result/usage/status summaries | ✅ Complete (PASS; execution disabled) |
-| 4B | Trusted Execution Boundary | Server-derived authority, action transition policy, execution contracts | ⏳ Not Started — explicit approval required |
+| 4B | Trusted Execution Boundary | Server-derived authority, action transition policy, execution contracts | ✅ Complete (PASS; local dry-run boundary only, execution disabled) |
 | 4C | Durable Execution Control Plane | Additive execution/usage persistence and hardened live integration | ⏳ Not Started — explicit approval and migration review required |
 | Future | Email & Replies | Email integration, reply detection, follow-up workflow | ⏳ Deferred; not enabled by Phase 4A |
 | 5 | Calendar & Meetings | Calendar integration, meeting booking, scheduling | ⏳ Not Started |

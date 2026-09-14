@@ -1,5 +1,11 @@
 # Risks and Blockers
 
+## Phase 4B trusted execution boundary - COMPLETE WITH EXPLICIT LIMITS
+
+The local boundary now derives workspace authority, action/approval state, capability, configuration, safety, jurisdiction, and cost before returning a non-executing dry-run envelope. Approval fingerprints prevent changed action content from reusing an old approval. Real execution and provider invocation remain disabled.
+
+Idempotency and approval fingerprints are currently in-memory/domain-only and do not survive process restart or coordinate multiple instances. Existing `rev_actions_tenant` and `approvals_tenant` policies also permit writes by any active member rather than execution-specific roles. Phase 4C must add reviewed durable records, uniqueness/locking, audit persistence, and role-restricted policies or trusted RPCs before any execution activation.
+
 ## Phase 3G commercial intelligence boundary - ACTIVE BY DESIGN
 
 FIND, AUDIENCE, and RECOVER currently use deterministic existing/mock data only. No external provider, paid AI, outreach, recovery integration, or persistence change is active. Audience safety blocks sensitive-person profiling; future external routes require the existing trusted provider, compliance, cost, and approval gates.

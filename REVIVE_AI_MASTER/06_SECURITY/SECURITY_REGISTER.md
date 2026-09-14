@@ -1,5 +1,14 @@
 # Security Register
 
+## Phase 4B Trusted Execution Boundary Security - PASS (local/non-durable)
+
+- The trusted boundary accepts minimal identifiers and separately supplied authenticated actor context; it derives active membership/role, workspace-owned action, approval, capability, configuration, safety, jurisdiction, and cost inputs from trusted dependencies.
+- Approval fingerprints bind material action content to the approval decision. Missing or changed fingerprints require fresh approval, and invalid action/execution transitions are blocked.
+- Idempotency is actor/workspace/request scoped, detects conflicting reuse, and is explicitly process-local/non-durable. Durable deduplication, locking, job state, approval binding, and audit persistence remain required in Phase 4C.
+- Every envelope has `executionEnabled: false` and `providerInvoked: false`. Platform execution, external communication, financial actions, and high-risk capabilities remain disabled.
+- Existing live `rev_actions_tenant` and `approvals_tenant` RLS policies allow all active members to write. This is insufficient for a future execution control plane; Phase 4C must propose role-restricted policies or trusted RPCs without weakening tenant isolation.
+- No schema, migration, RLS, Supabase deployment/write, secret, provider call, production action, legacy quote/Telegram, or `rev-business-verify` change occurred.
+
 ## Phase 4A Owner Control Centre Security - PASS (read-model only)
 
 - HOME aggregates only workspace-scoped repository reads. Mock mode is deterministic; live mode never falls back to mock operational data and exposes explicit unavailable states until live repositories exist.

@@ -581,7 +581,18 @@
 - Desktop and 390x844 browser validation passed with no document/content overflow; live mode was restored on `127.0.0.1:5180` and showed the authenticated sign-in boundary with no mock leakage.
 - No migration, RLS change, Supabase deployment, external call, production write, execution enablement, `public.quotes`, Telegram, or `rev-business-verify` change occurred.
 
-**Stop condition:** Phase 4B and Phase 4C are not started. Both require separate explicit approval.
+## Phase 4B: Trusted Execution Boundary COMPLETE (PASS; execution disabled)
+
+**Date:** 2026-09-14
+
+- Added minimal trusted request/auth/config/envelope contracts and a workspace-scoped `TrustedExecutionBoundaryService`.
+- Authority, role, action, approval, capability, workspace switch, provider state, audience safety, jurisdiction, autonomy, and cost are resolved inside the boundary rather than accepted as caller assertions.
+- Added deterministic approval fingerprints, stale-approval rejection, lifecycle transition checks, and actor/workspace/request-scoped in-memory idempotency with an explicit non-durable limitation.
+- Every envelope keeps `executionEnabled: false` and `providerInvoked: false`; external communication, financial, high-risk, and platform execution remain disabled.
+- Focused Phase 4B tests passed 21/21; adjacent regression bundle passed 42/42; full suite passed 141/141; build passed; `npm audit` reported 0 vulnerabilities.
+- No migration, RLS change, Supabase deployment/write, provider call, external action, Execute control, legacy quote/Telegram, or `rev-business-verify` change occurred.
+
+**Stop condition:** Phase 4C is not started. Durable execution records, idempotency, approval binding, locking, audit persistence, and role-restricted database writes require explicit migration/security approval.
 
 **Objective:** Build lead management and outreach workflow
 

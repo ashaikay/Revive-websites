@@ -59,6 +59,11 @@ export function evaluateExecutionPolicy(input: ExecutionPolicyInput, governor: C
   const reasons: string[] = [];
   let decision = 'eligible_for_dry_run' as ExecutionPolicyResult['decision'];
   if (input.action.workspaceId !== input.workspaceId) { decision = 'blocked'; reasons.push('Action is outside the requested workspace.'); }
+  else if (input.actorRole === 'viewer') { decision = 'blocked'; reasons.push('The active workspace role cannot prepare execution.'); }
+  else if (input.workspaceExecutionEnabled === false) { decision = 'requires_configuration'; reasons.push('Workspace execution preparation is disabled.'); }
+  else if (capability.requiresApproval && input.action.status !== 'approved') { decision = 'requires_fresh_approval'; reasons.push('The action is not in the approved state.'); }
+  else if (input.action.executionStatus !== 'not_executed') { decision = 'blocked'; reasons.push('The action is not eligible to enter a dry-run transition.'); }
+  else if (capability.requiresApproval && input.approvalFingerprintValid === false) { decision = 'requires_fresh_approval'; reasons.push('The approval no longer matches the current action.'); }
   else if (input.approvalState !== 'approved' && capability.requiresApproval) { decision = 'requires_fresh_approval'; reasons.push('Owner approval is required.'); }
   else if (input.audienceSafety === 'prohibited') { decision = 'blocked'; reasons.push('Audience safety prohibits this action.'); }
   else if (input.audienceSafety === 'review_required') { decision = 'requires_review'; reasons.push('Audience safety review is required.'); }
@@ -66,7 +71,7 @@ export function evaluateExecutionPolicy(input: ExecutionPolicyInput, governor: C
   else if (!PLATFORM_EXECUTION_ENABLED && capability.externalSideEffect) { decision = 'blocked'; reasons.push('Platform execution is disabled.'); }
   else if (capability.requiresProvider && !input.providerConfigured) { decision = 'requires_provider'; reasons.push('Required provider is not configured.'); }
   else if (input.countryCode && input.countryCode !== 'GB' && capability.jurisdictionSensitive) { decision = 'not_supported'; reasons.push('International execution is not supported in V1.'); }
-  else if (input.estimatedExternalCost > 0 && governor.decide(input.workspaceId, 1, 'premium') !== 'allow') { decision = 'blocked_by_cost'; reasons.push('Cost Governor did not allow this estimated cost.'); }
+  else if (input.estimatedExternalCost > 0 && governor.decide(input.workspaceId, 1, 'premium', input.usagePlan ?? 'free') !== 'allow') { decision = 'blocked_by_cost'; reasons.push('Cost Governor did not allow this estimated cost.'); }
   else if (input.autonomyMode === 'disabled') { decision = 'blocked'; reasons.push('Autonomy is disabled.'); }
   else if (input.autonomyMode !== 'always_ask' && !capability.allowedAutonomy.includes(input.autonomyMode ?? 'always_ask')) { decision = 'requires_review'; reasons.push('This capability is not approved for the selected autonomy mode.'); }
   if (decision === 'eligible_for_dry_run') reasons.push('Internal dry-run is eligible; real execution remains disabled.');
