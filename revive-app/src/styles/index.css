@@ -1,0 +1,82 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@layer base {
+  body {
+    @apply bg-neutral-50 text-neutral-900;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1 {
+    @apply text-4xl font-bold;
+  }
+
+  h2 {
+    @apply text-2xl font-bold;
+  }
+
+  h3 {
+    @apply text-xl font-semibold;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-neutral-200 text-neutral-900 rounded-lg font-medium hover:bg-neutral-300 transition-colors;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-neutral-600 rounded-lg font-medium hover:bg-neutral-100 transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-lg border border-neutral-200 shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500;
+  }
+
+  .badge {
+    @apply inline-block px-3 py-1 rounded-full text-sm font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-100 text-red-800;
+  }
+
+  .badge-neutral {
+    @apply badge bg-neutral-100 text-neutral-700;
+  }
+
+  .rev-motion-in {
+    @apply animate-rev-fade-up;
+  }
+
+  .rev-motion-in-soft {
+    @apply animate-rev-fade-in;
+  }
+}
+
+/* Respect reduced-motion preference across all purposeful animation utilities */
+@media (prefers-reduced-motion: reduce) {
+  .rev-motion-in,
+  .rev-motion-in-soft,
+  .card {
+    animation: none !important;
+    transition: none !important;
+  }
+}
