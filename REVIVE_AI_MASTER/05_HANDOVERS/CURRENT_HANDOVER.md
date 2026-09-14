@@ -25,14 +25,16 @@ Do not enable live writes or connect the remaining operational modules. No privi
 - No RLS, policy, schema, membership, or migration change was made; legacy `public.quotes` and Telegram were untouched.
 - Non-blocking tracked follow-up: `POST /auth/v1/logout?scope=global` repeatedly reports `net::ERR_ABORTED` in the browser console. Session/tenant state clearing was unaffected each time; no code was changed to silence it. See `RISKS_AND_BLOCKERS.md`.
 
-# Current Handover — Phase 3H Complete
+# Current Handover — Phase 4A Complete
 
 **Date:** 2026-09-14  
-**Completed Phase:** Phase 3H — REV RECOVER Real Recovery Intelligence Foundation  
-**Current Phase:** Phase 3H closeout complete; Phase 4 not started  
-**Status:** Phase 3H complete PASS; 110/110 tests passed, build passed, and `npm audit` reported 0 vulnerabilities
+**Completed Phase:** Phase 4A — Owner Control Centre Foundation
+**Current Phase:** Phase 4A closeout complete; Phase 4B and Phase 4C not started
+**Status:** Phase 4A complete PASS; 120/120 tests passed, build passed, and `npm audit` reported 0 vulnerabilities
 
-Execution remains disabled with the platform execution kill switch set to false and no Execute control. Approval remains supervised; approved actions remain `APPROVED — NOT EXECUTED`. Phase 4 requires explicit approval before implementation.
+HOME now uses a dedicated workspace-scoped read model for TODAY, REV work, approvals, derived READY/BLOCKED status, Money REV Found, recent results, cost/usage availability, and system status. Mock mode uses deterministic repository fixtures; live mode exposes truthful unavailable states and never falls back to mock data. REV remains the detailed work/approval surface and GROWTH remains the detailed commercial surface.
+
+Execution remains disabled with the platform execution kill switch set to false and no Execute control. Approval remains supervised; approved actions remain `APPROVED — NOT EXECUTED`. No database, RLS, Supabase, provider, production, legacy quote/Telegram, or `rev-business-verify` change occurred. Phase 4B and Phase 4C require separate explicit approval.
 
 Phase 3H adds `RecoveryCandidate`, `RecoveryAnalysis`, and `analyzeRecovery()`. It derives supported recovery signals from existing workspace-owned Contacts and Opportunities, surfaces potential recoverable value in GROWTH, leaves missing values unknown, and marks quote/invoice/renewal/repeat-service concepts unsupported. It does not use legacy quotes, create records, attribute revenue, write memory, call providers, or send communication.
 

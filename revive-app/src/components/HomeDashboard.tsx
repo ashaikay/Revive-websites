@@ -1,8 +1,13 @@
 import React from 'react';
+import { dataProviderMode } from '@/data/provider';
 import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
-import { Goal, Lead, REVAction } from '@/types';
-import { dataProviderMode } from '@/data/provider';
+import {
+  OwnerControlCentreReadModel,
+  buildOwnerControlCentre,
+  buildUnavailableOwnerControlCentre,
+} from '@/services/ownerControlCentreService';
+import { Lead } from '@/types';
 
 interface HomeDashboardProps {
   workspaceId: string;
@@ -11,19 +16,7 @@ interface HomeDashboardProps {
 const currency = (value: number) =>
   value.toLocaleString('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
 
-const ACTIVITY_LABEL: Record<string, string> = {
-  research: 'Researching opportunities',
-  outreach: 'Preparing outreach',
-  follow_up: 'Reviewing follow-ups',
-  meeting_prep: 'Preparing for a meeting',
-};
-
-function activityHeadline(action: REVAction): string {
-  if (action.status === 'completed') return `Completed: ${action.description}`;
-  return ACTIVITY_LABEL[action.type] ?? action.description;
-}
-
-/** Revenue snapshot derived only from existing lead records; no figures are invented. */
+/** Preserved Phase 3B compatibility helper; Phase 4A HOME uses the Opportunity read model. */
 export function computeRevenueSnapshot(leads: Lead[]) {
   const won = leads.filter((lead) => lead.status === 'customer');
   const pipeline = leads.filter((lead) => lead.status === 'lead' || lead.status === 'prospect');
@@ -31,235 +24,194 @@ export function computeRevenueSnapshot(leads: Lead[]) {
   const atRisk = pipeline.filter((lead) => (lead.lastInteraction?.getTime() ?? 0) < staleCutoff);
   const recoverable = leads.filter((lead) => lead.status === 'archived');
   const sum = (items: Lead[]) => items.reduce((total, lead) => total + (lead.estimatedValue ?? 0), 0);
-  return {
-    won: sum(won),
-    pipeline: sum(pipeline),
-    atRisk: sum(atRisk),
-    recoverable: sum(recoverable),
-  };
+  return { won: sum(won), pipeline: sum(pipeline), atRisk: sum(atRisk), recoverable: sum(recoverable) };
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({ workspaceId }) => {
   const { currentUser } = useAppStore();
+  const model = dataProviderMode === 'supabase'
+    ? buildUnavailableOwnerControlCentre(workspaceId)
+    : buildOwnerControlCentre({
+      provider: WorkspaceService.getDataProvider(),
+      workspaceId,
+      actorUserId: currentUser.id,
+    });
 
-  if (dataProviderMode === 'supabase') {
-    return <LiveCommandCentre displayName={currentUser?.displayName} />;
-  }
+  return <OwnerControlCentre model={model} displayName={currentUser.displayName} />;
+};
 
-  const workspaceData = WorkspaceService.getWorkspaceData(workspaceId);
-  const primaryGoal = workspaceData.goals?.[0] as Goal | undefined;
-  const dailyBrief = workspaceData.dailyBrief;
-  const pendingApprovals = workspaceData.approvals?.filter((a) => a.status === 'pending') || [];
-  const recentActivity = [...(workspaceData.actions ?? [])].sort(
-    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-  );
-  const revenue = computeRevenueSnapshot(workspaceData.leads ?? []);
+interface OwnerControlCentreProps {
+  model: OwnerControlCentreReadModel;
+  displayName?: string;
+}
+
+export const OwnerControlCentre: React.FC<OwnerControlCentreProps> = ({ model, displayName }) => {
   const hour = new Date().getHours();
   const greetingWord = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const liveUnavailable = model.mode === 'live';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Greeting */}
-      <div className="rev-motion-in">
-        <h1 className="text-4xl font-bold text-neutral-900">
-          {greetingWord}, {currentUser.displayName}.
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-10 space-y-9">
+      <header className="rev-motion-in border-b border-neutral-200 pb-6">
+        <p className="text-xs font-bold text-primary-700 uppercase tracking-widest">Owner Control Centre</p>
+        <h1 className="text-3xl sm:text-4xl font-bold text-neutral-950 mt-2">
+          {greetingWord}{displayName ? `, ${displayName}` : ''}.
         </h1>
-        <p className="text-neutral-600 mt-1">REV has been working while you were away.</p>
-      </div>
+        <p className="text-neutral-600 mt-2 max-w-2xl">
+          What REV is doing today, what needs you, where value may be waiting, and what happened.
+        </p>
+      </header>
 
-      {/* Daily Business Brief */}
-      {dailyBrief && (
-        <section aria-labelledby="daily-brief-heading" className="rev-motion-in">
-          <h2 id="daily-brief-heading" className="text-xl font-bold text-neutral-900 mb-4">
-            DAILY BUSINESS BRIEF
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <BriefStat value={dailyBrief.hotLeads} label="hot leads" />
-            <BriefStat value={dailyBrief.repliesNeeded} label="replies need attention" />
-            <BriefStat value={dailyBrief.followUpsDue} label="follow-ups due" />
-            <BriefStat value={dailyBrief.meetingsToday} label="meeting today" />
-          </div>
-          {dailyBrief.recommendation && (
-            <div className="mt-4 card p-6 bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200">
-              <h3 className="text-lg font-bold text-primary-900 mb-2">REV RECOMMENDS</h3>
-              <p className="text-primary-800">{dailyBrief.recommendation}</p>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Revenue / Growth summary */}
-      <section aria-labelledby="revenue-heading" className="rev-motion-in">
-        <h2 id="revenue-heading" className="text-xl font-bold text-neutral-900 mb-4">
-          WHERE THE MONEY IS
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <RevenueStat label="WON REVENUE" value={revenue.won} tone="success" />
-          <RevenueStat label="IN PIPELINE" value={revenue.pipeline} tone="neutral" />
-          <RevenueStat label="AT RISK" value={revenue.atRisk} tone="danger" />
-          <RevenueStat label="RECOVERABLE" value={revenue.recoverable} tone="warning" />
+      <section aria-labelledby="today-heading" className="rev-motion-in bg-neutral-950 text-white p-5 sm:p-6 rounded-lg">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <h2 id="today-heading" className="text-lg font-bold">TODAY</h2>
+          <span className="text-xs text-neutral-300">Top priorities only</span>
         </div>
-      </section>
-
-      {/* Attention / Approvals */}
-      <section aria-labelledby="attention-heading" className="rev-motion-in">
-        <h2 id="attention-heading" className="text-xl font-bold text-neutral-900 mb-4">
-          {pendingApprovals.length > 0 ? 'REV NEEDS YOUR ATTENTION' : 'ALL CLEAR'}
-        </h2>
-        {pendingApprovals.length > 0 ? (
-          <div className="card p-6 border-2 border-yellow-200 bg-yellow-50 space-y-4">
-            {pendingApprovals.slice(0, 3).map((approval) => (
-              <div key={approval.id} className="bg-white p-4 rounded-lg border border-yellow-100">
-                <h3 className="font-semibold text-neutral-900 mb-2">{approval.description}</h3>
-                <p className="text-sm text-neutral-600 mb-3">{approval.revReasoning}</p>
-                <div className="flex flex-wrap gap-2">
-                  <button className="btn-primary text-sm" type="button" aria-label={`Approve: ${approval.description}`}>
-                    Approve
-                  </button>
-                  <button className="btn-secondary text-sm" type="button" aria-label={`Edit and approve: ${approval.description}`}>
-                    Edit
-                  </button>
-                  <button className="btn-ghost text-sm" type="button" aria-label={`Reject: ${approval.description}`}>
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="card p-6 bg-neutral-100 text-center text-neutral-600">
-            No pending approvals. REV is ready for new tasks.
-          </div>
-        )}
-      </section>
-
-      {/* REV Activity */}
-      <section aria-labelledby="activity-heading" className="rev-motion-in">
-        <h2 id="activity-heading" className="text-xl font-bold text-neutral-900 mb-4">
-          WHAT REV IS DOING
-        </h2>
-        {recentActivity.length > 0 ? (
-          <ul className="card divide-y divide-neutral-100">
-            {recentActivity.slice(0, 5).map((action) => (
-              <li key={action.id} className="p-4 flex items-start gap-3">
-                <span
-                  className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${
-                    action.status === 'completed' ? 'bg-green-500' : 'bg-primary-500'
-                  }`}
-                  aria-hidden="true"
-                />
-                <div>
-                  <p className="text-neutral-900 font-medium">{activityHeadline(action)}</p>
-                  {action.result && <p className="text-sm text-neutral-600 mt-1">{action.result}</p>}
-                </div>
+        {model.today.length > 0 ? (
+          <ul className="divide-y divide-neutral-700">
+            {model.today.map((item) => (
+              <li key={item.id} className="py-3 first:pt-0 last:pb-0">
+                <p className="font-semibold">{item.title}</p>
+                <p className="text-sm text-neutral-300 mt-1">{item.detail}</p>
               </li>
             ))}
           </ul>
         ) : (
-          <div className="card p-6 text-center text-neutral-600">REV has no recent activity to show yet.</div>
+          <p className="text-sm text-neutral-300">
+            {liveUnavailable ? 'Live priorities are not available until operational repositories are connected.' : 'No supported priority items need attention today.'}
+          </p>
         )}
       </section>
 
-      {/* Goal progress */}
-      {primaryGoal && (
-        <section aria-labelledby="goal-heading" className="rev-motion-in">
-          <h2 id="goal-heading" className="text-xl font-bold text-neutral-900 mb-4">
-            GOAL PROGRESS
-          </h2>
-          <div className="card p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <p className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Primary goal</p>
-                <p className="text-neutral-900 mt-1">{primaryGoal.objective}</p>
+      <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.85fr)] gap-9 lg:gap-12 items-start">
+        <div className="space-y-9 min-w-0">
+          <ControlSection title="REV IS WORKING ON" id="working-heading">
+            <ItemList items={model.working} empty={liveUnavailable ? 'Live REV work is not available yet.' : 'REV has no proposed or in-progress work right now.'} />
+          </ControlSection>
+
+          <ControlSection title="NEEDS YOUR APPROVAL" id="approval-heading">
+            {model.approvals.length > 0 ? (
+              <div className="border-l-4 border-amber-400 bg-amber-50 px-4 py-4 rounded-r-lg">
+                <ItemList items={model.approvals.slice(0, 3)} />
+                <a href="#rev" className="btn-primary text-sm inline-flex mt-4">Review in REV</a>
+                <p className="text-xs text-amber-900 mt-3">Approval means approved, not executed.</p>
               </div>
-              <span className="badge-success" role="status">
-                On track
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="w-full bg-neutral-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-primary-600 h-full transition-all"
-                    style={{ width: `${Math.min(100, (primaryGoal.currentProgress / primaryGoal.targetValue) * 100)}%` }}
-                  />
+            ) : (
+              <EmptyState text={liveUnavailable ? 'Live approvals are not available yet.' : 'Nothing is waiting for your approval.'} />
+            )}
+          </ControlSection>
+
+          <ControlSection title="READY / BLOCKED" id="readiness-heading">
+            {model.readiness.length > 0 ? (
+              <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
+                {model.readiness.map((item) => (
+                  <li key={item.id} className="py-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-5">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-neutral-900 break-words">{item.title}</p>
+                      <p className="text-sm text-neutral-600 mt-1">{item.detail}</p>
+                    </div>
+                    <span className={item.state === 'ready_for_dry_run' ? 'badge-success whitespace-nowrap' : 'badge-warning whitespace-nowrap'}>
+                      {item.state === 'ready_for_dry_run' ? 'Ready for dry run' : 'Blocked'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState text={liveUnavailable ? 'Live readiness cannot be assessed until actions and approvals are connected.' : 'There are no active actions to assess.'} />
+            )}
+            <p className="text-xs text-neutral-500 mt-3">Real execution is disabled. No action can run from this screen.</p>
+          </ControlSection>
+
+          <ControlSection title="RECENT RESULTS" id="results-heading">
+            <ItemList items={model.results} empty={liveUnavailable ? 'Live outcomes are not available yet.' : 'No completed or failed REV work is recorded yet.'} />
+            <p className="text-xs text-neutral-500 mt-3">Completing work does not create or attribute revenue.</p>
+          </ControlSection>
+        </div>
+
+        <aside className="space-y-9 min-w-0">
+          <ControlSection title="MONEY REV FOUND" id="money-heading">
+            {model.money.available ? (
+              <div className="border-y border-amber-200 py-5">
+                <p className="text-3xl font-bold text-amber-800">{money(model.money.potentialValue)}</p>
+                <p className="font-semibold text-neutral-900 mt-1">Potential value</p>
+                <p className="text-sm text-neutral-600 mt-1">Potential recovery evidence, not money won.</p>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-4 mt-5 pt-5 border-t border-neutral-200">
+                  <MoneyLine label="Recoverable value" value={model.money.recoverableValue} />
+                  <MoneyLine label="Pipeline value" value={model.money.pipelineValue} />
+                  <MoneyLine label="Won revenue" value={model.money.wonRevenue} />
+                  <MoneyLine label="REV recovered" value={model.money.revRecovered} />
+                  <MoneyLine label="REV generated" value={model.money.revGenerated} />
+                  <div>
+                    <dt className="text-xs text-neutral-500">Unknown values</dt>
+                    <dd className="font-semibold text-neutral-900 mt-1">{model.money.unknownPotentialValueCount}</dd>
+                  </div>
+                </dl>
+              </div>
+            ) : (
+              <EmptyState text="Live recovery and revenue values are not available yet." />
+            )}
+          </ControlSection>
+
+          <ControlSection title="COST / USAGE" id="usage-heading">
+            {model.usage.available ? (
+              <div className="border-y border-neutral-200 py-4">
+                <p className="text-2xl font-bold text-neutral-950">{model.usage.used} / {model.usage.allowance}</p>
+                <p className="text-sm text-neutral-600 mt-1">Included research units used</p>
+                <p className="text-xs text-neutral-500 mt-3">{model.usage.message}</p>
+              </div>
+            ) : (
+              <EmptyState text={model.usage.message} />
+            )}
+          </ControlSection>
+
+          <ControlSection title="SYSTEM STATUS" id="status-heading">
+            <dl className="divide-y divide-neutral-200 border-y border-neutral-200">
+              {model.systemStatus.map((item) => (
+                <div key={item.label} className="py-3 flex items-center justify-between gap-4">
+                  <dt className="text-sm text-neutral-600">{item.label}</dt>
+                  <dd className="text-sm font-semibold text-neutral-900 flex items-center gap-2 text-right">
+                    <span className={`h-2 w-2 rounded-full flex-none ${item.safe ? 'bg-green-500' : 'bg-amber-500'}`} aria-hidden="true" />
+                    {item.value}
+                  </dd>
                 </div>
-              </div>
-              <div className="text-sm font-semibold text-neutral-900 whitespace-nowrap">
-                {primaryGoal.currentProgress} / {primaryGoal.targetValue}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-    </div>
+              ))}
+            </dl>
+          </ControlSection>
+        </aside>
+      </div>
+    </main>
   );
 };
 
-const BriefStat: React.FC<{ value: number; label: string }> = ({ value, label }) => (
-  <div className="card p-4 text-center">
-    <div className="text-3xl font-bold text-primary-600">{value}</div>
-    <div className="text-sm text-neutral-600">{label}</div>
+const ControlSection: React.FC<{ title: string; id: string; children: React.ReactNode }> = ({ title, id, children }) => (
+  <section aria-labelledby={id} className="rev-motion-in">
+    <h2 id={id} className="text-lg font-bold text-neutral-950 mb-3">{title}</h2>
+    {children}
+  </section>
+);
+
+const ItemList: React.FC<{ items: OwnerControlCentreReadModel['today']; empty?: string }> = ({ items, empty }) => items.length > 0 ? (
+  <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
+    {items.map((item) => (
+      <li key={item.id} className="py-4">
+        <p className="font-semibold text-neutral-900 break-words">{item.title}</p>
+        <p className="text-sm text-neutral-600 mt-1">{item.detail}</p>
+      </li>
+    ))}
+  </ul>
+) : <EmptyState text={empty ?? 'Nothing to show.'} />;
+
+const EmptyState: React.FC<{ text: string }> = ({ text }) => (
+  <div className="border-y border-neutral-200 py-4 text-sm text-neutral-500">{text}</div>
+);
+
+const MoneyLine: React.FC<{ label: string; value?: number }> = ({ label, value }) => (
+  <div>
+    <dt className="text-xs text-neutral-500">{label}</dt>
+    <dd className="font-semibold text-neutral-900 mt-1">{money(value)}</dd>
   </div>
 );
 
-const RevenueStat: React.FC<{ label: string; value: number; tone: 'success' | 'neutral' | 'danger' | 'warning' }> = ({
-  label,
-  value,
-  tone,
-}) => {
-  const toneClass =
-    tone === 'success'
-      ? 'text-green-700'
-      : tone === 'danger'
-        ? 'text-red-700'
-        : tone === 'warning'
-          ? 'text-amber-700'
-          : 'text-neutral-900';
-  return (
-    <div className="card p-4">
-      <div className={`text-2xl font-bold ${toneClass}`}>{value > 0 ? currency(value) : '—'}</div>
-      <div className="text-sm text-neutral-600">{label}</div>
-    </div>
-  );
-};
-
-/**
- * Live (Supabase) mode HOME. Goals/approvals/activity/revenue repositories remain
- * mock-only per Phase 2D.2 scope, so this surface shows honest empty states rather
- * than fabricating live business performance.
- */
-const LiveCommandCentre: React.FC<{ displayName?: string }> = ({ displayName }) => {
-  const hour = new Date().getHours();
-  const greetingWord = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div className="rev-motion-in">
-        <h1 className="text-4xl font-bold text-neutral-900">
-          {greetingWord}
-          {displayName ? `, ${displayName}` : ''}.
-        </h1>
-        <p className="text-neutral-600 mt-1">
-          Live workspace context is connected. Daily Brief, approvals, and activity are not yet available in live mode.
-        </p>
-      </div>
-
-      <EmptyLiveSection title="DAILY BUSINESS BRIEF" message="The Daily Business Brief is not yet connected to live workspace data." />
-      <EmptyLiveSection title="WHERE THE MONEY IS" message="Revenue intelligence is not yet connected to live workspace data." />
-      <EmptyLiveSection title="REV NEEDS YOUR ATTENTION" message="Live approvals are not yet available in this mode." />
-      <EmptyLiveSection title="WHAT REV IS DOING" message="REV activity is not yet available in live mode." />
-
-      <p className="text-sm text-neutral-500">
-        Visit BUSINESS to see this workspace&apos;s live Business Brain profile and services.
-      </p>
-    </div>
-  );
-};
-
-const EmptyLiveSection: React.FC<{ title: string; message: string }> = ({ title, message }) => (
-  <section className="rev-motion-in">
-    <h2 className="text-xl font-bold text-neutral-900 mb-4">{title}</h2>
-    <div className="card p-6 text-center text-neutral-600">{message}</div>
-  </section>
-);
+function money(value: number | undefined): string {
+  return typeof value === 'number' ? currency(value) : 'Unavailable';
+}

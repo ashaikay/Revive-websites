@@ -1,3 +1,11 @@
+## 2026-09-14 - Phase 4A Owner Control Centre Foundation (PASS; read-model only)
+
+- Added a dedicated workspace-scoped Owner Control Centre read model aggregating existing action, approval, policy, commercial intelligence, recovery, opportunity, and usage boundaries.
+- Rebuilt HOME with TODAY, REV IS WORKING ON, NEEDS YOUR APPROVAL, READY / BLOCKED, MONEY REV FOUND, RECENT RESULTS, COST / USAGE, and SYSTEM STATUS while keeping REV and GROWTH as detailed workspaces.
+- Kept READY/BLOCKED derived, approval non-executing, accounting categories separate, and live mode free of mock fallback.
+- Added 10 focused Phase 4A tests; focused HOME bundle passed 15/15, full suite passed 120/120, build passed, audit reported 0 vulnerabilities, and desktop/mobile browser checks passed.
+- Execution remains disabled with no Execute control. No migration, Supabase deployment, external call, production write, quote/Telegram, or `rev-business-verify` change occurred. Phase 4B/4C remain not started.
+
 ## 2026-09-14 — Phase 3E.3A Supabase CLI/config compatibility repair (PASS; remote untouched)
 
 ## 2026-09-14 - Phase 3F.1 provider-independent discovery foundation (PASS; mock-only)

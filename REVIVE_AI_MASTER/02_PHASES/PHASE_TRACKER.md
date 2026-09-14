@@ -565,7 +565,23 @@
 - Execution remains disabled with the platform execution kill switch set to false and no Execute control. Approval remains supervised; approved actions remain `APPROVED — NOT EXECUTED`.
 - Focused recovery tests: 7/7 passed. Full suite: 110/110 passed; build passed; `npm audit` found 0 vulnerabilities. Desktop and 390x844 review passed without overflow; live mode restored.
 - No external providers, Companies House calls, outreach, database migration, Supabase change, legacy quote/Telegram change, marketing-site, Stripe, or Family Legacy change occurred.
-- Next phase: Phase 4 — NOT STARTED. Implementation requires explicit approval.
+- Next phase: Phase 4A — subsequently completed below.
+
+## Phase 4A: Owner Control Centre Foundation COMPLETE (PASS; read-model only)
+
+**Date:** 2026-09-14
+
+- Added one workspace-scoped Owner Control Centre read model over existing repositories, commercial intelligence, recovery analysis, opportunity revenue, approval records, execution policy, and Cost Governor boundaries.
+- Rebuilt HOME around eight concise owner sections: TODAY, REV IS WORKING ON, NEEDS YOUR APPROVAL, READY / BLOCKED, MONEY REV FOUND, RECENT RESULTS, COST / USAGE, and SYSTEM STATUS.
+- Kept approval decisions in REV. HOME links to the existing approval surface and introduces no second approval or write path.
+- `READY` and `BLOCKED` remain derived dry-run views. Real execution is disabled and no Execute control exists.
+- Mock mode uses deterministic workspace fixtures. Live mode has explicit unavailable states and no mock fallback or leakage.
+- Potential, recoverable, pipeline, won, REV recovered, and REV generated values remain separate; completed work is not treated as revenue.
+- Focused Phase 4A tests passed 10/10; focused HOME regression bundle passed 15/15; full suite passed 120/120; build passed; `npm audit` reported 0 vulnerabilities.
+- Desktop and 390x844 browser validation passed with no document/content overflow; live mode was restored on `127.0.0.1:5180` and showed the authenticated sign-in boundary with no mock leakage.
+- No migration, RLS change, Supabase deployment, external call, production write, execution enablement, `public.quotes`, Telegram, or `rev-business-verify` change occurred.
+
+**Stop condition:** Phase 4B and Phase 4C are not started. Both require separate explicit approval.
 
 **Objective:** Build lead management and outreach workflow
 
@@ -593,7 +609,7 @@
 
 ---
 
-## Phase 4: Email & Replies ⏳
+## Future: Email & Replies ⏳
 
 **Objective:** Integrate email and build reply detection workflow
 
@@ -615,7 +631,7 @@
 - Conversation threads preserved
 - Follow-up tasks created automatically
 
-**Dependencies:** Phase 3 complete
+**Dependencies:** Owner Control Centre and trusted execution foundations complete, plus separate explicit integration approval
 
 ---
 

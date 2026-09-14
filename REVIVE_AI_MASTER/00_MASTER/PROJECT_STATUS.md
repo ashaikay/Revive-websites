@@ -27,10 +27,19 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 3H — REV RECOVER Real Recovery Intelligence Foundation Complete (PASS). REV RECOVER derives supported workspace recovery signals and potential value from existing records.
+Phase 4A — Owner Control Centre Foundation Complete (PASS). HOME now provides one workspace-scoped owner view of priorities, REV work, approvals, readiness, money signals, results, usage availability, and system safety status.
 
 ## Current Objective
-Identify where existing workspace data indicates potential or recoverable value without inventing evidence, changing persistence, or treating findings as revenue.
+Give owners a concise, truthful command centre over existing REV intelligence without adding execution, persistence, provider, or database capabilities.
+
+## Phase 4A Closeout
+- Validation: 10/10 focused Phase 4A tests passed; the focused HOME bundle passed 15/15; full validation passed 120/120; build passed; `npm audit` reported 0 vulnerabilities.
+- HOME uses a dedicated workspace-scoped read model. Mock mode aggregates deterministic repository records; live mode exposes truthful unavailable states and never falls back to mock data.
+- `READY` and `BLOCKED` are derived from the existing execution policy/dry-run planner and are not stored lifecycle states.
+- Potential Value, Recoverable Value, Pipeline Value, Won Revenue, REV Recovered, and REV Generated remain separate. Action completion does not create revenue.
+- Execution remains disabled, no Execute control exists, and approved actions remain `APPROVED — NOT EXECUTED`.
+- No migration, Supabase deployment, provider call, production write, legacy quote/Telegram change, or `rev-business-verify` change occurred.
+- Next phases: Phase 4B and Phase 4C are NOT STARTED and require explicit approval.
 
 ## Phase 3H Closeout
 - Validation: 110/110 tests passed; build passed; `npm audit` reported 0 vulnerabilities.

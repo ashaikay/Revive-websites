@@ -2,7 +2,17 @@
 
 **Last Updated:** 2026-09-12  
 **Phase:** 1 — Architecture Definition  
-**Status:** Phase 3F.1 discovery foundation complete; external discovery deferred
+**Status:** Phase 4A Owner Control Centre foundation complete; execution disabled
+
+## Phase 4A Owner Control Centre Boundary
+
+HOME is backed by a dedicated workspace-scoped read model over the existing repository interfaces. It aggregates concise owner-facing priorities, proposed/in-progress work, unresolved approvals, policy-derived readiness, recovery/revenue categories, recent action results, available usage information, and owner-relevant safety status. REV remains the detailed work and approval surface; GROWTH remains the detailed commercial intelligence surface.
+
+`READY` and `BLOCKED` are derived views over existing action/approval state and `createDryRunPlan()`; they are not persisted action lifecycle values. A ready item means ready for an internal dry run only. `PLATFORM_EXECUTION_ENABLED` remains false, there is no Execute control, and approval still means `APPROVED — NOT EXECUTED`.
+
+Mock mode reads deterministic workspace fixtures through `DataProvider`. Live mode does not fall back to mock repositories: until operational live repositories exist, HOME returns explicit unavailable/empty sections while retaining globally known safety status. Potential Value, Recoverable Value, Pipeline Value, Won Revenue, REV Recovered, and REV Generated remain distinct.
+
+Phase 4A adds no schema, RLS, Supabase, provider, production-write, or legacy quote/Telegram change. Phase 4B and Phase 4C are not started.
 
 ## Phase 3F.1 Discovery Boundary
 

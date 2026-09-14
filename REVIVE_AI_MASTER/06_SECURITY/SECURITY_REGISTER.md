@@ -1,5 +1,14 @@
 # Security Register
 
+## Phase 4A Owner Control Centre Security - PASS (read-model only)
+
+- HOME aggregates only workspace-scoped repository reads. Mock mode is deterministic; live mode never falls back to mock operational data and exposes explicit unavailable states until live repositories exist.
+- READY/BLOCKED is derived from the existing execution policy and dry-run planner. No stored lifecycle, write path, Execute control, provider call, or external side effect was added.
+- Platform execution, external communication, and financial actions remain disabled. Approval remains `APPROVED — NOT EXECUTED`.
+- Potential/recoverable/pipeline/won/REV-attributed values remain separate, and action completion does not create revenue.
+- No schema, migration, RLS, Supabase deployment, service-role exposure, production write, legacy quote/Telegram, or `rev-business-verify` change occurred.
+- Focused Phase 4A tests passed 10/10; full validation passed 120/120 with build and audit clean. Phase 4B/4C remain unstarted.
+
 ## Phase 3F.2C Companies House Provider - PASS (bounded)
 
 - The real adapter is server-only, uses API-key Basic Auth, and is not imported into React. It normalizes registry facts without retrieving officers, PSC, or personal addresses.
