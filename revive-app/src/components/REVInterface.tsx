@@ -6,8 +6,11 @@ import { REVActionService } from '@/services/revActionService';
 import { ApprovalService } from '@/services/approvalService';
 import { AIService } from '@/services/aiService';
 import { capabilityForAction, createDryRunPlan } from '@/services/executionPolicyService';
+import { analyzeRecovery } from '@/services/recoveryService';
+import { FollowUpPreparationService } from '@/services/followUpPreparationService';
 import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
+import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -54,11 +57,95 @@ export function qualityGateLabel(action: REVActionRecord): string {
   return 'Checked';
 }
 
+export function userFacingRationale(rationale: string | undefined): string {
+  if (!rationale) return 'EVIDENCE REQUIRED';
+  return rationale.replace(/^prepared-follow-up:[^|]+\s*\|\s*/, '');
+}
+
 function revStatus(actions: REVActionRecord[], pendingApprovalCount: number): 'Ready' | 'Working' | 'Waiting for approval' {
   if (pendingApprovalCount > 0) return 'Waiting for approval';
   if (actions.some((action) => action.status === 'proposed' || action.status === 'awaiting_approval')) return 'Working';
   return 'Ready';
 }
+
+interface PreparedFollowUpReviewProps {
+  artifact: PreparedFollowUpArtifact;
+  canReview: boolean;
+  onEdit: (subject: string, draftMessage: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}
+
+export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({ artifact, canReview, onEdit, onApprove, onReject }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [subject, setSubject] = useState(artifact.subject ?? '');
+  const [draftMessage, setDraftMessage] = useState(artifact.draftMessage);
+  const pending = artifact.approvalState === 'pending';
+
+  return (
+    <article className="card border-2 border-primary-200 overflow-hidden">
+      <header className="bg-primary-50 px-5 py-4 border-b border-primary-100">
+        <p className="text-xs font-semibold text-primary-700">REV PREPARED THIS FOR YOU</p>
+        <div className="flex flex-wrap items-start justify-between gap-2 mt-1">
+          <h3 className="font-semibold text-neutral-900">{artifact.subject}</h3>
+          <span className={pending ? 'badge-warning' : artifact.approvalState === 'approved_not_sent' ? 'badge-success' : 'badge-danger'}>
+            {pending ? 'DRAFT — REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED — NOT SENT' : 'REJECTED — NOT SENT'}
+          </span>
+        </div>
+      </header>
+      <div className="p-5 grid gap-5">
+        <div className="grid sm:grid-cols-2 gap-3 text-sm text-neutral-700">
+          <p><strong>Recovery reason:</strong> {artifact.recoveryReason}</p>
+          <p><strong>Objective:</strong> {artifact.objective}</p>
+          <p><strong>Suggested channel:</strong> {artifact.suggestedChannel.replace('_', ' ')}</p>
+          <p><strong>External effect:</strong> None. £0 cost.</p>
+        </div>
+
+        {isEditing ? (
+          <div className="grid gap-3">
+            <label className="text-sm font-medium text-neutral-800" htmlFor={`prepared-subject-${artifact.id}`}>Subject</label>
+            <input id={`prepared-subject-${artifact.id}`} className="input-field" value={subject} onChange={(event) => setSubject(event.target.value)} />
+            <label className="text-sm font-medium text-neutral-800" htmlFor={`prepared-draft-${artifact.id}`}>Draft</label>
+            <textarea id={`prepared-draft-${artifact.id}`} className="input-field min-h-48 resize-y" value={draftMessage} onChange={(event) => setDraftMessage(event.target.value)} />
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary text-sm" type="button" onClick={() => { onEdit(subject, draftMessage); setIsEditing(false); }}>Save draft</button>
+              <button className="btn-ghost text-sm" type="button" onClick={() => setIsEditing(false)}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs font-semibold text-neutral-500">DRAFT</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-800">{artifact.draftMessage}</p>
+          </div>
+        )}
+
+        <div>
+          <p className="text-xs font-semibold text-neutral-500">EVIDENCE USED</p>
+          <ul className="mt-2 grid gap-1 text-sm text-neutral-700">
+            {artifact.evidenceContext.map((evidence, index) => <li key={`${evidence.source}-${index}`}>{evidence.summary} <span className="text-neutral-500">({evidence.source})</span></li>)}
+          </ul>
+        </div>
+
+        {artifact.missingInformation.length > 0 && (
+          <div className="border-l-4 border-amber-400 pl-3">
+            <p className="text-xs font-semibold text-amber-800">MISSING INFORMATION</p>
+            {artifact.missingInformation.map((item) => <p key={item} className="text-sm text-amber-900 mt-1">{item}</p>)}
+          </div>
+        )}
+
+        {pending && canReview && !isEditing && (
+          <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-4">
+            <button className="btn-secondary text-sm" type="button" onClick={() => setIsEditing(true)}>Edit</button>
+            <button className="btn-primary text-sm" type="button" onClick={onApprove}>Approve</button>
+            <button className="btn-ghost text-sm" type="button" onClick={onReject}>Reject</button>
+          </div>
+        )}
+        {pending && !canReview && <p className="text-sm text-amber-800">Owner or admin review is required.</p>}
+        <p className="text-xs text-neutral-500">Preparation and approval do not send this draft. No provider is invoked.</p>
+      </div>
+    </article>
+  );
+};
 
 export const REVInterface: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   if (dataProviderMode === 'supabase') return <LiveRevWorkspace />;
@@ -71,6 +158,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const goalService = useMemo(() => new GoalService(provider), [provider]);
   const actionService = useMemo(() => new REVActionService(provider), [provider]);
   const approvalService = useMemo(() => new ApprovalService(provider), [provider]);
+  const followUpService = useMemo(() => new FollowUpPreparationService(provider), [provider]);
   const [, setVersion] = useState(0);
   const [editingApprovalId, setEditingApprovalId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState('');
@@ -79,6 +167,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     { role: 'rev', content: "Hi, I'm REV. Tell me what you'd like your business to achieve and I'll get to work." },
   ]);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
+  const [preparationError, setPreparationError] = useState<string | null>(null);
 
   const goals: GoalRecord[] = goalService.list(workspaceId);
   const actions: REVActionRecord[] = actionService.list(workspaceId);
@@ -87,8 +176,21 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const contactName = (contactId?: string) => contacts.find((contact) => contact.id === contactId)?.name;
 
   const primaryGoal = goals.find((goal) => goal.status === 'active') ?? goals[0];
+  const membership = provider.workspaces.getMembership(workspaceId, currentUser.id);
+  const canReviewPreparedWork = membership?.role === 'owner' || membership?.role === 'admin';
+  const recovery = analyzeRecovery({
+    workspaceId,
+    goal: primaryGoal,
+    profile: provider.business.getProfile(workspaceId),
+    services: provider.business.listServices(workspaceId),
+    contacts,
+    opportunities: provider.opportunities.list(workspaceId),
+    discoveryCandidates: [],
+  });
+  const preparedFollowUps = followUpService.list(workspaceId);
   const pendingApprovals = approvals.filter((approval) => !approval.decision);
   const actionForApproval = (revActionId: string) => actions.find((action) => action.id === revActionId);
+  const genericPendingApprovals = pendingApprovals.filter((approval) => actionForApproval(approval.revActionId)?.actionType !== 'prepare_follow_up');
   const completedActions = actions.filter((action) => action.status === 'completed');
   const outcomeActions = completedActions.filter((action) => action.outcomeSummary);
   const status = revStatus(actions, pendingApprovals.length);
@@ -119,6 +221,28 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     const response = await AIService.reason(input, { workspaceData: { goals, actions }, context: 'REV Workspace' });
     setMessages((prev) => [...prev, { role: 'rev', content: response.content }]);
     setInput('');
+  };
+
+  const handlePrepareFollowUp = (candidateId: string) => {
+    const candidate = recovery.candidates.find((item) => item.id === candidateId);
+    if (!candidate) return;
+    try {
+      followUpService.prepare(candidate, currentUser.id);
+      setPreparationError(null);
+      setVersion((version) => version + 1);
+    } catch (error) {
+      setPreparationError(error instanceof Error ? error.message : 'REV could not prepare this follow-up.');
+    }
+  };
+
+  const handleEditPrepared = (artifact: PreparedFollowUpArtifact, subject: string, draftMessage: string) => {
+    followUpService.edit(workspaceId, artifact.id, currentUser.id, subject, draftMessage);
+    setVersion((version) => version + 1);
+  };
+
+  const handleDecidePrepared = (artifact: PreparedFollowUpArtifact, decision: 'approved' | 'rejected') => {
+    followUpService.decide(workspaceId, artifact.id, currentUser.id, decision);
+    setVersion((version) => version + 1);
   };
 
   return (
@@ -188,12 +312,66 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
               placeholder="e.g. Follow up my old quotes"
             />
             <button className="btn-primary" type="submit">
-              Send
+              Ask REV
             </button>
           </form>
           <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only — REV AI execution is not connected yet.</p>
         </div>
       </section>
+
+      <section aria-labelledby="recovery-heading" className="order-3 sm:order-3 rev-motion-in">
+        <h2 id="recovery-heading" className="text-xl font-bold text-neutral-900 mb-4">RECOVERY OPPORTUNITIES</h2>
+        {recovery.candidates.length > 0 ? (
+          <div className="grid gap-3">
+            {recovery.candidates.map((candidate) => {
+              const alreadyPrepared = preparedFollowUps.some((artifact) => artifact.recoveryCandidateId === candidate.id);
+              const opportunity = candidate.opportunityId ? provider.opportunities.get(workspaceId, candidate.opportunityId) : undefined;
+              const candidateContact = provider.contacts.get(workspaceId, candidate.contactId ?? opportunity?.contactId ?? '');
+              const suppressed = candidateContact?.doNotContact === true;
+              return (
+                <article key={candidate.id} className="card p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-neutral-900">{opportunity?.title ?? candidateContact?.name ?? 'Recovery opportunity'}</p>
+                      <p className="text-sm text-neutral-600 mt-1">{candidate.reason}</p>
+                      <p className="text-xs text-neutral-500 mt-2">Evidence: {candidate.evidence.map((item) => item.summary).join(' ')}</p>
+                    </div>
+                    <button
+                      className="btn-secondary text-sm"
+                      type="button"
+                      disabled={alreadyPrepared || suppressed || candidate.safety !== 'allowed'}
+                      onClick={() => handlePrepareFollowUp(candidate.id)}
+                    >
+                      {alreadyPrepared ? 'Draft prepared' : suppressed ? 'Suppressed' : 'Prepare follow-up'}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="card p-6 text-center text-neutral-600">No evidence-supported recovery opportunities are available.</div>
+        )}
+        {preparationError && <p role="alert" className="text-sm text-red-700 mt-3">{preparationError}</p>}
+      </section>
+
+      {preparedFollowUps.length > 0 && (
+        <section aria-labelledby="prepared-heading" className="order-3 sm:order-4 rev-motion-in">
+          <h2 id="prepared-heading" className="text-xl font-bold text-neutral-900 mb-4">PREPARED FOLLOW-UPS</h2>
+          <div className="grid gap-4">
+            {preparedFollowUps.map((artifact) => (
+              <PreparedFollowUpReview
+                key={artifact.id}
+                artifact={artifact}
+                canReview={canReviewPreparedWork}
+                onEdit={(subject, draftMessage) => handleEditPrepared(artifact, subject, draftMessage)}
+                onApprove={() => handleDecidePrepared(artifact, 'approved')}
+                onReject={() => handleDecidePrepared(artifact, 'rejected')}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* What REV is working on */}
       <section aria-labelledby="work-heading" className="order-4 sm:order-3 rev-motion-in">
@@ -234,7 +412,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
               .map((action) => (
                 <div key={action.id} className="card p-4 bg-primary-50 border-primary-200">
                   <p className="text-primary-900 font-medium">{action.title}</p>
-                  <p className="text-sm text-primary-800 mt-1">{action.rationale}</p>
+                  <p className="text-sm text-primary-800 mt-1">{userFacingRationale(action.rationale)}</p>
                 </div>
               ))}
           </div>
@@ -285,17 +463,17 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
       {/* Approvals */}
       <section aria-labelledby="approvals-heading" className="order-3 sm:order-7 rev-motion-in">
         <h2 id="approvals-heading" className="text-xl font-bold text-neutral-900 mb-4">
-          {pendingApprovals.length > 0 ? 'REV NEEDS YOUR APPROVAL' : 'APPROVALS'}
+          {genericPendingApprovals.length > 0 ? 'REV NEEDS YOUR APPROVAL' : 'APPROVALS'}
         </h2>
-        {pendingApprovals.length > 0 ? (
+        {genericPendingApprovals.length > 0 ? (
           <div className="card p-6 border-2 border-yellow-200 bg-yellow-50 space-y-4">
-            {pendingApprovals.map((approval) => {
+            {genericPendingApprovals.map((approval) => {
               const action = actionForApproval(approval.revActionId);
               if (!action) return null;
               return (
                 <div key={approval.id} className="bg-white p-4 rounded-lg border border-yellow-100">
                   <h3 className="font-semibold text-neutral-900">{action.title}</h3>
-                  <p className="text-sm text-neutral-600 mt-1">{action.rationale ?? 'EVIDENCE REQUIRED'}</p>
+                  <p className="text-sm text-neutral-600 mt-1">{userFacingRationale(action.rationale)}</p>
                   <div className="mt-3 grid gap-1 text-xs text-neutral-600">
                     <p><strong>What REV will do:</strong> {action.description}</p>
                     <p><strong>External effect:</strong> NONE. Execution is disabled in this phase.</p>

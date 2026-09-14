@@ -29,6 +29,7 @@
 | 4A | Owner Control Centre Foundation | Workspace-scoped owner read model, priorities, approvals, derived readiness, money/result/usage/status summaries | ✅ Complete (PASS; execution disabled) |
 | 4B | Trusted Execution Boundary | Server-derived authority, action transition policy, execution contracts | ✅ Complete (PASS; local dry-run boundary only, execution disabled) |
 | 4C | Durable Execution Control Plane | Additive execution/usage persistence and hardened live integration | ✅ Production migration applied + verified; execution disabled |
+| 4D | First Real REV Capability: Prepare Follow-Up | Evidence-based internal draft, existing REV Action/Approval workflow, owner/admin review | ✅ Complete (PASS; no sending/provider/migration) |
 | Future | Email & Replies | Email integration, reply detection, follow-up workflow | ⏳ Deferred; not enabled by Phase 4A |
 | 5 | Calendar & Meetings | Calendar integration, meeting booking, scheduling | ⏳ Not Started |
 | 6 | Daily Brief & Analytics | Daily summary, dashboards, measurable results | ⏳ Not Started |

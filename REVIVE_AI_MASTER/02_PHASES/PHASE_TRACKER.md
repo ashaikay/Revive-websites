@@ -609,6 +609,22 @@
 
 **Stop condition:** Do not activate execution, a provider, external communication, payments, or an Execute control without separate explicit authorization.
 
+## Phase 4D: First Real REV Capability — Prepare Follow-Up COMPLETE (PASS; internal-only)
+
+**Date:** 2026-09-14
+
+- Added a typed prepared follow-up artifact using existing REV Action fields for editable material content and Business Memory structured data for recovery linkage, evidence, objective, channel, and missing information. No schema change was required.
+- Reused the canonical REV Action and Approval workflow. Each recovery candidate creates at most one `prepare_follow_up` action and approval.
+- Drafts use only workspace-owned Business Brain, Contact, Opportunity, Goal, and Recovery evidence. Missing context is disclosed rather than invented.
+- Suppressed contacts, review-required safety states, unsupported signals, cross-workspace records, and unauthorized reviewers are blocked.
+- Active members may prepare; only owner/admin may edit, approve, or reject. Approval fingerprints bind edited subject/body content.
+- REV now exposes Recovery Opportunities and `REV PREPARED THIS FOR YOU` with EDIT / APPROVE / REJECT and `APPROVED — NOT SENT`. There is no Send or Execute control.
+- Focused Phase 4D tests passed 15/15; full suite passed 163/163; build passed; `npm audit` reported 0 vulnerabilities.
+- Desktop 1440x1000 and mobile 390x844 browser checks passed with no overflow, no internal marker leakage, and successful edit/save/approve interaction.
+- No migration, Supabase deployment/write, external provider, external communication, execution attempt, legacy quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
+
+**Stop condition:** Do not add sending, provider-backed delivery, execution controls, or production persistence changes without a separately authorized phase.
+
 **Objective:** Build lead management and outreach workflow
 
 **Estimated Duration:** 4 weeks

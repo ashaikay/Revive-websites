@@ -27,10 +27,18 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 4C — Execution Control Plane production migration applied and verified (PASS). Execution and providers remain disabled.
+Phase 4D — First Real REV Capability: Prepare Follow-Up COMPLETE (PASS). Preparation is internal-only; execution and providers remain disabled.
 
 ## Current Objective
-Hold at the Phase 4C checkpoint. Any first real REV capability, provider activation, external communication, or execution UI requires separate authorization.
+Hold at the Phase 4D prepare-only checkpoint. Sending, provider activation, external communication, and execution UI require separate authorization.
+
+## Phase 4D Closeout
+- Added a deterministic, workspace-scoped `PreparedFollowUpArtifact` and `FollowUpPreparationService` over existing recovery evidence, Business Brain context, REV Actions, Approvals, and Business Memory.
+- Supported preparation covers current evidence-backed dormant lead, stale/no-next-action opportunity, and former-customer recovery paths. Unsupported or unsafe evidence remains blocked; suppressed contacts are refused.
+- Owner/admin may edit, approve, or reject. Members may prepare but cannot review. Approval binds the edited action content and results in `APPROVED — NOT SENT` with `executionStatus = not_executed`.
+- REV displays recovery opportunities and the prepared draft, objective, channel, evidence, missing information, and review controls. No Send or Execute control exists.
+- Validation: focused Phase 4D tests 15/15; full suite 163/163; build PASS; `npm audit` 0 vulnerabilities; desktop and 390x844 browser checks PASS without overflow.
+- No migration, Supabase deployment/write, provider call, external communication, production execution, legacy quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
 
 ## Phase 4C Local Rehearsal
 - Drafted `20260914183000_rev_execution_control_plane.sql` and its guarded rollback companion.

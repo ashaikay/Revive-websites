@@ -1,5 +1,11 @@
 # Decision Log
 
+## 2026-09-14 - Make the first real REV capability preparation-only
+- **Decision:** Phase 4D may turn an evidence-supported Recovery Candidate into an internal prepared follow-up, but it may not send, invoke a provider, or enter execution.
+- **Persistence:** Reuse REV Action title/description for material editable content and Business Memory structured data for artifact context. Reuse the existing Approval record and fingerprint; no migration or parallel approval workflow is justified.
+- **Authority:** Active members may prepare evidence-backed work. Only owner/admin may edit, approve, or reject. Suppressed contacts, unsafe candidates, unsupported signals, and cross-workspace references are denied.
+- **Consequences:** REV can produce useful reviewed work at £0 while `PLATFORM_EXECUTION_ENABLED` remains false. Delivery and any live persistence extension require separate authorization.
+
 ## 2026-09-14 - Keep Phase 4C durable authority local and disabled pending production approval
 - **Decision:** Draft and rehearse the durable execution control plane only on isolated local Supabase; do not deploy it or activate execution/providers.
 - **Authority:** Active owners/admins may decide approvals and prepare dry-run attempts. Members may propose ordinary work but cannot authorize execution; viewers are read-only.

@@ -25,7 +25,22 @@ Do not enable live writes or connect the remaining operational modules. No privi
 - No RLS, policy, schema, membership, or migration change was made; legacy `public.quotes` and Telegram were untouched.
 - Non-blocking tracked follow-up: `POST /auth/v1/logout?scope=global` repeatedly reports `net::ERR_ABORTED` in the browser console. Session/tenant state clearing was unaffected each time; no code was changed to silence it. See `RISKS_AND_BLOCKERS.md`.
 
-# Current Handover — Phase 4C Production Migration Applied + Verified
+# Current Handover — Phase 4D Prepare Follow-Up Complete
+
+**Date:** 2026-09-14
+**Completed checkpoint:** Phase 4D First Real REV Capability — Prepare Follow-Up
+**Current Phase:** Phase 4D complete; sending and provider activation are not authorized
+**Status:** Focused tests 15/15 PASS; full tests 163/163 PASS; build PASS; `npm audit` 0 vulnerabilities; desktop/mobile browser PASS
+
+Phase 4D adds an internal, deterministic prepared follow-up artifact over existing workspace recovery evidence and Business Brain context. It reuses REV Actions, Approvals, Business Memory, approval fingerprints, and execution policy rather than adding a parallel workflow or schema.
+
+The mock REV workspace now lists supported recovery opportunities and can prepare an editable draft for owner/admin review. The review surface shows the recovery reason, objective, suggested channel, evidence, missing information, and EDIT / APPROVE / REJECT controls. Approval produces `APPROVED — NOT SENT`; action execution remains `not_executed`.
+
+No migration or production deployment was performed. No provider was invoked, no communication was sent, cost remained £0, and the platform execution kill switch remains false. Legacy quotes, Telegram, the marketing site, and `rev-business-verify` were unchanged.
+
+**Next authorization boundary:** Any email/SMS/provider integration, outbound delivery, Send/Execute control, or live persistence extension requires a separate approved phase.
+
+## Previous Handover — Phase 4C Production Migration Applied + Verified
 
 **Date:** 2026-09-14  
 **Completed checkpoint:** Phase 4C Execution Control Plane production migration

@@ -16,6 +16,18 @@ export interface ProposedCommercialAction {
   alreadyProposed: boolean;
 }
 
+export interface PreparedCommercialActionInput {
+  workspaceId: string;
+  goalId?: string;
+  contactId?: string;
+  opportunityId?: string;
+  title: string;
+  description: string;
+  rationale: string;
+  deduplicationKey: string;
+  proposedAt: string;
+}
+
 export class CommercialActionService {
   private readonly actions: REVActionService;
   private readonly approvals: ApprovalService;
@@ -51,6 +63,36 @@ export class CommercialActionService {
       workspaceId: action.workspaceId,
       revActionId: action.id,
       requestedAt: new Date().toISOString(),
+    });
+    return { action, approval, alreadyProposed: false };
+  }
+
+  proposePreparedFollowUp(input: PreparedCommercialActionInput): ProposedCommercialAction {
+    const marker = `prepared-follow-up:${input.deduplicationKey}`;
+    const existing = this.actions.list(input.workspaceId).find((action) => action.rationale?.includes(marker));
+    if (existing) {
+      const approval = this.approvals.list(input.workspaceId).find((item) => item.revActionId === existing.id);
+      if (!approval) throw new Error('Existing prepared follow-up has no approval record.');
+      return { action: existing, approval, alreadyProposed: true };
+    }
+
+    const action = this.actions.propose({
+      workspaceId: input.workspaceId,
+      goalId: input.goalId,
+      contactId: input.contactId,
+      opportunityId: input.opportunityId,
+      actionType: 'prepare_follow_up',
+      title: input.title,
+      description: input.description,
+      rationale: `${marker} | ${input.rationale}`,
+      requiresApproval: true,
+      proposedAt: input.proposedAt,
+    });
+    const approval = this.provider.approvals.save({
+      id: `approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      workspaceId: action.workspaceId,
+      revActionId: action.id,
+      requestedAt: input.proposedAt,
     });
     return { action, approval, alreadyProposed: false };
   }
