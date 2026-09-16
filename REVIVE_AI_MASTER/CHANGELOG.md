@@ -1,3 +1,12 @@
+## 2026-09-16 - Phase 4G.1 Provider-Independent Email Execution Gateway Foundation (PASS; no email sent)
+
+- Added provider-neutral `EmailExecutionRequest`, `EmailExecutionResult`, `EmailExecutionService`, and `EmailProvider` contracts without implementing a provider adapter.
+- Added a server-authority reservation contract for revalidating active owner/admin authority, exact workspace/action, `PREPARE_FOLLOW_UP`, action version, current approved fingerprint, exact recipient/subject/body snapshot, safety, jurisdiction, workspace policy, Cost Governor, and durable approved-action-version idempotency.
+- Reused the Phase 4C architecture for the future durable reservation: `rev_action_executions`, bound approvals, action versions/fingerprints, request fingerprints, correlation/idempotency, provider usage, and backend-only outcomes. No parallel persistence system was added.
+- `SEND_APPROVED_EMAIL` is defined as disabled. `PLATFORM_EXECUTION_ENABLED = false`; the gateway returns `DRY RUN — NOTHING SENT` before provider invocation. No browser integration, provider credentials, adapter, or `SEND` control was added.
+- Focused Phase 4G.1 and adjacent execution regressions passed 67/67; the production build passed. Provider calls, emails, usage, cost, and external effects remained zero.
+- No migration, schema, RLS, grant, RPC/function, production Supabase, protected quote/Telegram, legacy-family, marketing-site, or unrelated resource change occurred.
+
 ## 2026-09-16 - Phase 4F Controlled Execution Request Foundation (PASS; dry run only)
 
 - Added an owner/admin-only controlled request service over the trusted execution boundary for approved `PREPARE_FOLLOW_UP` actions.

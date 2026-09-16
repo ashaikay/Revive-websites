@@ -1,5 +1,12 @@
 # Test Log
 
+## 2026-09-16 - Phase 4G.1 Provider-Independent Email Execution Gateway Foundation
+- New focused gateway suite: 17/17 PASS. Covered owner/admin eligibility; member/viewer denial; cross-tenant mismatch; stale action version; invalidated or content-modified approval; missing/invalid recipient, subject, and body; recipient/suppression verification; durable approved-action-version idempotency; replay; safety; jurisdiction; Cost Governor; disabled capability/platform; and provider non-invocation.
+- Lean adjacent regression: 6 files, 67/67 PASS across execution policy, trusted boundary, Phase 4C SQL control-plane contract, Phase 4F controlled request/UI, and Phase 4G.1 gateway.
+- Production build: PASS (`tsc && vite build`). Vite reported the existing minified chunk-size advisory over 500 kB.
+- Evidence: `PLATFORM_EXECUTION_ENABLED = false`; `SEND_APPROVED_EMAIL` disabled; provider mock called 0 times; emails sent 0; provider usage/cost £0; no `SEND` control.
+- Boundary: no full historical suite, Docker, browser, audit, external provider, Supabase, migration, schema, RLS, grant, RPC/function, production, or protected-system operation was performed.
+
 ## 2026-09-16 - Phase 4F Controlled Execution Request Foundation
 - Focused regression: 4 files, 39/39 PASS across the Phase 4B trusted boundary, Phase 4D prepared-work UI, Phase 4F controlled request service, and Phase 4F request/result UI.
 - Covered owner/admin success; member/viewer denial; cross-tenant non-disclosure; stale fingerprint denial; workspace policy enforcement; platform execution disabled; external provider and nonzero-cost rejection; zero provider calls, usage, cost, and external effect; request-ID replay without duplicate audit; and `DRY RUN — NOTHING SENT`.

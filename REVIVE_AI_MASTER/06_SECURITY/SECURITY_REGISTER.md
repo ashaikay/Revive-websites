@@ -1,5 +1,13 @@
 # Security Register
 
+## Phase 4G.1 Email Execution Gateway Security - PASS (foundation only)
+
+- Email eligibility requires trusted active owner/admin authority, exact workspace/action, approved `PREPARE_FOLLOW_UP`, matching current action and approval versions/fingerprints, current approval validity, exact approved recipient/subject/body request binding, recipient and suppression verification, allowed safety/jurisdiction/workspace policy, Cost Governor approval, and durable approved-action-version idempotency.
+- The provider contract contains no credentials. Future OAuth access/refresh tokens, SMTP passwords, Microsoft/Google/Titan secrets, and service-role credentials must exist only in the trusted server/provider adapter boundary and never in React, Vite, local storage, prompts, or client-readable records.
+- Phase 4C remains authoritative for durable reservations, locking, audit, usage, and backend-only outcomes. No frontend or process-local idempotency claim is made for sending.
+- `SEND_APPROVED_EMAIL` and platform execution are disabled. The service cannot reach its provider in Phase 4G.1; provider calls, emails, usage, cost, and external effects are zero.
+- No database, Supabase, provider, UI, credential, or protected-system change occurred. Focused and adjacent execution tests passed 67/67; build passed.
+
 ## Phase 4C Durable Execution Control Plane - PRODUCTION APPLIED + VERIFIED
 
 - Durable dry-run attempts use workspace-scoped unique idempotency keys plus transaction advisory locking. Approval authority is bound to action version and deterministic material fingerprint.

@@ -25,20 +25,24 @@ Do not enable live writes or connect the remaining operational modules. No privi
 - No RLS, policy, schema, membership, or migration change was made; legacy `public.quotes` and Telegram were untouched.
 - Non-blocking tracked follow-up: `POST /auth/v1/logout?scope=global` repeatedly reports `net::ERR_ABORTED` in the browser console. Session/tenant state clearing was unaffected each time; no code was changed to silence it. See `RISKS_AND_BLOCKERS.md`.
 
-# Current Handover — Phase 4F Controlled Execution Request Foundation Complete
+# Current Handover — Phase 4G.1 Provider-Independent Email Execution Gateway Foundation Complete
 
 **Date:** 2026-09-16
-**Completed checkpoint:** Phase 4F Controlled Execution Request Foundation
-**Current Phase:** Phase 4F complete; live execution, sending, providers, and payments are not authorized
-**Status:** Focused Phase 4B/4D/4F tests 39/39 PASS; production build PASS
+**Completed checkpoint:** Phase 4G.1 Provider-Independent Email Execution Gateway Foundation
+**Current Phase:** Phase 4G.1 complete; REV cannot send email
+**Status:** Focused and adjacent execution tests 67/67 PASS; production build PASS
 
-Phase 4F adds the smallest controlled bridge from approved prepared work to a trusted dry-run request. Only owners/admins may request it. The trusted boundary resolves membership, workspace/action state, approval fingerprint, capability, safety, jurisdiction, workspace policy, provider configuration, cost, and autonomy again immediately before returning a result.
+Phase 4G.1 defines provider-neutral `EmailExecutionRequest`, `EmailExecutionResult`, `EmailExecutionService`, and `EmailProvider` contracts. A future trusted server implementation of `EmailExecutionAuthority` must revalidate and durably reserve active owner/admin authority, the exact tenant/action, current action version and approved fingerprint, exact approved recipient/subject/body, safety, jurisdiction, workspace policy, Cost Governor, and approved-action-version idempotency.
 
-Only `PREPARE_FOLLOW_UP` plans marked `ready_for_dry_run` are accepted. The terminal result is `DRY RUN — NOTHING SENT`; platform and envelope execution remain false, provider calls and cost remain zero, and no external effect occurs. Matching request IDs replay process-locally without duplicate request/completion audits, while conflicting reuse is rejected.
+The design reuses Phase 4C `rev_action_executions`, approvals, fingerprints, request/correlation/idempotency architecture, provider usage, audit, and backend-only outcomes. It does not claim frontend or process-local idempotency is sufficient. The Phase 4C RPC has not been wired into an endpoint in this phase.
 
-The mock workspace shows `REQUEST EXECUTION` only for eligible approved owner/admin work. Live Supabase mode exposes no request control because no trusted server endpoint is authorized. Phase 4C remains the durable execution-control architecture; the Phase 4F mock bridge does not create browser execution authority. No `SEND` control, migration, RLS, grant, function, provider integration, production Supabase, public quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
+`SEND_APPROVED_EMAIL` and platform execution are disabled. `EmailExecutionService` stops before its optional provider and returns `DRY RUN — NOTHING SENT`; provider calls, emails, usage, cost, and external effects remain zero. No UI wiring, `SEND` control, adapter, credentials, database/Supabase, public quote/Telegram, legacy-family, marketing-site, or unrelated change occurred.
 
-**Next authorization boundary:** Any live trusted server endpoint, outbound provider, sending/delivery control, execution activation, or payment behavior requires a separately approved phase and security review.
+**Phase 4G.2 blockers:** separately authorize and security-review a trusted server endpoint/authority implementation, deterministic Phase 4C reservation integration, server-only provider credential storage, a selected provider adapter with provider idempotency/ambiguous-outcome handling, and backend-only outcome/usage recording. Sending remains prohibited until all are implemented and validated.
+
+## Previous Handover — Phase 4F Controlled Execution Request Foundation Complete
+
+Phase 4F added an owner/admin-only mock dry-run request over the trusted boundary, ending at `DRY RUN — NOTHING SENT`. Its focused Phase 4B/4D/4F validation remains 39/39 PASS with build PASS; live Supabase mode has no execution-request control.
 
 ## Previous Handover — Phase 4E Live Prepared-Work Repository Integration Complete
 

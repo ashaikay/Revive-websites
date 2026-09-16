@@ -653,6 +653,19 @@
 
 **Stop condition:** Do not add a live execution endpoint, provider-backed delivery, sending, payments, or execution activation without a separately authorized phase and security review.
 
+## Phase 4G.1: PROVIDER-INDEPENDENT EMAIL EXECUTION GATEWAY FOUNDATION COMPLETE (PASS; no email sent)
+
+**Date:** 2026-09-16
+
+- Added provider-neutral email execution request/result/service/provider contracts and a trusted server authority reservation contract. No provider adapter was implemented.
+- Future eligibility requires an active owner/admin, exact workspace and approved `PREPARE_FOLLOW_UP` action, matching action/approval version and fingerprint, exact approved recipient/subject/body snapshot, allowed safety/jurisdiction/workspace policy, Cost Governor approval, and durable approved-action-version idempotency.
+- Designed the authority boundary to reuse Phase 4C durable execution attempts, correlation/idempotency, request and approval fingerprints, provider usage evidence, audit, and backend-only outcome recording. No parallel persistence path exists.
+- `SEND_APPROVED_EMAIL` and platform execution remain disabled. The service stops at `DRY RUN — NOTHING SENT`; provider calls, emails, usage, external effects, and cost are zero.
+- Focused and adjacent execution tests passed 67/67; the production build passed. No UI wiring or `SEND` control was added.
+- No migration, schema, RLS, grant, RPC/function, production Supabase, provider credential, protected quote/Telegram, legacy-family, marketing-site, or unrelated change occurred.
+
+**Stop condition:** Do not implement Phase 4G.2 server/RPC integration, provider credentials or adapter, live outcome transitions, or sending without separate authorization and security review.
+
 **Objective:** Build lead management and outreach workflow
 
 **Estimated Duration:** 4 weeks

@@ -14,6 +14,14 @@ The result is always a non-executing envelope with `executionEnabled: false` and
 
 Current `rev_actions_tenant` and `approvals_tenant` RLS policies permit broad writes by any active member. Phase 4B does not change or rely on those policies for execution authority; role-restricted write policies/RPCs require separate Phase 4C migration review.
 
+## Phase 4G.1 Provider-Independent Email Execution Gateway
+
+`EmailExecutionService` depends on two provider-neutral contracts: a trusted server-side `EmailExecutionAuthority` and an `EmailProvider`. The authority is responsible for resolving and durably reserving all execution evidence; the provider contract accepts only the exact authorized email snapshot plus durable execution, correlation, and idempotency identifiers. OAuth tokens, passwords, provider secrets, and service-role credentials are outside these contracts and must remain server-only.
+
+The authority contract is designed over the Phase 4C control plane rather than a parallel system. A future implementation must use `rev_action_executions`, action versions, approval fingerprints, workspace policy versions, request fingerprints covering recipient/subject/body, correlation and workspace-scoped idempotency, provider usage events, audit, and backend-only result recording. Idempotency is scoped to the approved action version so a caller-selected retry identifier cannot permit duplicate delivery.
+
+Phase 4G.1 supplies no authority endpoint or provider adapter. `SEND_APPROVED_EMAIL` and `PLATFORM_EXECUTION_ENABLED` remain disabled, and the service returns `DRY RUN — NOTHING SENT` before the provider boundary.
+
 ## Phase 4A Owner Control Centre Boundary
 
 HOME is backed by a dedicated workspace-scoped read model over the existing repository interfaces. It aggregates concise owner-facing priorities, proposed/in-progress work, unresolved approvals, policy-derived readiness, recovery/revenue categories, recent action results, available usage information, and owner-relevant safety status. REV remains the detailed work and approval surface; GROWTH remains the detailed commercial intelligence surface.

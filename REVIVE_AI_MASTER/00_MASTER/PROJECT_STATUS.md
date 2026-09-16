@@ -27,10 +27,18 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 4F — Controlled Execution Request Foundation COMPLETE (PASS). Approved prepared work can enter a trusted mock dry run; nothing is sent or executed.
+Phase 4G.1 — PROVIDER-INDEPENDENT EMAIL EXECUTION GATEWAY FOUNDATION COMPLETE (PASS). Contracts and server-side authority boundaries exist; REV cannot send email.
 
 ## Current Objective
-Hold at `DRY RUN — NOTHING SENT`. A live trusted server endpoint, provider activation, sending, external communication, payments, and execution require separate authorization.
+Hold at `DRY RUN — NOTHING SENT`. Phase 4G.2 requires separate authorization for a trusted server implementation, durable reservation integration, provider adapter/credentials, ambiguity handling, and security review before any email can be sent.
+
+## Phase 4G.1 Closeout
+- Added provider-independent request/result/service/provider contracts and the disabled `SEND_APPROVED_EMAIL` capability. No Microsoft, Google, Titan, SMTP, or other provider assumption exists in core execution code.
+- `EmailExecutionAuthority` is the required trusted server boundary. It must resolve and reserve active owner/admin authority, exact tenant/action, current action version and approved fingerprint, exact approved recipient/subject/body snapshot, safety, jurisdiction, workspace policy, cost decision, and durable approved-action-version idempotency before returning authorization.
+- The contract reuses Phase 4C `rev_action_executions`, approvals, action versions/fingerprints, request fingerprints, correlation/idempotency, provider usage, audit, and backend-only outcome architecture. No parallel execution persistence was introduced.
+- `EmailExecutionService` validates the returned evidence, then stops at `PLATFORM_EXECUTION_ENABLED = false`. Its only successful result is `DRY RUN — NOTHING SENT`, with no provider invocation, email, usage, cost, or external effect.
+- Focused Phase 4G.1 plus adjacent Phase 3G.2/4B/4C/4F tests passed 67/67; the production build passed with the existing chunk-size advisory.
+- No browser wiring, `SEND` control, adapter, credentials, migration, schema, RLS, grant, RPC/function, production Supabase, or protected-system change occurred.
 
 ## Phase 4F Closeout
 - Added an owner/admin-only request wrapper over the existing trusted execution boundary. Members and viewers cannot request execution, and cross-workspace resources remain undisclosed.
