@@ -27,10 +27,19 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 4E — Live Prepared-Work Repository Integration COMPLETE (PASS). Prepared work persists and reloads; sending, execution, and providers remain disabled.
+Phase 4F — Controlled Execution Request Foundation COMPLETE (PASS). Approved prepared work can enter a trusted mock dry run; nothing is sent or executed.
 
 ## Current Objective
-Hold at the Phase 4E approved-not-sent checkpoint. Sending, provider activation, external communication, and execution UI require separate authorization.
+Hold at `DRY RUN — NOTHING SENT`. A live trusted server endpoint, provider activation, sending, external communication, payments, and execution require separate authorization.
+
+## Phase 4F Closeout
+- Added an owner/admin-only request wrapper over the existing trusted execution boundary. Members and viewers cannot request execution, and cross-workspace resources remain undisclosed.
+- Authority and policy are resolved again immediately before the dry run, including active membership, action state, approval fingerprint, capability, audience safety, jurisdiction, workspace execution-preparation policy, provider configuration, cost, and autonomy.
+- Only `PREPARE_FOLLOW_UP` plans that are `ready_for_dry_run` may return the fixed terminal result `DRY RUN — NOTHING SENT`; platform execution and envelope execution remain false, with zero provider calls, £0 provider cost, and no external effect.
+- Successful first requests write request/completion audit records. Mock idempotency is process-local; Phase 4C remains the durable execution-control architecture for any future trusted server integration.
+- Mock mode shows `REQUEST EXECUTION` only for eligible approved owner/admin work. Live Supabase mode exposes no request control because no trusted server endpoint is authorized. No `SEND` control exists.
+- Focused Phase 4B/4D/4F tests passed 39/39 and the production build passed. No full-suite, audit, Supabase, or browser validation was required for this isolated no-schema foundation.
+- No migration, RLS, grant, function, provider integration, production Supabase, protected quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
 
 ## Phase 4E Closeout
 - Connected the Phase 4D prepared follow-up capability to authenticated workspace-scoped Supabase repositories without adding a parallel workflow or schema.

@@ -1,3 +1,12 @@
+## 2026-09-16 - Phase 4F Controlled Execution Request Foundation (PASS; dry run only)
+
+- Added an owner/admin-only controlled request service over the trusted execution boundary for approved `PREPARE_FOLLOW_UP` actions.
+- Every request reruns authoritative membership, workspace, action, approval fingerprint, lifecycle, capability, safety, jurisdiction, workspace-policy, provider, cost, and autonomy checks before returning `DRY RUN — NOTHING SENT`.
+- Successful first requests create request/completion audit records; matching process-local replays are idempotent and conflicting request-ID reuse is rejected.
+- Mock mode exposes `REQUEST EXECUTION` for eligible approved work. Live Supabase mode exposes no control because no trusted server execution endpoint is authorized. No `SEND` control was added.
+- Focused Phase 4B/4D/4F tests passed 39/39 and the production build passed. Provider calls, provider cost, external effects, and execution remained zero/false.
+- No migration, RLS, grant, function, production Supabase, protected quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
+
 ## 2026-09-16 - Phase 4E Live Prepared-Work Repository Integration (PASS; not sent)
 
 - Connected `PREPARE_FOLLOW_UP` to the authenticated workspace-scoped Supabase repository using existing `rev_actions`, `approvals`, Business Memory, contacts, opportunities, and the Phase 4C trusted approval RPC.

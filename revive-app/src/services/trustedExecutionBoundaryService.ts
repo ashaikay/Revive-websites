@@ -75,7 +75,7 @@ export class TrustedExecutionBoundaryService {
 
     const membership = this.provider.workspaces.getMembership(request.workspaceId, actor.actorUserId);
     if (!membership) throw new Error('Active workspace membership is required.');
-    if (!['owner', 'admin', 'member'].includes(membership.role)) throw new Error('The active workspace role cannot prepare execution.');
+    if (!['owner', 'admin'].includes(membership.role)) throw new Error('The active workspace role must be owner or admin to request execution.');
 
     const action = this.provider.actions.get(request.workspaceId, request.actionId);
     if (!action) throw new Error('The requested action was not found in the active workspace.');

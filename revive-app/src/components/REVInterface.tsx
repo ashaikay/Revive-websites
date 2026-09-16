@@ -8,6 +8,8 @@ import { AIService } from '@/services/aiService';
 import { capabilityForAction, createDryRunPlan } from '@/services/executionPolicyService';
 import { analyzeRecovery } from '@/services/recoveryService';
 import { FollowUpPreparationService } from '@/services/followUpPreparationService';
+import { ControlledDryRunResult, ControlledExecutionRequestService } from '@/services/controlledExecutionRequestService';
+import { TrustedExecutionBoundaryService } from '@/services/trustedExecutionBoundaryService';
 import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
@@ -75,9 +77,16 @@ interface PreparedFollowUpReviewProps {
   onEdit: (subject: string, draftMessage: string) => void;
   onApprove: () => void;
   onReject: () => void;
+  canRequestExecution?: boolean;
+  onRequestExecution?: () => void;
+  executionResult?: ControlledDryRunResult;
+  executionError?: string;
 }
 
-export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({ artifact, canReview, onEdit, onApprove, onReject }) => {
+export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
+  artifact, canReview, onEdit, onApprove, onReject, canRequestExecution = false,
+  onRequestExecution, executionResult, executionError,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [subject, setSubject] = useState(artifact.subject ?? '');
   const [draftMessage, setDraftMessage] = useState(artifact.draftMessage);
@@ -142,6 +151,19 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({ 
           </div>
         )}
         {pending && !canReview && <p className="text-sm text-amber-800">Owner or admin review is required.</p>}
+        {artifact.approvalState === 'approved_not_sent' && canRequestExecution && onRequestExecution && (
+          <div className="border-t border-neutral-200 pt-4">
+            <p className="text-sm font-medium text-neutral-900">Phase 4F is dry-run only. Nothing will be sent.</p>
+            <button className="btn-secondary text-sm mt-3" type="button" onClick={onRequestExecution}>REQUEST EXECUTION</button>
+          </div>
+        )}
+        {executionResult && (
+          <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
+            <strong>{executionResult.displayStatus}</strong>
+            <p className="mt-1">Provider calls: 0 · Cost: £0 · External effect: none</p>
+          </div>
+        )}
+        {executionError && <p className="text-sm text-red-700" role="alert">{executionError}</p>}
         <p className="text-xs text-neutral-500">Preparation and approval do not send this draft. No provider is invoked.</p>
       </div>
     </article>
@@ -160,6 +182,21 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const actionService = useMemo(() => new REVActionService(provider), [provider]);
   const approvalService = useMemo(() => new ApprovalService(provider), [provider]);
   const followUpService = useMemo(() => new FollowUpPreparationService(provider), [provider]);
+  const executionRequestService = useMemo(() => new ControlledExecutionRequestService(
+    new TrustedExecutionBoundaryService(provider, {
+      resolve: () => ({
+        workspaceExecutionEnabled: true,
+        providerConfigured: false,
+        estimatedExternalCost: 0,
+        countryCode: 'GB',
+        jurisdiction: 'GB',
+        autonomyMode: 'always_ask',
+        audienceSafety: 'allowed',
+        usagePlan: 'free',
+      }),
+    }),
+    provider,
+  ), [provider]);
   const [, setVersion] = useState(0);
   const [editingApprovalId, setEditingApprovalId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState('');
@@ -169,6 +206,8 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   ]);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [preparationError, setPreparationError] = useState<string | null>(null);
+  const [executionResults, setExecutionResults] = useState<Record<string, ControlledDryRunResult>>({});
+  const [executionErrors, setExecutionErrors] = useState<Record<string, string>>({});
 
   const goals: GoalRecord[] = goalService.list(workspaceId);
   const actions: REVActionRecord[] = actionService.list(workspaceId);
@@ -244,6 +283,22 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const handleDecidePrepared = (artifact: PreparedFollowUpArtifact, decision: 'approved' | 'rejected') => {
     followUpService.decide(workspaceId, artifact.id, currentUser.id, decision);
     setVersion((version) => version + 1);
+  };
+
+  const handleRequestExecution = (artifact: PreparedFollowUpArtifact) => {
+    try {
+      const result = executionRequestService.requestDryRun(
+        { requestId: `phase4f-${artifact.revActionId}`, workspaceId, actionId: artifact.revActionId },
+        { actorUserId: currentUser.id },
+      );
+      setExecutionResults((current) => ({ ...current, [artifact.id]: result }));
+      setExecutionErrors((current) => ({ ...current, [artifact.id]: '' }));
+    } catch (error) {
+      setExecutionErrors((current) => ({
+        ...current,
+        [artifact.id]: error instanceof Error ? error.message : 'The dry-run request was blocked.',
+      }));
+    }
   };
 
   return (
@@ -368,6 +423,10 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 onEdit={(subject, draftMessage) => handleEditPrepared(artifact, subject, draftMessage)}
                 onApprove={() => handleDecidePrepared(artifact, 'approved')}
                 onReject={() => handleDecidePrepared(artifact, 'rejected')}
+                canRequestExecution={canReviewPreparedWork && artifact.approvalState === 'approved_not_sent'}
+                onRequestExecution={() => handleRequestExecution(artifact)}
+                executionResult={executionResults[artifact.id]}
+                executionError={executionErrors[artifact.id]}
               />
             ))}
           </div>

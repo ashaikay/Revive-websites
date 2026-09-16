@@ -1,5 +1,12 @@
 # Test Log
 
+## 2026-09-16 - Phase 4F Controlled Execution Request Foundation
+- Focused regression: 4 files, 39/39 PASS across the Phase 4B trusted boundary, Phase 4D prepared-work UI, Phase 4F controlled request service, and Phase 4F request/result UI.
+- Covered owner/admin success; member/viewer denial; cross-tenant non-disclosure; stale fingerprint denial; workspace policy enforcement; platform execution disabled; external provider and nonzero-cost rejection; zero provider calls, usage, cost, and external effect; request-ID replay without duplicate audit; and `DRY RUN — NOTHING SENT`.
+- UI contract: eligible approved mock owner/admin work exposes `REQUEST EXECUTION` with a dry-run-only notice and truthful terminal result. Unauthorized and live-safe usages expose no request control, and no button containing `SEND` exists.
+- Production build: PASS (`tsc && vite build`). Vite reported only the existing chunk-size advisory for a minified bundle over 500 kB.
+- Boundary: no full-suite, audit, browser, Docker, Supabase, migration, RLS, production, provider, quote/Telegram, marketing-site, or `rev-business-verify` operation was performed.
+
 ## 2026-09-16 - Phase 4E Live Prepared-Work Repository Integration
 - Focused application contracts: 14/14 PASS, covering deterministic PostgreSQL-compatible fingerprints, persistence/reload, owner/admin review, member/viewer restrictions, cross-tenant denial, stale approval, idempotency, browser-safe credentials, disabled execution, and protected-system scope.
 - Real isolated local Supabase/PostgREST/RLS proof: 1/1 PASS through authenticated disposable role identities, the browser-safe client, real repository writes/reads, RLS policies, action-version trigger behavior, and `decide_rev_action_approval`.

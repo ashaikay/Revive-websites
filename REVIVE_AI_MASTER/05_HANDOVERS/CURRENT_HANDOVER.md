@@ -25,20 +25,24 @@ Do not enable live writes or connect the remaining operational modules. No privi
 - No RLS, policy, schema, membership, or migration change was made; legacy `public.quotes` and Telegram were untouched.
 - Non-blocking tracked follow-up: `POST /auth/v1/logout?scope=global` repeatedly reports `net::ERR_ABORTED` in the browser console. Session/tenant state clearing was unaffected each time; no code was changed to silence it. See `RISKS_AND_BLOCKERS.md`.
 
-# Current Handover — Phase 4E Live Prepared-Work Repository Integration Complete
+# Current Handover — Phase 4F Controlled Execution Request Foundation Complete
 
 **Date:** 2026-09-16
-**Completed checkpoint:** Phase 4E Live Prepared-Work Repository Integration
-**Current Phase:** Phase 4E complete; sending, provider activation, and execution are not authorized
-**Status:** Focused tests 14/14 PASS; real isolated local Supabase/PostgREST/RLS proof 1/1 PASS; full tests 177/177 PASS; build PASS; `npm audit` 0 vulnerabilities; desktop/mobile PASS
+**Completed checkpoint:** Phase 4F Controlled Execution Request Foundation
+**Current Phase:** Phase 4F complete; live execution, sending, providers, and payments are not authorized
+**Status:** Focused Phase 4B/4D/4F tests 39/39 PASS; production build PASS
 
-Phase 4E connects the existing Phase 4D prepared follow-up artifact to authenticated workspace-scoped Supabase repositories. It reuses `rev_actions`, `approvals`, Business Memory, contacts, opportunities, deterministic linkage, Phase 4C action-version/fingerprint protection, role-specific RLS, and the trusted approval RPC.
+Phase 4F adds the smallest controlled bridge from approved prepared work to a trusted dry-run request. Only owners/admins may request it. The trusted boundary resolves membership, workspace/action state, approval fingerprint, capability, safety, jurisdiction, workspace policy, provider configuration, cost, and autonomy again immediately before returning a result.
 
-Real isolated local validation proved persistence and fresh repository/session reload; owner/admin prepare, edit, approve, and reject; member prepare without authorization; viewer read-only behavior; cross-tenant denial; stale approval rejection; duplicate prevention; and persisted `APPROVED — NOT SENT` state.
+Only `PREPARE_FOLLOW_UP` plans marked `ready_for_dry_run` are accepted. The terminal result is `DRY RUN — NOTHING SENT`; platform and envelope execution remain false, provider calls and cost remain zero, and no external effect occurs. Matching request IDs replay process-locally without duplicate request/completion audits, while conflicting reuse is rejected.
 
-Execution remains disabled at platform and workspace levels. No Send or Execute control exists, no provider was invoked, no external communication occurred, no execution/provider-usage row was created, and cost remained £0. No migration, RLS, grant, function, production Supabase, public quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
+The mock workspace shows `REQUEST EXECUTION` only for eligible approved owner/admin work. Live Supabase mode exposes no request control because no trusted server endpoint is authorized. Phase 4C remains the durable execution-control architecture; the Phase 4F mock bridge does not create browser execution authority. No `SEND` control, migration, RLS, grant, function, provider integration, production Supabase, public quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
 
-**Next authorization boundary:** Any outbound provider, sending/delivery control, execution activation, or payment behavior requires a separately approved phase.
+**Next authorization boundary:** Any live trusted server endpoint, outbound provider, sending/delivery control, execution activation, or payment behavior requires a separately approved phase and security review.
+
+## Previous Handover — Phase 4E Live Prepared-Work Repository Integration Complete
+
+Phase 4E connected the existing Phase 4D prepared follow-up artifact to authenticated workspace-scoped Supabase repositories and proved persistence, reload, tenant isolation, role authority, stale-review rejection, idempotency, and persisted `APPROVED — NOT SENT` against isolated local PostgREST/RLS. Its completed validation remains 14/14 focused, 1/1 real-local proof, 177/177 full tests, build PASS, audit 0 vulnerabilities, and desktop/mobile PASS.
 
 ## Previous Handover — Phase 4D Prepare Follow-Up Complete
 

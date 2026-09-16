@@ -80,6 +80,12 @@ describe('Phase 4B trusted execution boundary', () => {
     expect(() => harness(data).prepare()).toThrow(/role/);
   });
 
+  it('rejects a member role', () => {
+    const data = fixture();
+    data.members[0].role = 'member';
+    expect(() => harness(data).prepare()).toThrow(/owner or admin/);
+  });
+
   it('cannot resolve an action through a different workspace', () => {
     expect(() => harness().prepare('request-1', 'workspace-2')).toThrow(/not found/);
   });

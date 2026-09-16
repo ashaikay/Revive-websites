@@ -640,6 +640,19 @@
 
 **Stop condition:** Do not add sending, provider-backed delivery, execution activation, payments, or production configuration changes without a separately authorized phase.
 
+## Phase 4F: Controlled Execution Request Foundation COMPLETE (PASS; dry run only)
+
+**Date:** 2026-09-16
+
+- Added a controlled owner/admin-only request boundary for approved `PREPARE_FOLLOW_UP` work. Members, viewers, stale approvals, cross-tenant access, blocked policies, external providers, and nonzero provider costs are denied.
+- The trusted boundary reruns authoritative pre-execution validation and accepts only `ready_for_dry_run`; every accepted result is `DRY RUN — NOTHING SENT` with no provider invocation, external communication, execution, or cost.
+- Successful first requests produce request/completion audit records. Matching process-local retries replay without duplicate audit; Phase 4C remains the durable control plane for future server-owned integration.
+- Mock mode exposes `REQUEST EXECUTION` for eligible approved owner/admin artifacts. Live Supabase mode has no request control because a trusted server endpoint is not authorized. No `SEND` control exists.
+- Focused Phase 4B/4D/4F tests passed 39/39 and the production build passed.
+- No schema, migration, RLS, grant, function, production Supabase, provider, protected quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
+
+**Stop condition:** Do not add a live execution endpoint, provider-backed delivery, sending, payments, or execution activation without a separately authorized phase and security review.
+
 **Objective:** Build lead management and outreach workflow
 
 **Estimated Duration:** 4 weeks
