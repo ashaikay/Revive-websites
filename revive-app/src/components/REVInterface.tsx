@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { GoalService } from '@/services/goalService';
@@ -11,6 +11,7 @@ import { FollowUpPreparationService } from '@/services/followUpPreparationServic
 import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
+import { LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -148,7 +149,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({ 
 };
 
 export const REVInterface: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
-  if (dataProviderMode === 'supabase') return <LiveRevWorkspace />;
+  if (dataProviderMode === 'supabase') return <LiveRevWorkspace workspaceId={workspaceId} />;
   return <MockRevWorkspace workspaceId={workspaceId} />;
 };
 
@@ -578,29 +579,142 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   );
 };
 
-/**
- * Live (Supabase) mode REV workspace. Goals/actions/approvals repositories remain
- * mock-only per Phase 2D.2 scope, so this surface shows honest empty states rather
- * than fabricating REV work or AI reasoning.
- */
-const LiveRevWorkspace: React.FC = () => (
-  <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8">
-    <section className="rev-motion-in card p-6 bg-gradient-to-r from-primary-600 to-primary-700 text-white">
-      <p className="text-xs font-semibold tracking-[0.2em] text-primary-100">REV</p>
-      <h1 className="text-3xl font-bold mt-1">Your AI Growth Employee</h1>
-      <span className="badge bg-white/15 text-white mt-4 inline-block" role="status">
-        Not yet connected
-      </span>
-    </section>
-    <LiveEmptySection title="CURRENT OBJECTIVE" message="Goals are not yet connected to live workspace data." />
-    <LiveEmptySection title="TALK TO REV" message="REV AI execution is not connected yet." />
-    <LiveEmptySection title="WHAT REV IS WORKING ON" message="REV work items are not yet available in live mode." />
-    <LiveEmptySection title="RECOMMENDATIONS" message="REV recommendations are not yet available in live mode." />
-    <LiveEmptySection title="APPROVALS" message="Live approvals are not yet available in this mode." />
-    <LiveEmptySection title="RECENTLY COMPLETED" message="No completed REV work is available in live mode yet." />
-    <LiveEmptySection title="OUTCOMES" message="Outcome tracking is not yet connected to live workspace data." />
-  </div>
-);
+const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
+  const { currentUser } = useAppStore();
+  const repository = useMemo(() => new SupabasePreparedWorkRepository(), []);
+  const [context, setContext] = useState<LivePreparedWorkContext | null>(null);
+  const [preparedFollowUps, setPreparedFollowUps] = useState<PreparedFollowUpArtifact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = async () => {
+    const [nextContext, nextPrepared] = await Promise.all([
+      repository.loadContext(workspaceId, currentUser.id),
+      repository.list(workspaceId),
+    ]);
+    setContext(nextContext);
+    setPreparedFollowUps(nextPrepared);
+  };
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([repository.loadContext(workspaceId, currentUser.id), repository.list(workspaceId)])
+      .then(([nextContext, nextPrepared]) => {
+        if (!active) return;
+        setContext(nextContext);
+        setPreparedFollowUps(nextPrepared);
+        setError(null);
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Live REV work could not be loaded.');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [currentUser.id, repository, workspaceId]);
+
+  const primaryGoal = context?.goals.find((goal) => goal.status === 'active') ?? context?.goals[0];
+  const recovery = context ? analyzeRecovery({
+    workspaceId,
+    goal: primaryGoal,
+    profile: context.profile,
+    services: context.services,
+    contacts: context.contacts,
+    opportunities: context.opportunities,
+    discoveryCandidates: [],
+  }) : undefined;
+  const canReview = context?.membership?.role === 'owner' || context?.membership?.role === 'admin';
+
+  const runChange = async (id: string, operation: () => Promise<unknown>) => {
+    setBusyId(id);
+    try {
+      await operation();
+      await reload();
+      setError(null);
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : 'Live prepared work could not be updated.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8">
+      <section className="rev-motion-in card p-6 bg-gradient-to-r from-primary-600 to-primary-700 text-white">
+        <p className="text-xs font-semibold tracking-[0.2em] text-primary-100">REV LIVE</p>
+        <h1 className="text-3xl font-bold mt-1">Your AI Growth Employee</h1>
+        <span className="badge bg-white/15 text-white mt-4 inline-block" role="status">
+          {loading ? 'Loading workspace' : preparedFollowUps.some((item) => item.approvalState === 'pending') ? 'Waiting for approval' : 'Ready'}
+        </span>
+      </section>
+
+      {error && <div role="alert" className="card p-4 border border-red-200 bg-red-50 text-sm text-red-800">{error}</div>}
+      {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work…" />}
+
+      {!loading && context && (
+        <>
+          <section aria-labelledby="live-objective-heading" className="rev-motion-in">
+            <h2 id="live-objective-heading" className="text-xl font-bold text-neutral-900 mb-4">CURRENT OBJECTIVE</h2>
+            <div className="card p-5 text-neutral-700">{primaryGoal?.objective ?? 'No active objective is recorded for this workspace.'}</div>
+          </section>
+
+          <section aria-labelledby="live-recovery-heading" className="rev-motion-in">
+            <h2 id="live-recovery-heading" className="text-xl font-bold text-neutral-900 mb-4">RECOVERY OPPORTUNITIES</h2>
+            {recovery && recovery.candidates.length > 0 ? (
+              <div className="grid gap-3">
+                {recovery.candidates.map((candidate) => {
+                  const opportunity = candidate.opportunityId ? context.opportunities.find((item) => item.id === candidate.opportunityId) : undefined;
+                  const contact = context.contacts.find((item) => item.id === (candidate.contactId ?? opportunity?.contactId));
+                  const alreadyPrepared = preparedFollowUps.some((item) => item.recoveryCandidateId === candidate.id);
+                  const unavailable = alreadyPrepared || contact?.doNotContact || candidate.safety !== 'allowed' || busyId === candidate.id;
+                  return (
+                    <article key={candidate.id} className="card p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-neutral-900">{opportunity?.title ?? contact?.name ?? 'Recovery opportunity'}</p>
+                          <p className="text-sm text-neutral-600 mt-1">{candidate.reason}</p>
+                          <p className="text-xs text-neutral-500 mt-2">Evidence: {candidate.evidence.map((item) => item.summary).join(' ')}</p>
+                        </div>
+                        {context.membership?.role !== 'viewer' && (
+                          <button className="btn-secondary text-sm" type="button" disabled={unavailable} onClick={() => runChange(candidate.id, () => repository.prepare(candidate, currentUser.id))}>
+                            {alreadyPrepared ? 'Draft prepared' : contact?.doNotContact ? 'Suppressed' : busyId === candidate.id ? 'Preparing…' : 'Prepare follow-up'}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : <div className="card p-6 text-center text-neutral-600">No evidence-supported recovery opportunities are available.</div>}
+          </section>
+
+          <section aria-labelledby="live-prepared-heading" className="rev-motion-in">
+            <h2 id="live-prepared-heading" className="text-xl font-bold text-neutral-900 mb-4">PREPARED FOLLOW-UPS</h2>
+            {preparedFollowUps.length > 0 ? (
+              <div className="grid gap-4">
+                {preparedFollowUps.map((artifact) => (
+                  <PreparedFollowUpReview
+                    key={artifact.id}
+                    artifact={artifact}
+                    canReview={canReview && busyId !== artifact.id}
+                    onEdit={(subject, draftMessage) => runChange(artifact.id, () => repository.edit(workspaceId, artifact.id, currentUser.id, subject, draftMessage))}
+                    onApprove={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'approved'))}
+                    onReject={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'rejected'))}
+                  />
+                ))}
+              </div>
+            ) : <div className="card p-6 text-center text-neutral-600">No prepared follow-up work is recorded for this workspace.</div>}
+          </section>
+
+          <section className="card p-4 text-sm text-neutral-700">
+            <strong>Execution remains disabled.</strong> Prepared work costs £0, invokes no provider, and cannot be sent from REV.
+          </section>
+        </>
+      )}
+    </div>
+  );
+};
 
 const LiveEmptySection: React.FC<{ title: string; message: string }> = ({ title, message }) => (
   <section className="rev-motion-in">

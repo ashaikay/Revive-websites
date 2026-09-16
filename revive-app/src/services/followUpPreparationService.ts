@@ -9,17 +9,9 @@ import { RecoveryCandidate, RecoverySignalType } from '@/domain/recovery';
 import { DataProvider } from '@/domain/repositories';
 import { ApprovalService } from './approvalService';
 import { CommercialActionService } from './commercialActionService';
+import { buildPreparedFollowUpDraft } from './preparedFollowUpDraft';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
-const SUPPORTED_TYPES: RecoverySignalType[] = [
-  'dormant_lead',
-  'stale_opportunity',
-  'no_next_action',
-  'former_customer_reactivation',
-  'quote_follow_up',
-  'repeat_service',
-  'renewal_due',
-];
 
 interface StoredPreparedFollowUp {
   recoveryCandidateId: string;
@@ -56,10 +48,6 @@ function isStoredFollowUp(value: unknown): value is StoredPreparedFollowUp {
     && Array.isArray(record.missingInformation);
 }
 
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || 'there';
-}
-
 export class FollowUpPreparationService {
   private readonly commercialActions: CommercialActionService;
   private readonly approvals: ApprovalService;
@@ -87,10 +75,6 @@ export class FollowUpPreparationService {
   prepare(candidate: RecoveryCandidate, actorUserId: string, now = new Date().toISOString()): PrepareFollowUpResult {
     const role = this.requireRole(candidate.workspaceId, actorUserId, ['owner', 'admin', 'member']);
     void role;
-    if (candidate.supportStatus !== 'supported' || !SUPPORTED_TYPES.includes(candidate.signalType)) {
-      throw new Error('This recovery type is not supported by current REV data.');
-    }
-    if (candidate.safety !== 'allowed') throw new Error('This recovery candidate requires safety review before preparation.');
 
     const opportunity = candidate.opportunityId
       ? this.provider.opportunities.get(candidate.workspaceId, candidate.opportunityId)
@@ -99,49 +83,24 @@ export class FollowUpPreparationService {
     const contactId = candidate.contactId ?? opportunity?.contactId;
     const contact = contactId ? this.provider.contacts.get(candidate.workspaceId, contactId) : undefined;
     if (contactId && !contact) throw new Error('Recovery contact was not found in the active workspace.');
-    if (contact?.doNotContact) throw new Error('Suppressed contacts cannot have follow-up prepared.');
-
     const existing = this.list(candidate.workspaceId).find((artifact) => artifact.recoveryCandidateId === candidate.id);
     if (existing) return { artifact: existing, alreadyPrepared: true };
 
-    const profile = this.provider.business.getProfile(candidate.workspaceId);
-    const service = this.provider.business.listServices(candidate.workspaceId).find((item) => item.active);
-    const goal = candidate.goalId ? this.provider.goals.get(candidate.workspaceId, candidate.goalId) : undefined;
-    const missingInformation: string[] = [];
-    if (!profile?.businessName) missingInformation.push('Business identity is not available.');
-    if (!service) missingInformation.push('No active service is recorded for this workspace.');
-    if (!contact?.email && !contact?.phone) missingInformation.push('No contact channel is recorded; the owner must choose how to follow up.');
-    if (!opportunity && candidate.source === 'opportunity') missingInformation.push('Opportunity context is unavailable.');
-
-    const businessName = profile?.businessName ?? 'our team';
-    const recipientName = contact?.name ? firstName(contact.name) : 'there';
-    const suggestedChannel: PreparedFollowUpChannel = contact?.email ? 'email' : contact?.phone ? 'phone' : 'owner_choice';
-    const subject = opportunity ? `Checking in about ${opportunity.title}` : `Checking in from ${businessName}`;
-    const contextLine = opportunity
-      ? `I wanted to check in about ${opportunity.title}.`
-      : candidate.signalType === 'former_customer_reactivation'
-        ? 'I wanted to check in and see whether it would be useful to reconnect.'
-        : 'I wanted to check in and see whether we can help.';
-    const serviceLine = service
-      ? `If ${service.name} is still relevant, we would be happy to continue the conversation.`
-      : 'If this is still relevant, we would be happy to continue the conversation.';
-    const draftMessage = `Hi ${recipientName},\n\n${contextLine} ${serviceLine} Please let us know what would be useful from us.\n\nBest,\n${businessName}`;
-    const objective = goal?.objective
-      ? `Reconnect helpfully in support of: ${goal.objective}`
-      : 'Reconnect helpfully and establish whether there is a useful next step.';
-    const evidenceContext: CommercialEvidence[] = [
-      ...candidate.evidence,
-      ...(profile?.businessName ? [{ type: 'fact' as const, summary: `Business identity: ${profile.businessName}.`, source: 'Business Brain' }] : []),
-      ...(service ? [{ type: 'fact' as const, summary: `Active service: ${service.name}.`, source: 'Business Brain' }] : []),
-    ];
+    const draft = buildPreparedFollowUpDraft(candidate, {
+      profile: this.provider.business.getProfile(candidate.workspaceId),
+      services: this.provider.business.listServices(candidate.workspaceId),
+      goal: candidate.goalId ? this.provider.goals.get(candidate.workspaceId, candidate.goalId) : undefined,
+      contact,
+      opportunity,
+    });
     const proposed = this.commercialActions.proposePreparedFollowUp({
       workspaceId: candidate.workspaceId,
       goalId: candidate.goalId,
-      contactId,
+      contactId: draft.contactId,
       opportunityId: candidate.opportunityId,
-      title: subject,
-      description: draftMessage,
-      rationale: `${candidate.reason} Evidence: ${candidate.evidence.map((item) => item.summary).join(' ')}`,
+      title: draft.subject,
+      description: draft.draftMessage,
+      rationale: draft.rationale,
       deduplicationKey: candidate.id,
       proposedAt: now,
     });
@@ -155,11 +114,11 @@ export class FollowUpPreparationService {
       recoveryCandidateId: candidate.id,
       recoveryType: candidate.signalType,
       approvalId: proposed.approval.id,
-      recoveryReason: candidate.reason,
-      objective,
-      suggestedChannel,
-      evidenceContext,
-      missingInformation,
+      recoveryReason: draft.recoveryReason,
+      objective: draft.objective,
+      suggestedChannel: draft.suggestedChannel,
+      evidenceContext: draft.evidenceContext,
+      missingInformation: draft.missingInformation,
     };
     const event = this.provider.memory.save({
       id: `prepared-follow-up-${proposed.action.id}`,

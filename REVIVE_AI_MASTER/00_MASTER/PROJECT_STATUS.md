@@ -27,10 +27,18 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 4D — First Real REV Capability: Prepare Follow-Up COMPLETE (PASS). Preparation is internal-only; execution and providers remain disabled.
+Phase 4E — Live Prepared-Work Repository Integration COMPLETE (PASS). Prepared work persists and reloads; sending, execution, and providers remain disabled.
 
 ## Current Objective
-Hold at the Phase 4D prepare-only checkpoint. Sending, provider activation, external communication, and execution UI require separate authorization.
+Hold at the Phase 4E approved-not-sent checkpoint. Sending, provider activation, external communication, and execution UI require separate authorization.
+
+## Phase 4E Closeout
+- Connected the Phase 4D prepared follow-up capability to authenticated workspace-scoped Supabase repositories without adding a parallel workflow or schema.
+- Reused `rev_actions`, `approvals`, Business Memory, contacts, opportunities, Phase 4C action versions/fingerprints, role-specific RLS, and the trusted approval decision RPC.
+- Deterministic IDs provide retry-safe preparation. Fresh repository/session reload, owner/admin edit/approve/reject, member preparation restrictions, viewer read-only behavior, tenant isolation, stale review rejection, and `APPROVED — NOT SENT` persistence passed against isolated local PostgREST/RLS.
+- Focused tests passed 14/14 plus the temporary real-local integration proof 1/1. Previously completed final gates remain 177/177 full tests, build PASS, audit 0 vulnerabilities, and desktop/mobile PASS.
+- `PLATFORM_EXECUTION_ENABLED = false`; workspace execution remains OFF; no Send/Execute control, provider call, external communication, execution attempt, or provider usage exists. Cost remained £0.
+- No migration, RLS, grant, function, production Supabase, protected quote/Telegram, marketing-site, or `rev-business-verify` change occurred.
 
 ## Phase 4D Closeout
 - Added a deterministic, workspace-scoped `PreparedFollowUpArtifact` and `FollowUpPreparationService` over existing recovery evidence, Business Brain context, REV Actions, Approvals, and Business Memory.
