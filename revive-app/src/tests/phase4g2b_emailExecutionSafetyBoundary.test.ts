@@ -23,6 +23,7 @@ describe('Phase 4G.2B email execution Edge Function safety boundary', () => {
     expect(source).toContain(".from('rev_actions')");
     expect(source).toContain(".from('contacts')");
     expect(source).toContain(".from('contact_suppressions')");
+
     expect(source).toContain('recipient: String(contact.email)');
     expect(source).toContain('subject: String(action.title)');
     expect(source).toContain('body: String(action.description)');
@@ -30,28 +31,67 @@ describe('Phase 4G.2B email execution Edge Function safety boundary', () => {
 
   it('creates the durable SEND_APPROVED_EMAIL reservation', () => {
     expect(source).toContain(
-      "userClient.rpc('prepare_rev_action_execution'",
+      "'prepare_rev_action_execution'",
     );
+
     expect(source).toContain(
       "target_capability: 'SEND_APPROVED_EMAIL'",
     );
+
     expect(source).toContain(
       "target_provider_key: 'microsoft_graph'",
     );
   });
 
-  it('keeps provider execution disabled', () => {
-    expect(source).toContain("status: 'provider_disabled'");
-    expect(source).toContain('executionEnabled: false');
-    expect(source).toContain('providerInvoked: false');
-    expect(source).toContain('emailSent: false');
-    expect(source).toContain('DRY RUN — NOTHING SENT');
+  it('keeps the provider activation gate hard-disabled before live execution', () => {
+    expect(source).toContain(
+      'const PROVIDER_EXECUTION_ENABLED = false;',
+    );
+
+    expect(source).toContain(
+      'if (!PROVIDER_EXECUTION_ENABLED)',
+    );
+
+    expect(source).toContain(
+      "status: 'provider_disabled'",
+    );
+
+    expect(source).toContain(
+      'executionEnabled: false',
+    );
+
+    expect(source).toContain(
+      'providerInvoked: false',
+    );
+
+    expect(source).toContain(
+      'emailSent: false',
+    );
+
+    expect(source).toContain(
+      'DRY RUN â€” NOTHING SENT',
+    );
   });
 
-  it('does not contain service-role provider claim or result recording', () => {
-    expect(source).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
-    expect(source).not.toContain('claim_rev_action_provider_attempt');
-    expect(source).not.toContain('record_email_execution_result');
-    expect(source).not.toContain('sendMicrosoftGraphEmail');
+  it('does not implement or import live provider execution', () => {
+    expect(source).not.toMatch(
+      /Deno\.env\.get\(['"]SUPABASE_SERVICE_ROLE_KEY['"]\)/,
+    );
+
+    expect(source).not.toMatch(
+      /\.rpc\(\s*['"]claim_rev_action_provider_attempt['"]/,
+    );
+
+    expect(source).not.toMatch(
+      /\.rpc\(\s*['"]record_email_execution_result['"]/,
+    );
+
+    expect(source).not.toMatch(
+      /import\s+.*sendMicrosoftGraphEmail.*from/,
+    );
+
+    expect(source).not.toMatch(
+      /\bsendMicrosoftGraphEmail\s*\(/,
+    );
   });
 });

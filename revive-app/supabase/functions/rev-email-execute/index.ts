@@ -1,16 +1,29 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { fingerprintApprovedEmail } from '../_shared/approvedEmailFingerprint.ts';
 
+/*
+ * PHASE 4G.2B PROVIDER ACTIVATION GATE
+ *
+ * MUST remain false during implementation and validation.
+ * No provider claim, Microsoft Graph invocation, or terminal provider
+ * result recording is reachable while this is false.
+ */
+const PROVIDER_EXECUTION_ENABLED = false;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    },
   });
 }
 
@@ -27,16 +40,21 @@ Deno.serve(async (req) => {
     const authorization = req.headers.get('Authorization');
 
     if (!authorization?.startsWith('Bearer ')) {
-      return json(401, { error: 'Authentication required.' });
+      return json(401, {
+        error: 'Authentication required.',
+      });
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
+
     const publicKey =
       Deno.env.get('SUPABASE_ANON_KEY') ??
       Deno.env.get('SUPABASE_PUBLISHABLE_KEY');
 
     if (!supabaseUrl || !publicKey) {
-      return json(500, { error: 'Server configuration is incomplete.' });
+      return json(500, {
+        error: 'Server configuration is incomplete.',
+      });
     }
 
     const userClient = createClient(supabaseUrl, publicKey, {
@@ -57,9 +75,17 @@ Deno.serve(async (req) => {
     } = await userClient.auth.getUser();
 
     if (authError || !user) {
-      return json(401, { error: 'Invalid authentication.' });
+      return json(401, {
+        error: 'Invalid authentication.',
+      });
     }
 
+    /*
+     * Caller supplies identity references only.
+     *
+     * Recipient, subject, body, approval state, action version,
+     * provider and execution authority are derived server-side.
+     */
     const payload = await req.json().catch(() => null) as {
       workspaceId?: unknown;
       actionId?: unknown;
@@ -81,7 +107,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: membership, error: membershipError } = await userClient
+    /*
+     * Verify active workspace authority.
+     */
+    const {
+      data: membership,
+      error: membershipError,
+    } = await userClient
       .from('workspace_members')
       .select('role,status')
       .eq('workspace_id', workspaceId)
@@ -99,7 +131,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: action, error: actionError } = await userClient
+    /*
+     * Load the workspace-scoped approved REV action.
+     */
+    const {
+      data: action,
+      error: actionError,
+    } = await userClient
       .from('rev_actions')
       .select(
         'id,workspace_id,contact_id,action_type,title,description,status,execution_status,action_version',
@@ -109,7 +147,9 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (actionError || !action) {
-      return json(404, { error: 'Approved REV action not found.' });
+      return json(404, {
+        error: 'Approved REV action not found.',
+      });
     }
 
     if (
@@ -118,7 +158,8 @@ Deno.serve(async (req) => {
       action.execution_status !== 'not_executed'
     ) {
       return json(409, {
-        error: 'REV action is not currently eligible for email execution.',
+        error:
+          'REV action is not currently eligible for email execution.',
       });
     }
 
@@ -128,7 +169,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: contact, error: contactError } = await userClient
+    /*
+     * Resolve the recipient from trusted workspace data.
+     */
+    const {
+      data: contact,
+      error: contactError,
+    } = await userClient
       .from('contacts')
       .select('id,email')
       .eq('workspace_id', workspaceId)
@@ -137,11 +184,18 @@ Deno.serve(async (req) => {
 
     if (contactError || !contact?.email) {
       return json(409, {
-        error: 'Workspace contact does not have a valid email source.',
+        error:
+          'Workspace contact does not have a valid email source.',
       });
     }
 
-    const { data: suppression, error: suppressionError } = await userClient
+    /*
+     * Fail closed if suppression status cannot be verified.
+     */
+    const {
+      data: suppression,
+      error: suppressionError,
+    } = await userClient
       .from('contact_suppressions')
       .select('reason')
       .eq('workspace_id', workspaceId)
@@ -162,19 +216,48 @@ Deno.serve(async (req) => {
 
     const actionVersion = Number(action.action_version);
 
-    const requestFingerprint = await fingerprintApprovedEmail({
-      workspaceId,
-      actionId,
-      actionVersion,
-      recipient: String(contact.email),
-      subject: String(action.title),
-      body: String(action.description),
-    });
+    if (
+      !Number.isInteger(actionVersion) ||
+      actionVersion < 1
+    ) {
+      return json(409, {
+        error: 'REV action version is invalid.',
+      });
+    }
+
+    /*
+     * Bind the execution request to the exact trusted email snapshot.
+     */
+    const requestFingerprint =
+      await fingerprintApprovedEmail({
+        workspaceId,
+        actionId,
+        actionVersion,
+        recipient: String(contact.email),
+        subject: String(action.title),
+        body: String(action.description),
+      });
 
     const correlationId = crypto.randomUUID();
 
-    const { data: execution, error: reservationError } =
-      await userClient.rpc('prepare_rev_action_execution', {
+    /*
+     * Durable reservation.
+     *
+     * The database independently revalidates:
+     * - workspace policy
+     * - capability
+     * - cost
+     * - action state/version
+     * - action material fingerprint
+     * - fresh bound approval
+     * - semantic idempotency
+     */
+    const {
+      data: execution,
+      error: reservationError,
+    } = await userClient.rpc(
+      'prepare_rev_action_execution',
+      {
         target_workspace_id: workspaceId,
         target_action_id: actionId,
         target_idempotency_key:
@@ -186,37 +269,79 @@ Deno.serve(async (req) => {
         target_jurisdiction: 'GB',
         target_estimated_provider_cost: 0,
         target_provider_key: 'microsoft_graph',
-      });
+      },
+    );
 
     if (reservationError || !execution) {
       return json(409, {
-        error: 'Trusted email execution reservation was not authorized.',
+        error:
+          'Trusted email execution reservation was not authorized.',
         providerInvoked: false,
         emailSent: false,
       });
     }
 
     /*
-     * PHASE 4G.2B SAFETY GATE
+     * HARD PHASE 4G.2B SAFETY GATE
      *
-     * Reservation is now durable.
-     * Provider claim and Microsoft Graph invocation remain unreachable.
+     * This return MUST remain before:
+     * - service-role client creation
+     * - claim_rev_action_provider_attempt
+     * - Microsoft Graph invocation
+     * - record_email_execution_result
+     *
+     * The durable execution reservation may exist, but no external
+     * communication can occur while the provider gate is disabled.
      */
-    return json(200, {
-      status: 'provider_disabled',
-      displayStatus: 'DRY RUN — NOTHING SENT',
+    if (!PROVIDER_EXECUTION_ENABLED) {
+      return json(200, {
+        status: 'provider_disabled',
+        displayStatus: 'DRY RUN â€” NOTHING SENT',
+        executionEnabled: false,
+        providerInvoked: false,
+        emailSent: false,
+        executionId: execution.id,
+        correlationId: execution.correlation_id,
+        providerOutcome: execution.provider_outcome,
+        workspaceId,
+        actionId,
+        actionVersion,
+        recipientSource: 'workspace_contact',
+        suppressionChecked: true,
+        durableReservation: true,
+      });
+    }
+
+    /*
+     * PHASE 4G.2B FUTURE TRUSTED EXECUTION BOUNDARY
+     *
+     * Deliberately unreachable while
+     * PROVIDER_EXECUTION_ENABLED === false.
+     *
+     * Future controlled activation sequence:
+     *
+     * 1. Recheck suppression immediately before provider claim.
+     * 2. Create server-only service-role client.
+     * 3. Atomically claim provider attempt.
+     * 4. Invoke configured Microsoft Graph provider.
+     * 5. Record exactly one terminal provider outcome:
+     *
+     *    accepted_by_provider
+     *    rejected_by_provider
+     *    provider_outcome_unknown
+     *
+     * 6. Never automatically retry provider_outcome_unknown.
+     *
+     * Microsoft Graph HTTP 202 means accepted by provider only.
+     * It MUST NOT be represented as delivered.
+     */
+
+    return json(503, {
+      error:
+        'Live provider execution is not activated in Phase 4G.2B.',
       executionEnabled: false,
       providerInvoked: false,
       emailSent: false,
-      executionId: execution.id,
-      correlationId: execution.correlation_id,
-      providerOutcome: execution.provider_outcome,
-      workspaceId,
-      actionId,
-      actionVersion,
-      recipientSource: 'workspace_contact',
-      suppressionChecked: true,
-      durableReservation: true,
     });
   } catch {
     return json(500, {
