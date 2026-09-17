@@ -52,8 +52,10 @@ describe('Phase 4G.2B Microsoft Graph execution orchestrator', () => {
     dependencies.recheckSuppression = vi.fn(async () => {
       order.push('suppression');
     });
-
-    dependencies.claimProviderAttempt = vi.fn(async () => {
+dependencies.claimProviderAttempt = vi.fn(
+  async (): ReturnType<
+    MicrosoftGraphExecutionDependencies['claimProviderAttempt']
+  > => {
       order.push('claim');
 
       return {
@@ -67,8 +69,10 @@ describe('Phase 4G.2B Microsoft Graph execution orchestrator', () => {
         status: 'in_progress',
       };
     });
-
-    dependencies.sendEmail = vi.fn(async () => {
+dependencies.sendEmail = vi.fn(
+  async (): ReturnType<
+    MicrosoftGraphExecutionDependencies['sendEmail']
+  > => {
       order.push('send');
 
       return {

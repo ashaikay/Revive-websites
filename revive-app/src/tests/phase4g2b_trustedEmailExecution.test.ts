@@ -107,7 +107,22 @@ describe('Phase 4G.2B trusted email execution helper', () => {
 
       expect(rpc).toHaveBeenCalledTimes(1);
 
-      const [rpcName, args] = rpc.mock.calls[0];
+      const [rpcName, args] = rpc.mock.calls[0] as unknown as [
+  string,
+  {
+    target_execution_id: string;
+    target_provider_outcome: string;
+    usage_events: Array<{
+      provider_key: string;
+      operation: string;
+      usage_event_key: string;
+      units: number;
+      estimated_provider_cost: number;
+      actual_provider_cost: number;
+      currency: string;
+    }>;
+  },
+];
 
       expect(rpcName).toBe('record_email_execution_result');
       expect(args.target_execution_id).toBe(executionId);
