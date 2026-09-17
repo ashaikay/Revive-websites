@@ -323,5 +323,74 @@ dependencies.sendEmail = vi.fn(
     expect(
       dependencies.recordProviderResult,
     ).not.toHaveBeenCalled();
+
+  });
+    it('does not misclassify a Graph-shaped error thrown while recording an accepted result', async () => {
+    const dependencies = createDependencies();
+
+    dependencies.recordProviderResult = vi
+      .fn()
+      .mockRejectedValue(
+        new MicrosoftGraphRejectedError(
+          500,
+          'Database recording failure disguised as provider error.',
+        ),
+      );
+
+    await expect(
+      executeMicrosoftGraphEmail(
+        {
+          executionId,
+          requestFingerprint,
+          email,
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow(
+      'Database recording failure disguised as provider error.',
+    );
+
+    expect(dependencies.sendEmail).toHaveBeenCalledTimes(1);
+
+    expect(
+      dependencies.claimProviderAttempt,
+    ).toHaveBeenCalledTimes(1);
+
+    expect(
+      dependencies.recordProviderResult,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed on an unexpected provider result without a second send', async () => {
+    const dependencies = createDependencies();
+
+    dependencies.sendEmail = vi.fn().mockResolvedValue({
+      outcome: 'unexpected_provider_outcome',
+      acceptedAt: '2026-09-17T16:00:00.000Z',
+      actualCost: 0,
+    } as never);
+
+    await expect(
+      executeMicrosoftGraphEmail(
+        {
+          executionId,
+          requestFingerprint,
+          email,
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow(
+      'Microsoft Graph returned an unexpected provider outcome after invocation.',
+    );
+
+    expect(dependencies.sendEmail).toHaveBeenCalledTimes(1);
+
+    expect(
+      dependencies.claimProviderAttempt,
+    ).toHaveBeenCalledTimes(1);
+
+    expect(
+      dependencies.recordProviderResult,
+    ).not.toHaveBeenCalled();
   });
 });

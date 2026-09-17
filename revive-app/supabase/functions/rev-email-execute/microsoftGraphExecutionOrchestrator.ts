@@ -57,9 +57,9 @@ export interface MicrosoftGraphExecutionResult {
  * 3. Invoke Microsoft Graph exactly once.
  * 4. Record exactly one terminal provider outcome.
  *
- * Authentication/configuration should be completed BEFORE this
- * orchestrator is entered. Therefore a missing/invalid Microsoft
- * credential does not consume the provider-attempt claim.
+ * Authentication/configuration must be completed BEFORE this
+ * orchestrator is entered. Therefore missing/invalid Microsoft
+ * credentials do not consume the provider-attempt claim.
  *
  * Once the claim succeeds, automatic retry is prohibited.
  */
@@ -68,6 +68,7 @@ export async function executeMicrosoftGraphEmail(
   dependencies: MicrosoftGraphExecutionDependencies,
 ): Promise<MicrosoftGraphExecutionResult> {
   const executionId = input.executionId?.trim();
+
   const requestFingerprint =
     input.requestFingerprint?.trim().toLowerCase();
 
@@ -92,13 +93,14 @@ export async function executeMicrosoftGraphEmail(
   await dependencies.recheckSuppression();
 
   /*
-   * This is the irreversible boundary.
+   * Irreversible boundary.
    *
    * The database claim must move:
+   *
    * provider_not_invoked -> provider_attempt_claimed
    *
-   * After this point we NEVER automatically retry the same semantic
-   * email action/version.
+   * After this succeeds we NEVER automatically retry the same
+   * semantic email action/version.
    */
   const claim = await dependencies.claimProviderAttempt(
     executionId,
@@ -119,33 +121,21 @@ export async function executeMicrosoftGraphEmail(
     );
   }
 
+  /*
+   * IMPORTANT:
+   *
+   * Only the actual provider invocation belongs inside this try/catch.
+   *
+   * Database/result-recording failures must NEVER be interpreted as
+   * Microsoft Graph rejection or an unknown Graph response.
+   */
+  let sendResult: MicrosoftGraphSendResult;
+
   try {
     /*
      * Exactly one Graph sendMail invocation per claimed execution.
      */
-    const sendResult = await dependencies.sendEmail(input.email);
-
-    /*
-     * Microsoft Graph 202 is represented only as accepted by provider.
-     * It is NOT delivery confirmation.
-     */
-    await dependencies.recordProviderResult({
-      executionId,
-      providerKey,
-      providerOutcome: 'accepted_by_provider',
-      resultSummary:
-        'Accepted by provider; delivery remains unknown.',
-      failureCode: null,
-      actualProviderCost: sendResult.actualCost,
-    });
-
-    return {
-      executionId,
-      providerOutcome: 'accepted_by_provider',
-      acceptedByProvider: true,
-      deliveryConfirmed: false,
-      automaticRetryAllowed: false,
-    };
+    sendResult = await dependencies.sendEmail(input.email);
   } catch (error) {
     /*
      * An explicit HTTP response from Graph means the provider rejected
@@ -198,15 +188,62 @@ export async function executeMicrosoftGraphEmail(
     }
 
     /*
-     * CRITICAL:
+     * Any unexpected provider-side error after the claim is rethrown.
      *
-     * An unexpected error after the provider-attempt claim must NOT
-     * trigger another send.
-     *
-     * This includes failure while recording an accepted result.
-     * The execution remains claimed for reconciliation rather than
-     * risking a duplicate external email.
+     * The claimed execution is left for reconciliation.
+     * There is NEVER an automatic second send.
      */
     throw error;
   }
+
+  /*
+   * Fail closed on an unexpected provider result.
+   *
+   * The adapter contract currently permits only accepted_by_provider,
+   * but we validate at runtime because this is an irreversible
+   * external-communication boundary.
+   */
+  if (sendResult.outcome !== 'accepted_by_provider') {
+    throw new Error(
+      'Microsoft Graph returned an unexpected provider outcome after invocation.',
+    );
+  }
+
+  if (
+    !Number.isFinite(sendResult.actualCost) ||
+    sendResult.actualCost < 0
+  ) {
+    throw new Error(
+      'Microsoft Graph returned an invalid provider cost after invocation.',
+    );
+  }
+
+  /*
+   * Microsoft Graph HTTP 202 is represented only as accepted by
+   * provider. It is NOT delivery confirmation.
+   *
+   * IMPORTANT:
+   * Result recording is intentionally OUTSIDE the provider try/catch.
+   *
+   * If this database operation fails, the error propagates and the
+   * claimed execution remains for reconciliation. We never invoke
+   * Microsoft Graph a second time.
+   */
+  await dependencies.recordProviderResult({
+    executionId,
+    providerKey,
+    providerOutcome: 'accepted_by_provider',
+    resultSummary:
+      'Accepted by provider; delivery remains unknown.',
+    failureCode: null,
+    actualProviderCost: sendResult.actualCost,
+  });
+
+  return {
+    executionId,
+    providerOutcome: 'accepted_by_provider',
+    acceptedByProvider: true,
+    deliveryConfirmed: false,
+    automaticRetryAllowed: false,
+  };
 }
