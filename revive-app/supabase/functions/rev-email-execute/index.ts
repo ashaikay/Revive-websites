@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
+﻿import { createClient } from 'npm:@supabase/supabase-js@2';
 
 import { fingerprintApprovedEmail } from '../_shared/approvedEmailFingerprint.ts';
 
@@ -348,7 +348,7 @@ Deno.serve(async (req) => {
       return json(200, {
         status: 'provider_disabled',
         displayStatus:
-          'DRY RUN — NOTHING SENT',
+          'DRY RUN - NOTHING SENT',
         executionEnabled: false,
         providerInvoked: false,
         emailSent: false,
@@ -478,7 +478,7 @@ Deno.serve(async (req) => {
       automaticRetryAllowed:
         providerResult.automaticRetryAllowed,
 
-      executionId,
+      executionId: String(execution.id),
       correlationId:
         execution.correlation_id,
       workspaceId,
@@ -497,8 +497,8 @@ Deno.serve(async (req) => {
     return json(500, {
       error:
         'Trusted email execution request failed safely.',
-      providerInvoked: false,
-      emailSent: false,
+      providerInvoked: 'unknown',
+      emailSent: 'unknown',
       automaticRetryAllowed: false,
     });
   }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -69,7 +69,7 @@ describe('Phase 4G.2B email execution Edge Function safety boundary', () => {
     );
 
     expect(source).toContain(
-      'DRY RUN — NOTHING SENT',
+      'DRY RUN - NOTHING SENT',
     );
   });
 
