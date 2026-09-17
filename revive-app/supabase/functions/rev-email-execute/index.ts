@@ -1,12 +1,24 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+
 import { fingerprintApprovedEmail } from '../_shared/approvedEmailFingerprint.ts';
+
+import {
+  createMicrosoftGraphExecutionDependencies,
+  type MicrosoftGraphServerConfig,
+} from './microsoftGraphExecutionDependencies.ts';
+
+import {
+  executeMicrosoftGraphEmail,
+} from './microsoftGraphExecutionOrchestrator.ts';
 
 /*
  * PHASE 4G.2B PROVIDER ACTIVATION GATE
  *
  * MUST remain false during implementation and validation.
- * No provider claim, Microsoft Graph invocation, or terminal provider
- * result recording is reachable while this is false.
+ *
+ * No service-role client, Microsoft authentication, provider claim,
+ * Microsoft Graph invocation, or terminal provider result recording
+ * is reachable while this is false.
  */
 const PROVIDER_EXECUTION_ENABLED = false;
 
@@ -17,7 +29,10 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-function json(status: number, body: Record<string, unknown>) {
+function json(
+  status: number,
+  body: Record<string, unknown>,
+) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -29,15 +44,20 @@ function json(status: number, body: Record<string, unknown>) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', {
+      headers: corsHeaders,
+    });
   }
 
   if (req.method !== 'POST') {
-    return json(405, { error: 'Method not allowed.' });
+    return json(405, {
+      error: 'Method not allowed.',
+    });
   }
 
   try {
-    const authorization = req.headers.get('Authorization');
+    const authorization =
+      req.headers.get('Authorization');
 
     if (!authorization?.startsWith('Bearer ')) {
       return json(401, {
@@ -45,7 +65,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseUrl =
+      Deno.env.get('SUPABASE_URL');
 
     const publicKey =
       Deno.env.get('SUPABASE_ANON_KEY') ??
@@ -57,17 +78,27 @@ Deno.serve(async (req) => {
       });
     }
 
-    const userClient = createClient(supabaseUrl, publicKey, {
-      global: {
-        headers: {
-          Authorization: authorization,
+    /*
+     * Caller-scoped client.
+     *
+     * This client carries the authenticated user's JWT and remains
+     * subject to normal tenant RLS.
+     */
+    const userClient = createClient(
+      supabaseUrl,
+      publicKey,
+      {
+        global: {
+          headers: {
+            Authorization: authorization,
+          },
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
         },
       },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+    );
 
     const {
       data: { user },
@@ -103,7 +134,8 @@ Deno.serve(async (req) => {
 
     if (!workspaceId || !actionId) {
       return json(400, {
-        error: 'workspaceId and actionId are required.',
+        error:
+          'workspaceId and actionId are required.',
       });
     }
 
@@ -124,10 +156,13 @@ Deno.serve(async (req) => {
     if (
       membershipError ||
       !membership ||
-      !['owner', 'admin'].includes(String(membership.role))
+      !['owner', 'admin'].includes(
+        String(membership.role),
+      )
     ) {
       return json(403, {
-        error: 'Active owner or admin role required.',
+        error:
+          'Active owner or admin role required.',
       });
     }
 
@@ -165,7 +200,8 @@ Deno.serve(async (req) => {
 
     if (!action.contact_id) {
       return json(409, {
-        error: 'Approved follow-up has no workspace contact.',
+        error:
+          'Approved follow-up has no workspace contact.',
       });
     }
 
@@ -190,7 +226,10 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * Fail closed if suppression status cannot be verified.
+     * Initial suppression check before reservation.
+     *
+     * A second trusted suppression check occurs immediately before
+     * the irreversible provider claim when execution is activated.
      */
     const {
       data: suppression,
@@ -204,17 +243,20 @@ Deno.serve(async (req) => {
 
     if (suppressionError) {
       return json(500, {
-        error: 'Suppression status could not be verified.',
+        error:
+          'Suppression status could not be verified.',
       });
     }
 
     if (suppression) {
       return json(409, {
-        error: 'Contact is suppressed from outreach.',
+        error:
+          'Contact is suppressed from outreach.',
       });
     }
 
-    const actionVersion = Number(action.action_version);
+    const actionVersion =
+      Number(action.action_version);
 
     if (
       !Number.isInteger(actionVersion) ||
@@ -244,6 +286,7 @@ Deno.serve(async (req) => {
      * Durable reservation.
      *
      * The database independently revalidates:
+     *
      * - workspace policy
      * - capability
      * - cost
@@ -262,13 +305,17 @@ Deno.serve(async (req) => {
         target_action_id: actionId,
         target_idempotency_key:
           `send-approved-email:${actionId}:v${actionVersion}`,
-        target_request_fingerprint: requestFingerprint,
+        target_request_fingerprint:
+          requestFingerprint,
         target_correlation_id: correlationId,
-        target_capability: 'SEND_APPROVED_EMAIL',
-        target_risk_class: 'external_communication',
+        target_capability:
+          'SEND_APPROVED_EMAIL',
+        target_risk_class:
+          'external_communication',
         target_jurisdiction: 'GB',
         target_estimated_provider_cost: 0,
-        target_provider_key: 'microsoft_graph',
+        target_provider_key:
+          'microsoft_graph',
       },
     );
 
@@ -284,70 +331,175 @@ Deno.serve(async (req) => {
     /*
      * HARD PHASE 4G.2B SAFETY GATE
      *
-     * This return MUST remain before:
+     * This MUST remain before:
+     *
      * - service-role client creation
+     * - Microsoft credential access
+     * - Microsoft authentication
+     * - final trusted suppression recheck
      * - claim_rev_action_provider_attempt
      * - Microsoft Graph invocation
      * - record_email_execution_result
      *
-     * The durable execution reservation may exist, but no external
-     * communication can occur while the provider gate is disabled.
+     * A durable provider_not_invoked reservation may exist, but no
+     * external communication can occur while this gate is disabled.
      */
     if (!PROVIDER_EXECUTION_ENABLED) {
       return json(200, {
         status: 'provider_disabled',
-        displayStatus: 'DRY RUN — NOTHING SENT',
+        displayStatus:
+          'DRY RUN — NOTHING SENT',
         executionEnabled: false,
         providerInvoked: false,
         emailSent: false,
         executionId: execution.id,
-        correlationId: execution.correlation_id,
-        providerOutcome: execution.provider_outcome,
+        correlationId:
+          execution.correlation_id,
+        providerOutcome:
+          execution.provider_outcome,
         workspaceId,
         actionId,
         actionVersion,
-        recipientSource: 'workspace_contact',
+        recipientSource:
+          'workspace_contact',
         suppressionChecked: true,
         durableReservation: true,
       });
     }
 
     /*
-     * PHASE 4G.2B FUTURE TRUSTED EXECUTION BOUNDARY
+     * Everything below this point is trusted server-only execution.
      *
-     * Deliberately unreachable while
-     * PROVIDER_EXECUTION_ENABLED === false.
-     *
-     * Future controlled activation sequence:
-     *
-     * 1. Recheck suppression immediately before provider claim.
-     * 2. Create server-only service-role client.
-     * 3. Atomically claim provider attempt.
-     * 4. Invoke configured Microsoft Graph provider.
-     * 5. Record exactly one terminal provider outcome:
-     *
-     *    accepted_by_provider
-     *    rejected_by_provider
-     *    provider_outcome_unknown
-     *
-     * 6. Never automatically retry provider_outcome_unknown.
-     *
-     * Microsoft Graph HTTP 202 means accepted by provider only.
-     * It MUST NOT be represented as delivered.
+     * This code is structurally wired during Phase 4G.2B but remains
+     * unreachable while PROVIDER_EXECUTION_ENABLED === false.
      */
 
-    return json(503, {
-      error:
-        'Live provider execution is not activated in Phase 4G.2B.',
-      executionEnabled: false,
-      providerInvoked: false,
-      emailSent: false,
+    const serviceRoleKey =
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    const graphConfig: MicrosoftGraphServerConfig = {
+      tenantId:
+        Deno.env.get(
+          'MICROSOFT_GRAPH_TENANT_ID',
+        ) ?? '',
+      clientId:
+        Deno.env.get(
+          'MICROSOFT_GRAPH_CLIENT_ID',
+        ) ?? '',
+      clientSecret:
+        Deno.env.get(
+          'MICROSOFT_GRAPH_CLIENT_SECRET',
+        ) ?? '',
+      senderUserId:
+        Deno.env.get(
+          'MICROSOFT_GRAPH_SENDER_USER_ID',
+        ) ?? '',
+    };
+
+    if (!serviceRoleKey) {
+      return json(503, {
+        error:
+          'Trusted provider execution is not configured.',
+        executionEnabled: false,
+        providerInvoked: false,
+        emailSent: false,
+      });
+    }
+
+    /*
+     * Server-only privileged client.
+     *
+     * This key must never be exposed to the browser, request payload,
+     * logs or response body.
+     */
+    const serviceClient = createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      },
+    );
+
+    /*
+     * Dependency creation authenticates with Microsoft BEFORE the
+     * irreversible provider-attempt claim.
+     *
+     * Missing/invalid Microsoft configuration therefore fails before
+     * the claim and before any email invocation.
+     */
+    const dependencies =
+      await createMicrosoftGraphExecutionDependencies({
+        serviceClient,
+        workspaceId,
+        contactId: String(action.contact_id),
+        config: graphConfig,
+      });
+
+    /*
+     * Orchestrator order:
+     *
+     * final suppression recheck
+     * -> atomic provider claim
+     * -> exactly one Graph sendMail invocation
+     * -> exactly one terminal provider outcome
+     *
+     * provider_outcome_unknown is NEVER automatically retried.
+     */
+    const providerResult =
+      await executeMicrosoftGraphEmail(
+        {
+          executionId: String(execution.id),
+          requestFingerprint,
+          email: {
+            recipient: String(contact.email),
+            subject: String(action.title),
+            body: String(action.description),
+          },
+        },
+        dependencies,
+      );
+
+    return json(200, {
+      status: providerResult.providerOutcome,
+      executionEnabled: true,
+      providerInvoked: true,
+
+      /*
+       * acceptedByProvider is intentionally NOT represented as
+       * delivery confirmation.
+       */
+      acceptedByProvider:
+        providerResult.acceptedByProvider,
+      deliveryConfirmed:
+        providerResult.deliveryConfirmed,
+      automaticRetryAllowed:
+        providerResult.automaticRetryAllowed,
+
+      executionId,
+      correlationId:
+        execution.correlation_id,
+      workspaceId,
+      actionId,
+      actionVersion,
     });
   } catch {
+    /*
+     * Fail closed without leaking credentials, provider response
+     * bodies, internal database details, or recipient information.
+     *
+     * Once provider execution is eventually activated, operational
+     * reconciliation must inspect durable execution state before any
+     * further attempt. This endpoint never automatically retries.
+     */
     return json(500, {
-      error: 'Trusted email execution request failed safely.',
+      error:
+        'Trusted email execution request failed safely.',
       providerInvoked: false,
       emailSent: false,
+      automaticRetryAllowed: false,
     });
   }
 });

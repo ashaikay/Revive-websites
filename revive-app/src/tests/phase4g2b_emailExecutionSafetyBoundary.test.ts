@@ -34,12 +34,12 @@ describe('Phase 4G.2B email execution Edge Function safety boundary', () => {
       "'prepare_rev_action_execution'",
     );
 
-    expect(source).toContain(
-      "target_capability: 'SEND_APPROVED_EMAIL'",
+    expect(source).toMatch(
+      /target_capability:\s*['"]SEND_APPROVED_EMAIL['"]/,
     );
 
-    expect(source).toContain(
-      "target_provider_key: 'microsoft_graph'",
+    expect(source).toMatch(
+      /target_provider_key:\s*['"]microsoft_graph['"]/,
     );
   });
 
@@ -73,10 +73,27 @@ describe('Phase 4G.2B email execution Edge Function safety boundary', () => {
     );
   });
 
-  it('does not implement or import live provider execution', () => {
-    expect(source).not.toMatch(
-      /Deno\.env\.get\(['"]SUPABASE_SERVICE_ROLE_KEY['"]\)/,
+  it('keeps all privileged provider execution structurally below the disabled gate', () => {
+    const gateIndex = source.indexOf(
+      'if (!PROVIDER_EXECUTION_ENABLED)',
     );
+
+    const serviceRoleIndex = source.indexOf(
+      "Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')",
+    );
+
+    const dependencyCreationIndex = source.indexOf(
+      'createMicrosoftGraphExecutionDependencies({',
+    );
+
+    const providerExecutionIndex = source.indexOf(
+      'executeMicrosoftGraphEmail(',
+    );
+
+    expect(gateIndex).toBeGreaterThan(-1);
+    expect(serviceRoleIndex).toBeGreaterThan(gateIndex);
+    expect(dependencyCreationIndex).toBeGreaterThan(gateIndex);
+    expect(providerExecutionIndex).toBeGreaterThan(gateIndex);
 
     expect(source).not.toMatch(
       /\.rpc\(\s*['"]claim_rev_action_provider_attempt['"]/,
@@ -84,10 +101,6 @@ describe('Phase 4G.2B email execution Edge Function safety boundary', () => {
 
     expect(source).not.toMatch(
       /\.rpc\(\s*['"]record_email_execution_result['"]/,
-    );
-
-    expect(source).not.toMatch(
-      /import\s+.*sendMicrosoftGraphEmail.*from/,
     );
 
     expect(source).not.toMatch(
