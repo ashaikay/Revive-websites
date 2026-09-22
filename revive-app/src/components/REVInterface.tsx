@@ -14,7 +14,7 @@ import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
 import { LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
-import { requestLiveEmailExecution } from '@/services/liveEmailExecutionClient';
+import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/services/liveEmailExecutionClient';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -82,12 +82,13 @@ interface PreparedFollowUpReviewProps {
   canRequestExecution?: boolean;
   onRequestExecution?: () => void;
   executionResult?: ControlledDryRunResult;
+  liveExecutionResult?: LiveEmailExecutionResult;
   executionError?: string;
 }
 
 export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
   artifact, canReview, onRefreshContext, onEdit, onApprove, onReject, canRequestExecution = false,
-  onRequestExecution, executionResult, executionError,
+  onRequestExecution, executionResult, liveExecutionResult, executionError,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [subject, setSubject] = useState(artifact.subject ?? '');
@@ -164,6 +165,21 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>{executionResult.displayStatus}</strong>
             <p className="mt-1">Provider calls: 0 · Cost: £0 · External effect: none</p>
+          </div>
+        )}
+        {liveExecutionResult && (
+          <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
+            <strong>
+              {liveExecutionResult.acceptedByProvider
+                ? 'ACCEPTED BY PROVIDER ? DELIVERY NOT CONFIRMED'
+                : liveExecutionResult.displayStatus ?? liveExecutionResult.status}
+            </strong>
+            {liveExecutionResult.acceptedByProvider && (
+              <p className="mt-1">Microsoft accepted the send request. This does not confirm delivery.</p>
+            )}
+            {liveExecutionResult.providerInvoked === 'unknown' && (
+              <p className="mt-1">Provider outcome is unknown. Do not retry automatically.</p>
+            )}
           </div>
         )}
         {executionError && <p className="text-sm text-red-700" role="alert">{executionError}</p>}
@@ -650,13 +666,15 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [liveExecutionErrors, setLiveExecutionErrors] = useState<Record<string, string>>({});
+  const [liveExecutionResults, setLiveExecutionResults] = useState<Record<string, LiveEmailExecutionResult>>({});
 
   const handleLiveExecutionRequest = async (artifact: PreparedFollowUpArtifact) => {
     setBusyId(artifact.id);
     setLiveExecutionErrors((current) => ({ ...current, [artifact.id]: '' }));
 
     try {
-      await requestLiveEmailExecution(workspaceId, artifact.revActionId);
+      const result = await requestLiveEmailExecution(workspaceId, artifact.revActionId);
+      setLiveExecutionResults((current) => ({ ...current, [artifact.id]: result }));
       await reload();
     } catch (executionError) {
       setLiveExecutionErrors((current) => ({
@@ -786,6 +804,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     onReject={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'rejected'))}
                     canRequestExecution={false}
                     onRequestExecution={() => handleLiveExecutionRequest(artifact)}
+                    liveExecutionResult={liveExecutionResults[artifact.id]}
                     executionError={liveExecutionErrors[artifact.id]}
                   />
                 ))}
