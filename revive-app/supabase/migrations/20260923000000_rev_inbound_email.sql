@@ -152,4 +152,6 @@ using (
     where wm.workspace_id = rev_email_messages.workspace_id
   and wm.user_id = auth.uid()
   and wm.status = 'active'
-)
+
+  )
+);
