@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { GoalService } from '@/services/goalService';
@@ -37,7 +37,7 @@ const SPECIALIST_SKILLS = [
 const WORK_QUEUE_LABEL: Record<ActionStatus, string> = {
   proposed: 'Planned',
   awaiting_approval: 'Waiting for approval',
-  approved: 'Approved — not executed',
+  approved: 'Approved â€” not executed',
   rejected: 'Rejected',
   cancelled: 'Cancelled',
   completed: 'Completed',
@@ -80,6 +80,7 @@ interface PreparedFollowUpReviewProps {
   onApprove: () => void;
   onReject: () => void;
   canRequestExecution?: boolean;
+  executionMode?: 'dry_run' | 'live';
   onRequestExecution?: () => void;
   executionResult?: ControlledDryRunResult;
   liveExecutionResult?: LiveEmailExecutionResult;
@@ -87,7 +88,7 @@ interface PreparedFollowUpReviewProps {
 }
 
 export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
-  artifact, canReview, onRefreshContext, onEdit, onApprove, onReject, canRequestExecution = false,
+  artifact, canReview, onRefreshContext, onEdit, onApprove, onReject, canRequestExecution = false, executionMode = 'dry_run',
   onRequestExecution, executionResult, liveExecutionResult, executionError,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -102,7 +103,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-2 mt-1">
           <h3 className="font-semibold text-neutral-900">{artifact.subject}</h3>
           <span className={pending ? 'badge-warning' : artifact.approvalState === 'approved_not_sent' ? 'badge-success' : 'badge-danger'}>
-            {pending ? 'DRAFT — REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED — NOT SENT' : 'REJECTED — NOT SENT'}
+            {pending ? 'DRAFT â€” REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED â€” NOT SENT' : 'REJECTED â€” NOT SENT'}
           </span>
         </div>
       </header>
@@ -111,7 +112,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           <p><strong>Recovery reason:</strong> {artifact.recoveryReason}</p>
           <p><strong>Objective:</strong> {artifact.objective}</p>
           <p><strong>Suggested channel:</strong> {artifact.suggestedChannel.replace('_', ' ')}</p>
-          <p><strong>External effect:</strong> None. £0 cost.</p>
+          <p><strong>External effect:</strong> None. Â£0 cost.</p>
         </div>
 
         {isEditing ? (
@@ -157,14 +158,30 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         {pending && !canReview && <p className="text-sm text-amber-800">Owner or admin review is required.</p>}
         {artifact.approvalState === 'approved_not_sent' && canRequestExecution && onRequestExecution && (
           <div className="border-t border-neutral-200 pt-4">
-            <p className="text-sm font-medium text-neutral-900">Phase 4F is dry-run only. Nothing will be sent.</p>
-            <button className="btn-secondary text-sm mt-3" type="button" onClick={onRequestExecution}>REQUEST EXECUTION</button>
+            <p className="text-sm font-medium text-neutral-900">
+              {executionMode === 'live'
+                ? 'LIVE EMAIL SEND - this will send the approved email to the contact.'
+                : 'Phase 4F is dry-run only. Nothing will be sent.'}
+            </p>
+            <button
+              className="btn-secondary text-sm mt-3"
+              type="button"
+              onClick={() => {
+                if (executionMode === 'live' &&
+                    !window.confirm('Send this approved email now? This will contact the recipient through Microsoft Graph.')) {
+                  return;
+                }
+                onRequestExecution();
+              }}
+            >
+              {executionMode === 'live' ? 'SEND APPROVED EMAIL' : 'REQUEST EXECUTION'}
+            </button>
           </div>
         )}
         {executionResult && (
           <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>{executionResult.displayStatus}</strong>
-            <p className="mt-1">Provider calls: 0 · Cost: £0 · External effect: none</p>
+            <p className="mt-1">Provider calls: 0 Â· Cost: Â£0 Â· External effect: none</p>
           </div>
         )}
         {liveExecutionResult && (
@@ -183,7 +200,11 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           </div>
         )}
         {executionError && <p className="text-sm text-red-700" role="alert">{executionError}</p>}
-        <p className="text-xs text-neutral-500">Preparation and approval do not send this draft. No provider is invoked.</p>
+        <p className="text-xs text-neutral-500">
+          {executionMode === 'live'
+            ? 'Preparation and approval alone do not send this draft. Sending requires the explicit live-send action above.'
+            : 'Preparation and approval do not send this draft. No provider is invoked.'}
+        </p>
       </div>
     </article>
   );
@@ -390,7 +411,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
               Ask REV
             </button>
           </form>
-          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only — REV AI execution is not connected yet.</p>
+          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only â€” REV AI execution is not connected yet.</p>
         </div>
       </section>
 
@@ -517,7 +538,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 </div>
                 <div className="flex flex-wrap gap-3 mt-3 text-xs text-neutral-600">
                   <span>External effect: {plan.externalCommunication ? 'External communication' : 'None'}</span>
-                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? '£0' : `£${plan.estimatedExternalCost}`}</span>
+                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? 'Â£0' : `Â£${plan.estimatedExternalCost}`}</span>
                   <span>Execution: Disabled</span>
                 </div>
                 <button className="btn-secondary text-sm mt-3" type="button" onClick={() => setExpandedPlanId(expandedPlanId === plan.actionId ? null : plan.actionId)}>
@@ -556,7 +577,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                   <div className="mt-3 grid gap-1 text-xs text-neutral-600">
                     <p><strong>What REV will do:</strong> {action.description}</p>
                     <p><strong>External effect:</strong> NONE. Execution is disabled in this phase.</p>
-                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED — NOT EXECUTED' : 'Required before any future execution.'}</p>
+                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED â€” NOT EXECUTED' : 'Required before any future execution.'}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-3">
                     {!approval.decision && <button className="btn-primary text-sm" type="button" onClick={() => handleDecide(approval.id, 'approved')}>
@@ -590,7 +611,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                       </button>
                     </div>
                   )}
-                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED — NOT EXECUTED.</p>
+                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED â€” NOT EXECUTED.</p>
                 </div>
               );
             })}
@@ -750,7 +771,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
       </section>
 
       {error && <div role="alert" className="card p-4 border border-red-200 bg-red-50 text-sm text-red-800">{error}</div>}
-      {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work…" />}
+      {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV workâ€¦" />}
 
       {!loading && context && (
         <>
@@ -778,7 +799,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                         </div>
                         {context.membership?.role !== 'viewer' && (
                           <button className="btn-secondary text-sm" type="button" disabled={unavailable} onClick={() => runChange(candidate.id, () => repository.prepare(candidate, currentUser.id))}>
-                            {alreadyPrepared ? 'Draft prepared' : contact?.doNotContact ? 'Suppressed' : busyId === candidate.id ? 'Preparing…' : 'Prepare follow-up'}
+                            {alreadyPrepared ? 'Draft prepared' : contact?.doNotContact ? 'Suppressed' : busyId === candidate.id ? 'Preparingâ€¦' : 'Prepare follow-up'}
                           </button>
                         )}
                       </div>
@@ -803,6 +824,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     onApprove={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'approved'))}
                     onReject={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'rejected'))}
                     canRequestExecution={canReview && artifact.approvalState === 'approved_not_sent'}
+                    executionMode="live"
                     onRequestExecution={() => handleLiveExecutionRequest(artifact)}
                     liveExecutionResult={liveExecutionResults[artifact.id]}
                     executionError={liveExecutionErrors[artifact.id]}
@@ -813,7 +835,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
           </section>
 
           <section className="card p-4 text-sm text-neutral-700">
-            <strong>Execution remains disabled.</strong> Prepared work costs £0, invokes no provider, and cannot be sent from REV.
+            <strong>Execution remains disabled.</strong> Prepared work costs Â£0, invokes no provider, and cannot be sent from REV.
           </section>
         </>
       )}
@@ -827,3 +849,4 @@ const LiveEmptySection: React.FC<{ title: string; message: string }> = ({ title,
     <div className="card p-6 text-center text-neutral-600">{message}</div>
   </section>
 );
+
