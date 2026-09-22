@@ -835,7 +835,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
           </section>
 
           <section className="card p-4 text-sm text-neutral-700">
-            <strong>Execution remains disabled.</strong> Prepared work costs Â£0, invokes no provider, and cannot be sent from REV.
+            <strong>Live execution is controlled.</strong> Only an approved follow-up can be sent, and sending requires explicit confirmation.
           </section>
         </>
       )}
