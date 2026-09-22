@@ -15,6 +15,7 @@ import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
 import { RecoveryCandidate, RecoverySignalType } from '@/domain/recovery';
 import { supabaseClient } from './supabaseClient';
 import { buildPreparedFollowUpDraft } from '@/services/preparedFollowUpDraft';
+import { analyzeRecovery } from '@/services/recoveryService';
 import { deterministicUuid, fingerprintREVAction } from '@/services/revActionFingerprint';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
@@ -300,9 +301,21 @@ export class SupabasePreparedWorkRepository {
 
   async list(workspaceId: string): Promise<PreparedFollowUpArtifact[]> {
     const state = await this.gateway.loadPreparedState(workspaceId);
-    return state.memories.flatMap((memory) => {
+
+    const latestMemories = [...state.memories]
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      .filter(
+        (memory, index, memories) =>
+          memories.findIndex((item) => item.entityId === memory.entityId) === index,
+      );
+
+    return latestMemories.flatMap((memory) => {
       const action = state.actions.find((item) => item.id === memory.entityId);
-      const approval = state.approvals.find((item) => item.id === memory.stored.approvalId && item.revActionId === memory.entityId);
+      const approval = state.approvals.find(
+        (item) =>
+          item.id === memory.stored.approvalId &&
+          item.revActionId === memory.entityId,
+      );
       return action && approval ? [toArtifact(action, approval, memory)] : [];
     });
   }
@@ -350,6 +363,116 @@ export class SupabasePreparedWorkRepository {
     const artifact = (await this.list(candidate.workspaceId)).find((item) => item.recoveryCandidateId === candidate.id);
     if (!artifact) throw new Error('Prepared follow-up could not be reloaded after persistence.');
     return { artifact, alreadyPrepared: false };
+  }
+
+  async refreshContext(
+    workspaceId: string,
+    artifactId: string,
+    actorUserId: string,
+    now = new Date().toISOString(),
+  ): Promise<PreparedFollowUpArtifact> {
+    const context = await this.gateway.loadContext(workspaceId, actorUserId);
+
+    if (!context.membership || !['owner', 'admin'].includes(context.membership.role)) {
+      throw new Error('Owner or admin role is required to refresh prepared work.');
+    }
+
+    const state = await this.gateway.loadPreparedState(workspaceId);
+    const memory = state.memories.find((item) => item.id === artifactId);
+    const action = memory
+      ? state.actions.find((item) => item.id === memory.entityId)
+      : undefined;
+    const approval = memory
+      ? state.approvals.find(
+          (item) =>
+            item.id === memory.stored.approvalId &&
+            item.revActionId === memory.entityId,
+        )
+      : undefined;
+
+    if (!memory || !action || !approval) {
+      throw new Error('Prepared follow-up was not found in the active workspace.');
+    }
+
+    if (
+      approval.decision ||
+      action.status !== 'awaiting_approval' ||
+      action.executionStatus !== 'not_executed'
+    ) {
+      throw new Error('Only pending, unexecuted prepared work can have its context refreshed.');
+    }
+
+    const primaryGoal =
+      context.goals.find((goal) => goal.status === 'active') ??
+      context.goals[0];
+
+    const recovery = analyzeRecovery({
+      workspaceId,
+      goal: primaryGoal,
+      profile: context.profile,
+      services: context.services,
+      contacts: context.contacts,
+      opportunities: context.opportunities,
+      discoveryCandidates: [],
+    });
+
+    const candidate = recovery.candidates.find(
+      (item) => item.id === memory.stored.recoveryCandidateId,
+    );
+
+    if (!candidate) {
+      throw new Error('The original recovery opportunity is no longer available.');
+    }
+
+    const opportunity = candidate.opportunityId
+      ? context.opportunities.find((item) => item.id === candidate.opportunityId)
+      : undefined;
+
+    const contactId = candidate.contactId ?? opportunity?.contactId;
+    const contact = contactId
+      ? context.contacts.find((item) => item.id === contactId)
+      : undefined;
+
+    const draft = buildPreparedFollowUpDraft(candidate, {
+      profile: context.profile,
+      services: context.services,
+      goal: candidate.goalId
+        ? context.goals.find((item) => item.id === candidate.goalId)
+        : undefined,
+      contact,
+      opportunity,
+    });
+
+    const stored: StoredPreparedFollowUp = {
+      recoveryCandidateId: candidate.id,
+      recoveryType: candidate.signalType,
+      approvalId: approval.id,
+      recoveryReason: draft.recoveryReason,
+      objective: draft.objective,
+      suggestedChannel: draft.suggestedChannel,
+      evidenceContext: draft.evidenceContext,
+      missingInformation: draft.missingInformation,
+    };
+
+    const memoryId = await deterministicUuid(
+      `prepared-memory-refresh:${workspaceId}:${action.id}:${now}`,
+    );
+
+    await this.gateway.insertMemory({
+      id: memoryId,
+      workspaceId,
+      eventType: PREPARED_EVENT,
+      entityType: 'rev_action',
+      entityId: action.id,
+      title: 'REV refreshed prepared follow-up context',
+      summary: 'Evidence context refreshed for owner/admin review. Draft content was preserved. Nothing was sent.',
+      structuredData: { preparedFollowUp: stored },
+      occurredAt: now,
+      createdByType: 'user',
+      createdById: actorUserId,
+    });
+
+    return this.requireArtifact(workspaceId, memoryId);
   }
 
   async edit(workspaceId: string, artifactId: string, actorUserId: string, subject: string, draftMessage: string): Promise<PreparedFollowUpArtifact> {

@@ -74,6 +74,7 @@ function revStatus(actions: REVActionRecord[], pendingApprovalCount: number): 'R
 interface PreparedFollowUpReviewProps {
   artifact: PreparedFollowUpArtifact;
   canReview: boolean;
+  onRefreshContext?: () => void;
   onEdit: (subject: string, draftMessage: string) => void;
   onApprove: () => void;
   onReject: () => void;
@@ -84,7 +85,7 @@ interface PreparedFollowUpReviewProps {
 }
 
 export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
-  artifact, canReview, onEdit, onApprove, onReject, canRequestExecution = false,
+  artifact, canReview, onRefreshContext, onEdit, onApprove, onReject, canRequestExecution = false,
   onRequestExecution, executionResult, executionError,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -145,6 +146,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
 
         {pending && canReview && !isEditing && (
           <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-4">
+            <button className="btn-secondary text-sm" type="button" onClick={onRefreshContext}>Refresh context</button>
             <button className="btn-secondary text-sm" type="button" onClick={() => setIsEditing(true)}>Edit</button>
             <button className="btn-primary text-sm" type="button" onClick={onApprove}>Approve</button>
             <button className="btn-ghost text-sm" type="button" onClick={onReject}>Reject</button>
@@ -757,6 +759,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     key={artifact.id}
                     artifact={artifact}
                     canReview={canReview && busyId !== artifact.id}
+                    onRefreshContext={() => runChange(artifact.id, () => repository.refreshContext(workspaceId, artifact.id, currentUser.id))}
                     onEdit={(subject, draftMessage) => runChange(artifact.id, () => repository.edit(workspaceId, artifact.id, currentUser.id, subject, draftMessage))}
                     onApprove={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'approved'))}
                     onReject={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'rejected'))}
