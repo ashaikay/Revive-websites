@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 
 import {
   acquireMicrosoftGraphAccessToken,
   MicrosoftGraphAuthError,
-} from '../../supabase/functions/rev-email-execute/microsoftGraphAuth';
+} from '../../supabase/functions/_shared/microsoftGraphAuth';
 
 const validConfig = {
   tenantId: 'test-tenant',

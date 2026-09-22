@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 
 vi.mock(
-  '../../supabase/functions/rev-email-execute/microsoftGraphAuth',
+  '../../supabase/functions/_shared/microsoftGraphAuth',
   () => ({
     acquireMicrosoftGraphAccessToken: vi.fn(),
   }),
@@ -22,7 +22,7 @@ vi.mock(
   }),
 );
 
-import { acquireMicrosoftGraphAccessToken } from '../../supabase/functions/rev-email-execute/microsoftGraphAuth';
+import { acquireMicrosoftGraphAccessToken } from '../../supabase/functions/_shared/microsoftGraphAuth';
 
 import { sendMicrosoftGraphEmail } from '../../supabase/functions/rev-email-execute/microsoftGraphProvider';
 

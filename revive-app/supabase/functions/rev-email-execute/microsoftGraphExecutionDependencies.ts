@@ -1,9 +1,9 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
   acquireMicrosoftGraphAccessToken,
   type MicrosoftGraphAuthConfig,
-} from './microsoftGraphAuth.ts';
+} from '../_shared/microsoftGraphAuth.ts';
 
 import {
   sendMicrosoftGraphEmail,
