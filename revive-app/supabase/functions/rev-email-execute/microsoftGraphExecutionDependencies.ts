@@ -97,7 +97,7 @@ export async function createMicrosoftGraphExecutionDependencies(
         error,
       } = await input.serviceClient
         .from('contact_suppressions')
-        .select('id')
+        .select('reason')
         .eq('workspace_id', workspaceId)
         .eq('contact_id', contactId)
         .maybeSingle();

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { GoalService } from '@/services/goalService';
@@ -37,7 +37,7 @@ const SPECIALIST_SKILLS = [
 const WORK_QUEUE_LABEL: Record<ActionStatus, string> = {
   proposed: 'Planned',
   awaiting_approval: 'Waiting for approval',
-  approved: 'Approved â€” not executed',
+  approved: 'Approved — not executed',
   rejected: 'Rejected',
   cancelled: 'Cancelled',
   completed: 'Completed',
@@ -103,7 +103,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-2 mt-1">
           <h3 className="font-semibold text-neutral-900">{artifact.subject}</h3>
           <span className={pending ? 'badge-warning' : artifact.approvalState === 'approved_not_sent' ? 'badge-success' : 'badge-danger'}>
-            {pending ? 'DRAFT â€” REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED â€” NOT SENT' : 'REJECTED â€” NOT SENT'}
+            {pending ? 'DRAFT — REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED — NOT SENT' : 'REJECTED — NOT SENT'}
           </span>
         </div>
       </header>
@@ -112,7 +112,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           <p><strong>Recovery reason:</strong> {artifact.recoveryReason}</p>
           <p><strong>Objective:</strong> {artifact.objective}</p>
           <p><strong>Suggested channel:</strong> {artifact.suggestedChannel.replace('_', ' ')}</p>
-          <p><strong>External effect:</strong> None. Â£0 cost.</p>
+          <p><strong>External effect:</strong> None. £0 cost.</p>
         </div>
 
         {isEditing ? (
@@ -181,7 +181,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         {executionResult && (
           <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>{executionResult.displayStatus}</strong>
-            <p className="mt-1">Provider calls: 0 Â· Cost: Â£0 Â· External effect: none</p>
+            <p className="mt-1">Provider calls: 0 · Cost: £0 · External effect: none</p>
           </div>
         )}
         {liveExecutionResult && (
@@ -411,7 +411,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
               Ask REV
             </button>
           </form>
-          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only â€” REV AI execution is not connected yet.</p>
+          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only — REV AI execution is not connected yet.</p>
         </div>
       </section>
 
@@ -538,7 +538,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 </div>
                 <div className="flex flex-wrap gap-3 mt-3 text-xs text-neutral-600">
                   <span>External effect: {plan.externalCommunication ? 'External communication' : 'None'}</span>
-                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? 'Â£0' : `Â£${plan.estimatedExternalCost}`}</span>
+                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? '£0' : `£${plan.estimatedExternalCost}`}</span>
                   <span>Execution: Disabled</span>
                 </div>
                 <button className="btn-secondary text-sm mt-3" type="button" onClick={() => setExpandedPlanId(expandedPlanId === plan.actionId ? null : plan.actionId)}>
@@ -577,7 +577,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                   <div className="mt-3 grid gap-1 text-xs text-neutral-600">
                     <p><strong>What REV will do:</strong> {action.description}</p>
                     <p><strong>External effect:</strong> NONE. Execution is disabled in this phase.</p>
-                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED â€” NOT EXECUTED' : 'Required before any future execution.'}</p>
+                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED — NOT EXECUTED' : 'Required before any future execution.'}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-3">
                     {!approval.decision && <button className="btn-primary text-sm" type="button" onClick={() => handleDecide(approval.id, 'approved')}>
@@ -611,7 +611,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                       </button>
                     </div>
                   )}
-                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED â€” NOT EXECUTED.</p>
+                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED — NOT EXECUTED.</p>
                 </div>
               );
             })}
