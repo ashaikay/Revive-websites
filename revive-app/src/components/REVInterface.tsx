@@ -14,6 +14,7 @@ import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
 import { LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
+import { requestLiveEmailExecution } from '@/services/liveEmailExecutionClient';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -648,6 +649,26 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [liveExecutionErrors, setLiveExecutionErrors] = useState<Record<string, string>>({});
+
+  const handleLiveExecutionRequest = async (artifact: PreparedFollowUpArtifact) => {
+    setBusyId(artifact.id);
+    setLiveExecutionErrors((current) => ({ ...current, [artifact.id]: '' }));
+
+    try {
+      await requestLiveEmailExecution(workspaceId, artifact.revActionId);
+      await reload();
+    } catch (executionError) {
+      setLiveExecutionErrors((current) => ({
+        ...current,
+        [artifact.id]: executionError instanceof Error
+          ? executionError.message
+          : 'Trusted email execution request failed.',
+      }));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const reload = async () => {
     const [nextContext, nextPrepared] = await Promise.all([
@@ -763,6 +784,9 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     onEdit={(subject, draftMessage) => runChange(artifact.id, () => repository.edit(workspaceId, artifact.id, currentUser.id, subject, draftMessage))}
                     onApprove={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'approved'))}
                     onReject={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'rejected'))}
+                    canRequestExecution={false}
+                    onRequestExecution={() => handleLiveExecutionRequest(artifact)}
+                    executionError={liveExecutionErrors[artifact.id]}
                   />
                 ))}
               </div>
