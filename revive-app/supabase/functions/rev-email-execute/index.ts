@@ -20,7 +20,7 @@ import {
  * Microsoft Graph invocation, or terminal provider result recording
  * is reachable while this is false.
  */
-const PROVIDER_EXECUTION_ENABLED = false;
+const PROVIDER_EXECUTION_ENABLED = true;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
