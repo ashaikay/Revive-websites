@@ -802,7 +802,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     onEdit={(subject, draftMessage) => runChange(artifact.id, () => repository.edit(workspaceId, artifact.id, currentUser.id, subject, draftMessage))}
                     onApprove={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'approved'))}
                     onReject={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'rejected'))}
-                    canRequestExecution={false}
+                    canRequestExecution={canReview && artifact.approvalState === 'approved_not_sent'}
                     onRequestExecution={() => handleLiveExecutionRequest(artifact)}
                     liveExecutionResult={liveExecutionResults[artifact.id]}
                     executionError={liveExecutionErrors[artifact.id]}
