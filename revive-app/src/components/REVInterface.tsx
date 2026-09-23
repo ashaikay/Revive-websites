@@ -230,91 +230,167 @@ export function emailBodyPreview(bodyText: string, limit = 240): string {
   return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
 }
 
+export type EmailThreadCategory = 'customer' | 'needs_review' | 'automated';
+
 function hasLinkedEmailRecord(thread: LiveEmailThread): boolean {
   return Boolean(thread.contactId || thread.opportunityId);
 }
+
+function isStrongAutomatedMessage(message: LiveEmailThread['messages'][number]): boolean {
+  const sender = message.senderEmail.toLowerCase();
+  const localPart = sender.split('@')[0] ?? '';
+  const senderDomain = sender.split('@')[1] ?? '';
+  const subject = (message.subject ?? '').toLowerCase();
+  const automatedSender = /(?:no[._-]?reply|do[._-]?not[._-]?reply|donotreply)/.test(localPart)
+    || /(?:notification|notifications|mailer-daemon|postmaster)@/.test(sender)
+    || senderDomain === 'buffermail.com';
+  const automatedSubject = /\b(?:dmarc|delivery (?:status |)?report|automated alert|account notification|newsletter|platform digest)\b/.test(subject);
+  return automatedSender || automatedSubject;
+}
+
+export function classifyEmailThread(thread: LiveEmailThread): EmailThreadCategory {
+  if (hasLinkedEmailRecord(thread)) return 'customer';
+  return thread.messages.length > 0 && thread.messages.every(isStrongAutomatedMessage)
+    ? 'automated'
+    : 'needs_review';
+}
+
+function newestFirst(threads: LiveEmailThread[]): LiveEmailThread[] {
+  return [...threads].sort((left, right) =>
+    (right.lastMessageAt ?? '').localeCompare(left.lastMessageAt ?? ''),
+  );
+}
+
+export function triageEmailThreads(threads: LiveEmailThread[]): Record<EmailThreadCategory, LiveEmailThread[]> {
+  const triage: Record<EmailThreadCategory, LiveEmailThread[]> = {
+    customer: [],
+    needs_review: [],
+    automated: [],
+  };
+  for (const thread of threads) triage[classifyEmailThread(thread)].push(thread);
+  return {
+    customer: newestFirst(triage.customer),
+    needs_review: newestFirst(triage.needs_review),
+    automated: newestFirst(triage.automated),
+  };
+}
+
+interface EmailThreadListProps {
+  threads: LiveEmailThread[];
+  contacts: ContactRecord[];
+  opportunities: { id: string; title: string }[];
+}
+
+const EmailThreadList: React.FC<EmailThreadListProps> = ({ threads, contacts, opportunities }) => (
+  <div className="grid gap-4">
+    {threads.map((thread) => {
+      const contact = thread.contactId
+        ? contacts.find((item) => item.id === thread.contactId)
+        : undefined;
+      const opportunity = thread.opportunityId
+        ? opportunities.find((item) => item.id === thread.opportunityId)
+        : undefined;
+      return (
+        <article key={thread.id} className="card divide-y divide-neutral-100 overflow-hidden">
+          <header className="p-5">
+            <h3 className="font-semibold text-neutral-900">
+              {thread.subject ?? 'Email conversation'}
+            </h3>
+            <p className="text-sm text-neutral-600 mt-2">
+              {contact && <>Contact: {contact.name}</>}
+              {contact && opportunity && ' | '}
+              {opportunity && <>Opportunity: {opportunity.title}</>}
+              {!contact && !opportunity && 'No linked contact or opportunity'}
+            </p>
+            <p className="text-xs text-neutral-500 mt-2">
+              Last message: {formatEmailTimestamp(thread.lastMessageAt)}
+            </p>
+          </header>
+          <div className="divide-y divide-neutral-100">
+            {thread.messages.map((message) => (
+              <div key={message.id} className="p-5 text-sm text-neutral-700">
+                <p className="font-semibold text-neutral-900">
+                  {message.direction === 'inbound' ? 'INBOUND' : 'OUTBOUND'}
+                </p>
+                <p className="mt-2">From: {message.senderEmail}</p>
+                <p>To: {message.recipientEmails.join(', ') || 'No recipients recorded'}</p>
+                <p>Date: {formatEmailTimestamp(message.communicationAt)}</p>
+                {message.subject && <p className="mt-2 font-medium">Subject: {message.subject}</p>}
+                {message.bodyText && (
+                  <>
+                    <p className="mt-2">{emailBodyPreview(message.bodyText)}</p>
+                    {message.bodyText.replace(/\s+/g, ' ').trim().length > 240 && (
+                      <details className="mt-3">
+                        <summary className="cursor-pointer font-medium text-primary-700">
+                          View full message
+                        </summary>
+                        <p className="mt-2 max-h-80 overflow-y-auto break-words whitespace-pre-wrap rounded border border-neutral-200 bg-neutral-50 p-3">
+                          {message.bodyText}
+                        </p>
+                      </details>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </article>
+      );
+    })}
+  </div>
+);
 
 export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> = ({
   threads,
   contacts,
   opportunities,
 }) => {
-  const displayThreads = [...threads].sort((left, right) => {
-    const linkedDifference = Number(hasLinkedEmailRecord(right)) - Number(hasLinkedEmailRecord(left));
-    if (linkedDifference !== 0) return linkedDifference;
-    return (right.lastMessageAt ?? '').localeCompare(left.lastMessageAt ?? '');
-  });
+  const triage = triageEmailThreads(threads);
 
   return (
     <section aria-labelledby="email-conversations-heading" className="rev-motion-in">
-    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-      <h2 id="email-conversations-heading" className="text-xl font-bold text-neutral-900">
-        EMAIL CONVERSATIONS
-      </h2>
-      <span className="badge-neutral">READ-ONLY HISTORY</span>
-    </div>
-    {threads.length === 0 ? (
-      <div className="card p-6 text-center text-neutral-600">
-        No email conversation history is recorded for this workspace.
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h2 id="email-conversations-heading" className="text-xl font-bold text-neutral-900">
+          EMAIL CONVERSATIONS
+        </h2>
+        <span className="badge-neutral">READ-ONLY HISTORY</span>
       </div>
-    ) : (
-      <div className="grid gap-4">
-        {displayThreads.map((thread) => {
-          const contact = thread.contactId
-            ? contacts.find((item) => item.id === thread.contactId)
-            : undefined;
-          const opportunity = thread.opportunityId
-            ? opportunities.find((item) => item.id === thread.opportunityId)
-            : undefined;
-          return (
-            <article key={thread.id} className="card divide-y divide-neutral-100 overflow-hidden">
-              <header className="p-5">
-                <h3 className="font-semibold text-neutral-900">
-                  {thread.subject ?? 'Email conversation'}
-                </h3>
-                <p className="text-sm text-neutral-600 mt-2">
-                  {contact && <>Contact: {contact.name}</>}
-                  {contact && opportunity && ' | '}
-                  {opportunity && <>Opportunity: {opportunity.title}</>}
-                  {!contact && !opportunity && 'No linked contact or opportunity'}
-                </p>
-                <p className="text-xs text-neutral-500 mt-2">
-                  Last message: {formatEmailTimestamp(thread.lastMessageAt)}
-                </p>
-              </header>
-              <div className="divide-y divide-neutral-100">
-                {thread.messages.map((message) => (
-                  <div key={message.id} className="p-5 text-sm text-neutral-700">
-                    <p className="font-semibold text-neutral-900">
-                      {message.direction === 'inbound' ? 'INBOUND' : 'OUTBOUND'}
-                    </p>
-                    <p className="mt-2">From: {message.senderEmail}</p>
-                    <p>To: {message.recipientEmails.join(', ') || 'No recipients recorded'}</p>
-                    <p>Date: {formatEmailTimestamp(message.communicationAt)}</p>
-                    {message.subject && <p className="mt-2 font-medium">Subject: {message.subject}</p>}
-                    {message.bodyText && (
-                      <>
-                        <p className="mt-2">{emailBodyPreview(message.bodyText)}</p>
-                        {message.bodyText.replace(/\s+/g, ' ').trim().length > 240 && (
-                          <details className="mt-3">
-                            <summary className="cursor-pointer font-medium text-primary-700">
-                              View full message
-                            </summary>
-                            <p className="mt-2 max-h-80 overflow-y-auto break-words whitespace-pre-wrap rounded border border-neutral-200 bg-neutral-50 p-3">
-                              {message.bodyText}
-                            </p>
-                          </details>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
+      {threads.length === 0 ? (
+        <div className="card p-6 text-center text-neutral-600">
+          No email conversation history is recorded for this workspace.
+        </div>
+      ) : (
+        <div className="grid gap-8">
+          <section aria-labelledby="customer-conversations-heading">
+            <h3 id="customer-conversations-heading" className="text-lg font-semibold text-neutral-900 mb-3">
+              CUSTOMER CONVERSATIONS
+            </h3>
+            {triage.customer.length > 0 ? (
+              <EmailThreadList threads={triage.customer} contacts={contacts} opportunities={opportunities} />
+            ) : (
+              <p className="text-sm text-neutral-600">No customer conversations are recorded for this workspace.</p>
+            )}
+          </section>
+          <section aria-labelledby="needs-review-heading">
+            <h3 id="needs-review-heading" className="text-lg font-semibold text-neutral-900 mb-3">NEEDS REVIEW</h3>
+            {triage.needs_review.length > 0 ? (
+              <EmailThreadList threads={triage.needs_review} contacts={contacts} opportunities={opportunities} />
+            ) : (
+              <p className="text-sm text-neutral-600">No unlinked conversations need review.</p>
+            )}
+          </section>
+          {triage.automated.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-lg font-semibold text-neutral-900">
+                AUTOMATED MAIL ({triage.automated.length})
+              </summary>
+              <div className="mt-3">
+                <EmailThreadList threads={triage.automated} contacts={contacts} opportunities={opportunities} />
               </div>
-            </article>
-          );
-        })}
-      </div>
-    )}
+            </details>
+          )}
+        </div>
+      )}
     </section>
   );
 };
@@ -1087,9 +1163,6 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             ) : <div className="card p-6 text-center text-neutral-600">No prepared follow-up work is recorded for this workspace.</div>}
           </section>
 
-          <section className="card p-4 text-sm text-neutral-700">
-            <strong>Live execution is controlled.</strong> Only an approved follow-up can be sent, and sending requires explicit confirmation.
-          </section>
         </>
       )}
     </div>
