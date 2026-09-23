@@ -157,25 +157,21 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           </div>
         )}
         {pending && !canReview && <p className="text-sm text-amber-800">Owner or admin review is required.</p>}
-        {artifact.approvalState === 'approved_not_sent' && canRequestExecution && onRequestExecution && (
+        {artifact.approvalState === 'approved_not_sent' && executionMode === 'live' && (
+          <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-semibold">EMAIL SENDING DISABLED</p>
+            <p className="mt-1">Approved draft retained. Nothing has been sent and no email provider can be invoked.</p>
+          </div>
+        )}
+        {artifact.approvalState === 'approved_not_sent' && executionMode === 'dry_run' && canRequestExecution && onRequestExecution && (
           <div className="border-t border-neutral-200 pt-4">
-            <p className="text-sm font-medium text-neutral-900">
-              {executionMode === 'live'
-                ? 'LIVE EMAIL SEND - this will send the approved email to the contact.'
-                : 'Phase 4F is dry-run only. Nothing will be sent.'}
-            </p>
+            <p className="text-sm font-medium text-neutral-900">Phase 4F is dry-run only. Nothing will be sent.</p>
             <button
               className="btn-secondary text-sm mt-3"
               type="button"
-              onClick={() => {
-                if (executionMode === 'live' &&
-                    !window.confirm('Send this approved email now? This will contact the recipient through Microsoft Graph.')) {
-                  return;
-                }
-                onRequestExecution();
-              }}
+              onClick={onRequestExecution}
             >
-              {executionMode === 'live' ? 'SEND APPROVED EMAIL' : 'REQUEST EXECUTION'}
+              REQUEST EXECUTION
             </button>
           </div>
         )}
@@ -203,7 +199,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         {executionError && <p className="text-sm text-red-700" role="alert">{executionError}</p>}
         <p className="text-xs text-neutral-500">
           {executionMode === 'live'
-            ? 'Preparation and approval alone do not send this draft. Sending requires the explicit live-send action above.'
+            ? 'Email sending is disabled. Preparation and approval do not contact the recipient.'
             : 'Preparation and approval do not send this draft. No provider is invoked.'}
         </p>
       </div>
