@@ -1,5 +1,6 @@
-import type { MicrosoftGraphInboxMessage } from './microsoftGraphInbox.ts';
+﻿import type { MicrosoftGraphInboxMessage } from './microsoftGraphInbox.ts';
 import type { InboundContactMatch } from './inboundContactMatcher.ts';
+import type { InboundEmailClassificationResult } from './inboundEmailClassifier.ts';
 
 export interface InboundEmailPersistenceClient {
   from(table: string): {
@@ -13,6 +14,7 @@ export interface PersistInboundEmailInput {
   workspaceId: string;
   message: MicrosoftGraphInboxMessage;
   contactMatch: InboundContactMatch;
+  classification: InboundEmailClassificationResult;
 }
 
 export interface PersistInboundEmailResult {
@@ -228,6 +230,10 @@ export async function persistInboundEmail(
       received_at: input.message.receivedAt,
       sent_at: null,
       processing_status: processingStatus,
+      classification: input.classification.classification,
+      classification_confidence: input.classification.confidence,
+      classification_reason: input.classification.reason,
+      classified_at: new Date().toISOString(),
     })
     .select('id')
     .single();

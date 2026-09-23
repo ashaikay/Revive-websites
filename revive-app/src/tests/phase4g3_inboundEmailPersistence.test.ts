@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 
 import {
   persistInboundEmail,
@@ -17,6 +17,12 @@ const message: MicrosoftGraphInboxMessage = {
   recipientEmails: ['support@example.com'],
   receivedAt: '2026-09-23T00:30:00Z',
   isRead: false,
+};
+
+const classification = {
+  classification: 'customer_opportunity' as const,
+  confidence: 'high' as const,
+  reason: 'Sender matches an existing workspace contact.',
 };
 
 function createQuery(result: unknown) {
@@ -113,6 +119,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const { client } = createClient();
 
     const result = await persistInboundEmail(client, {
+      classification,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -133,6 +140,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const { client } = createClient();
 
     const result = await persistInboundEmail(client, {
+      classification,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -148,6 +156,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const { client } = createClient();
 
     const result = await persistInboundEmail(client, {
+      classification,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -172,6 +181,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     });
 
     const result = await persistInboundEmail(client, {
+      classification,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -199,6 +209,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     });
 
     const result = await persistInboundEmail(client, {
+      classification,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -219,6 +230,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     await expect(
       persistInboundEmail(client, {
+        classification,
         workspaceId: '',
         message,
         contactMatch: {
@@ -234,6 +246,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     await expect(
       persistInboundEmail(client, {
+        classification,
         workspaceId: 'workspace-a',
         message: {
           ...message,
@@ -259,6 +272,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     await expect(
       persistInboundEmail(client, {
+        classification,
         workspaceId: 'workspace-a',
         message,
         contactMatch: {

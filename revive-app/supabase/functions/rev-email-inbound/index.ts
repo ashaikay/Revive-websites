@@ -270,6 +270,7 @@ if (
           workspaceId,
           message,
           contactMatch,
+          classification,
         },
       );
 
@@ -311,4 +312,5 @@ if (
     );
   }
 });
+
 
