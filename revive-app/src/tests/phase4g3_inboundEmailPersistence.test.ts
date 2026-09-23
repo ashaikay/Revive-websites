@@ -120,6 +120,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     const result = await persistInboundEmail(client, {
       classification,
+      replyIntent: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -141,6 +142,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     const result = await persistInboundEmail(client, {
       classification,
+      replyIntent: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -157,6 +159,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     const result = await persistInboundEmail(client, {
       classification,
+      replyIntent: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -182,6 +185,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     const result = await persistInboundEmail(client, {
       classification,
+      replyIntent: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -210,6 +214,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
 
     const result = await persistInboundEmail(client, {
       classification,
+      replyIntent: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -231,6 +236,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     await expect(
       persistInboundEmail(client, {
         classification,
+        replyIntent: null,
         workspaceId: '',
         message,
         contactMatch: {
@@ -247,6 +253,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     await expect(
       persistInboundEmail(client, {
         classification,
+        replyIntent: null,
         workspaceId: 'workspace-a',
         message: {
           ...message,
@@ -273,6 +280,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     await expect(
       persistInboundEmail(client, {
         classification,
+        replyIntent: null,
         workspaceId: 'workspace-a',
         message,
         contactMatch: {
@@ -285,3 +293,5 @@ describe('Phase 4G.3 inbound email persistence', () => {
     );
   });
 });
+
+

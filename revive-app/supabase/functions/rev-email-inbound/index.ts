@@ -20,6 +20,7 @@ import {
 import {
   classifyInboundEmail,
 } from './inboundEmailClassifier.ts';
+import { detectInboundReplyIntent } from './inboundReplyIntent.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -264,6 +265,14 @@ if (
         reason: classification.reason,
       });
 
+      const replyIntent =
+        classification.classification === 'customer_opportunity'
+          ? detectInboundReplyIntent({
+              subject: message.subject,
+              bodyText: message.bodyText,
+            })
+          : null;
+
       const result = await persistInboundEmail(
         serviceClient,
         {
@@ -271,6 +280,7 @@ if (
           message,
           contactMatch,
           classification,
+          replyIntent,
         },
       );
 
@@ -312,5 +322,7 @@ if (
     );
   }
 });
+
+
 
 
