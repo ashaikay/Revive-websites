@@ -21,6 +21,7 @@ import {
   classifyInboundEmail,
 } from './inboundEmailClassifier.ts';
 import { detectInboundReplyIntent } from './inboundReplyIntent.ts';
+import { recommendInboundAction } from './inboundActionRecommender.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -273,6 +274,11 @@ if (
             })
           : null;
 
+      const recommendedAction =
+        replyIntent
+          ? recommendInboundAction(replyIntent)
+          : null;
+
       const result = await persistInboundEmail(
         serviceClient,
         {
@@ -281,6 +287,7 @@ if (
           contactMatch,
           classification,
           replyIntent,
+          recommendedAction,
         },
       );
 
@@ -322,6 +329,7 @@ if (
     );
   }
 });
+
 
 
 

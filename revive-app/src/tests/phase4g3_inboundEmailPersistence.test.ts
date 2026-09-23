@@ -121,6 +121,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const result = await persistInboundEmail(client, {
       classification,
       replyIntent: null,
+      recommendedAction: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -143,6 +144,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const result = await persistInboundEmail(client, {
       classification,
       replyIntent: null,
+      recommendedAction: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -160,6 +162,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const result = await persistInboundEmail(client, {
       classification,
       replyIntent: null,
+      recommendedAction: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -186,6 +189,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const result = await persistInboundEmail(client, {
       classification,
       replyIntent: null,
+      recommendedAction: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -215,6 +219,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     const result = await persistInboundEmail(client, {
       classification,
       replyIntent: null,
+      recommendedAction: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -237,6 +242,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       persistInboundEmail(client, {
         classification,
         replyIntent: null,
+      recommendedAction: null,
         workspaceId: '',
         message,
         contactMatch: {
@@ -254,6 +260,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       persistInboundEmail(client, {
         classification,
         replyIntent: null,
+      recommendedAction: null,
         workspaceId: 'workspace-a',
         message: {
           ...message,
@@ -281,6 +288,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       persistInboundEmail(client, {
         classification,
         replyIntent: null,
+      recommendedAction: null,
         workspaceId: 'workspace-a',
         message,
         contactMatch: {
@@ -293,5 +301,6 @@ describe('Phase 4G.3 inbound email persistence', () => {
     );
   });
 });
+
 
 

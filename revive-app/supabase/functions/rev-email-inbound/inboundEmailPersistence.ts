@@ -2,6 +2,7 @@
 import type { InboundContactMatch } from './inboundContactMatcher.ts';
 import type { InboundEmailClassificationResult } from './inboundEmailClassifier.ts';
 import type { InboundReplyIntentResult } from './inboundReplyIntent.ts';
+import type { InboundRecommendedActionResult } from './inboundActionRecommender.ts';
 
 export interface InboundEmailPersistenceClient {
   from(table: string): {
@@ -17,6 +18,7 @@ export interface PersistInboundEmailInput {
   contactMatch: InboundContactMatch;
   classification: InboundEmailClassificationResult;
   replyIntent: InboundReplyIntentResult | null;
+  recommendedAction: InboundRecommendedActionResult | null;
 }
 
 export interface PersistInboundEmailResult {
@@ -239,6 +241,10 @@ export async function persistInboundEmail(
       reply_intent_confidence: input.replyIntent?.confidence ?? null,
       reply_intent_reason: input.replyIntent?.reason ?? null,
       intent_detected_at: input.replyIntent ? new Date().toISOString() : null,
+      recommended_action: input.recommendedAction?.action ?? null,
+      recommended_action_reason: input.recommendedAction?.reason ?? null,
+      recommended_action_requires_approval: input.recommendedAction?.requiresApproval ?? null,
+      recommended_action_at: input.recommendedAction ? new Date().toISOString() : null,
       classified_at: new Date().toISOString(),
     })
     .select('id')
@@ -259,4 +265,5 @@ export async function persistInboundEmail(
     processingStatus,
   };
 }
+
 
