@@ -15,6 +15,7 @@ import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRec
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
 import { LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
 import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/services/liveEmailExecutionClient';
+import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -37,7 +38,7 @@ const SPECIALIST_SKILLS = [
 const WORK_QUEUE_LABEL: Record<ActionStatus, string> = {
   proposed: 'Planned',
   awaiting_approval: 'Waiting for approval',
-  approved: 'Approved — not executed',
+  approved: 'Approved - not executed',
   rejected: 'Rejected',
   cancelled: 'Cancelled',
   completed: 'Completed',
@@ -103,7 +104,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-2 mt-1">
           <h3 className="font-semibold text-neutral-900">{artifact.subject}</h3>
           <span className={pending ? 'badge-warning' : artifact.approvalState === 'approved_not_sent' ? 'badge-success' : 'badge-danger'}>
-            {pending ? 'DRAFT — REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED — NOT SENT' : 'REJECTED — NOT SENT'}
+            {pending ? 'DRAFT - REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED - NOT SENT' : 'REJECTED - NOT SENT'}
           </span>
         </div>
       </header>
@@ -112,7 +113,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           <p><strong>Recovery reason:</strong> {artifact.recoveryReason}</p>
           <p><strong>Objective:</strong> {artifact.objective}</p>
           <p><strong>Suggested channel:</strong> {artifact.suggestedChannel.replace('_', ' ')}</p>
-          <p><strong>External effect:</strong> None. £0 cost.</p>
+          <p><strong>External effect:</strong> None. GBP 0 cost.</p>
         </div>
 
         {isEditing ? (
@@ -181,7 +182,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         {executionResult && (
           <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>{executionResult.displayStatus}</strong>
-            <p className="mt-1">Provider calls: 0 · Cost: £0 · External effect: none</p>
+            <p className="mt-1">Provider calls: 0 | Cost: GBP 0 | External effect: none</p>
           </div>
         )}
         {liveExecutionResult && (
@@ -411,7 +412,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
               Ask REV
             </button>
           </form>
-          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only — REV AI execution is not connected yet.</p>
+          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only - REV AI execution is not connected yet.</p>
         </div>
       </section>
 
@@ -538,7 +539,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 </div>
                 <div className="flex flex-wrap gap-3 mt-3 text-xs text-neutral-600">
                   <span>External effect: {plan.externalCommunication ? 'External communication' : 'None'}</span>
-                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? '£0' : `£${plan.estimatedExternalCost}`}</span>
+                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? 'GBP 0' : `GBP ${plan.estimatedExternalCost}`}</span>
                   <span>Execution: Disabled</span>
                 </div>
                 <button className="btn-secondary text-sm mt-3" type="button" onClick={() => setExpandedPlanId(expandedPlanId === plan.actionId ? null : plan.actionId)}>
@@ -577,7 +578,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                   <div className="mt-3 grid gap-1 text-xs text-neutral-600">
                     <p><strong>What REV will do:</strong> {action.description}</p>
                     <p><strong>External effect:</strong> NONE. Execution is disabled in this phase.</p>
-                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED — NOT EXECUTED' : 'Required before any future execution.'}</p>
+                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED - NOT EXECUTED' : 'Required before any future execution.'}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-3">
                     {!approval.decision && <button className="btn-primary text-sm" type="button" onClick={() => handleDecide(approval.id, 'approved')}>
@@ -611,7 +612,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                       </button>
                     </div>
                   )}
-                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED — NOT EXECUTED.</p>
+                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED - NOT EXECUTED.</p>
                 </div>
               );
             })}
@@ -688,6 +689,27 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [error, setError] = useState<string | null>(null);
   const [liveExecutionErrors, setLiveExecutionErrors] = useState<Record<string, string>>({});
   const [liveExecutionResults, setLiveExecutionResults] = useState<Record<string, LiveEmailExecutionResult>>({});
+  const [inboundResult, setInboundResult] = useState<InboundEmailReadResult | null>(null);
+  const [inboundError, setInboundError] = useState<string | null>(null);
+  const [checkingInbox, setCheckingInbox] = useState(false);
+
+  const handleCheckInbox = async () => {
+    setCheckingInbox(true);
+    setInboundError(null);
+
+    try {
+      const result = await requestInboundEmailRead(workspaceId);
+      setInboundResult(result);
+    } catch (inboundReadError) {
+      setInboundError(
+        inboundReadError instanceof Error
+          ? inboundReadError.message
+          : 'Inbound email read failed.',
+      );
+    } finally {
+      setCheckingInbox(false);
+    }
+  };
 
   const handleLiveExecutionRequest = async (artifact: PreparedFollowUpArtifact) => {
     setBusyId(artifact.id);
@@ -768,10 +790,35 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
         <span className="badge bg-white/15 text-white mt-4 inline-block" role="status">
           {loading ? 'Loading workspace' : preparedFollowUps.some((item) => item.approvalState === 'pending') ? 'Waiting for approval' : 'Ready'}
         </span>
+
+        {canReview && (
+          <div className="mt-4">
+            <button
+              type="button"
+              className="btn-secondary text-sm"
+              disabled={checkingInbox}
+              onClick={handleCheckInbox}
+            >
+              {checkingInbox ? 'Checking inbox...' : 'Check inbox'}
+            </button>
+
+            {inboundResult && (
+              <p className="text-sm mt-3 text-white">
+                Inbox checked: {inboundResult.messagesRead} read, {inboundResult.stored} stored, {inboundResult.matched} matched, {inboundResult.needsReview} need review.
+              </p>
+            )}
+
+            {inboundError && (
+              <p className="text-sm mt-3 text-red-100" role="alert">
+                {inboundError}
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       {error && <div role="alert" className="card p-4 border border-red-200 bg-red-50 text-sm text-red-800">{error}</div>}
-      {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV workâ€¦" />}
+      {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work..." />}
 
       {!loading && context && (
         <>
@@ -799,7 +846,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                         </div>
                         {context.membership?.role !== 'viewer' && (
                           <button className="btn-secondary text-sm" type="button" disabled={unavailable} onClick={() => runChange(candidate.id, () => repository.prepare(candidate, currentUser.id))}>
-                            {alreadyPrepared ? 'Draft prepared' : contact?.doNotContact ? 'Suppressed' : busyId === candidate.id ? 'Preparingâ€¦' : 'Prepare follow-up'}
+                            {alreadyPrepared ? 'Draft prepared' : contact?.doNotContact ? 'Suppressed' : busyId === candidate.id ? 'Preparing...' : 'Prepare follow-up'}
                           </button>
                         )}
                       </div>

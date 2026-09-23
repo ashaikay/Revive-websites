@@ -142,15 +142,10 @@ Deno.serve(async (request: Request) => {
   const clientSecret = Deno.env.get(
     'MICROSOFT_GRAPH_CLIENT_SECRET',
   );
-  const mailboxUserId = Deno.env.get(
-    'MICROSOFT_GRAPH_SENDER_USER_ID',
-  );
-
-  if (
+if (
     !tenantId ||
     !clientId ||
-    !clientSecret ||
-    !mailboxUserId
+    !clientSecret
   ) {
     return jsonResponse(
       { error: 'Microsoft Graph configuration is incomplete.' },
@@ -173,6 +168,24 @@ Deno.serve(async (request: Request) => {
   );
 
   try {
+    const { data: mailbox, error: mailboxError } =
+      await serviceClient
+        .from('workspace_email_mailboxes')
+        .select('mailbox_user_id, mailbox_email, enabled')
+        .eq('workspace_id', workspaceId)
+        .eq('provider_key', 'microsoft_graph')
+        .eq('enabled', true)
+        .maybeSingle();
+
+    if (mailboxError || !mailbox?.mailbox_user_id) {
+      return jsonResponse(
+        { error: 'No enabled mailbox is configured for this workspace.' },
+        403,
+      );
+    }
+
+    const mailboxUserId = mailbox.mailbox_user_id;
+
     const token = await acquireMicrosoftGraphAccessToken({
       tenantId,
       clientId,
