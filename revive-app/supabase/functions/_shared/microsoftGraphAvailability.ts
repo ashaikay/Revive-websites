@@ -84,8 +84,8 @@ function normalizeScheduleItem(item: GraphScheduleItem): BusyInterval | null {
 }
 
 /*
- * Disabled Phase 5C adapter foundation. It is deliberately not imported by
- * application UI or an Edge Function entrypoint until a later authorization.
+ * This server-only adapter is injected into the controlled calendar boundary.
+ * The boundary's disabled capability gate prevents it from running in production.
  * `workingElsewhere` is treated as busy because location/remote-work policy
  * cannot safely establish customer-meeting availability in this phase.
  */

@@ -1,5 +1,4 @@
 import {
-  CALENDAR_CAPABILITIES,
   calculateAvailability,
   type AvailabilityPolicy,
   type BusyInterval,
@@ -8,6 +7,8 @@ import {
 import { readMicrosoftGraphPrimaryCalendarAvailability } from '../_shared/microsoftGraphAvailability.ts';
 
 export const CALENDAR_AVAILABILITY_ENABLED = false;
+export const MAXIMUM_AVAILABILITY_QUERY_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
+export const MAXIMUM_AVAILABLE_SLOTS = 100;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,7 +26,9 @@ export interface TrustedCalendarAvailabilityConfig {
 export interface CalendarAvailabilityDependencies {
   getAuthenticatedUserId: (authorization: string) => Promise<string | null>;
   hasActiveWorkspaceMembership: (authorization: string, workspaceId: string, userId: string) => Promise<boolean>;
-  resolveTrustedCalendarAvailability: (workspaceId: string) => Promise<TrustedCalendarAvailabilityConfig>;
+  isCalendarAvailabilityEnabled: () => boolean;
+  isReadCalendarAvailabilityEnabled: () => boolean;
+  resolveTrustedCalendarAvailability: (workspaceId: string, searchStartAt: string, searchEndAt: string) => Promise<TrustedCalendarAvailabilityConfig>;
   readBusyIntervals: typeof readMicrosoftGraphPrimaryCalendarAvailability;
   now: () => string;
 }
@@ -69,6 +72,7 @@ function parsePayload(value: unknown): CalendarAvailabilityPayload | null {
   if (typeof payload.workspaceId !== 'string' || !payload.workspaceId.trim()
     || !validUtcInstant(payload.searchStartAt) || !validUtcInstant(payload.searchEndAt)
     || Date.parse(payload.searchStartAt) >= Date.parse(payload.searchEndAt)
+    || Date.parse(payload.searchEndAt) - Date.parse(payload.searchStartAt) > MAXIMUM_AVAILABILITY_QUERY_RANGE_MS
     || typeof payload.requestedDurationMinutes !== 'number'
     || !Number.isInteger(payload.requestedDurationMinutes) || payload.requestedDurationMinutes <= 0
     || !validTimezone(payload.timezone)) return null;
@@ -111,12 +115,16 @@ export async function handleCalendarAvailability(
     return json(403, { error: 'Workspace access denied.' });
   }
 
-  if (!CALENDAR_AVAILABILITY_ENABLED || !CALENDAR_CAPABILITIES.READ_CALENDAR_AVAILABILITY) {
+  if (!dependencies.isCalendarAvailabilityEnabled() || !dependencies.isReadCalendarAvailabilityEnabled()) {
     return json(503, { status: 'disabled', providerCalls: 0, externalEffect: 'none' });
   }
 
   try {
-    const trusted = await dependencies.resolveTrustedCalendarAvailability(payload.workspaceId);
+    const trusted = await dependencies.resolveTrustedCalendarAvailability(
+      payload.workspaceId,
+      payload.searchStartAt,
+      payload.searchEndAt,
+    );
     if (trusted.selectedCalendar.workspaceId !== payload.workspaceId
       || trusted.selectedCalendar.timezone !== payload.timezone
       || trusted.selectedCalendar.provider !== 'microsoft_graph') {
@@ -132,7 +140,7 @@ export async function handleCalendarAvailability(
       searchEndAt: payload.searchEndAt,
       timezone: trusted.selectedCalendar.timezone,
     });
-    return json(200, calculateAvailability({
+    const availability = calculateAvailability({
       workspaceId: payload.workspaceId,
       selectedCalendarId: trusted.selectedCalendar.id,
       selectedCalendar: trusted.selectedCalendar,
@@ -143,7 +151,11 @@ export async function handleCalendarAvailability(
       now: dependencies.now(),
       policy: trusted.policy,
       busyIntervals,
-    }));
+    });
+    return json(200, {
+      ...availability,
+      slots: availability.slots.slice(0, MAXIMUM_AVAILABLE_SLOTS),
+    });
   } catch {
     return json(503, { error: 'Calendar availability is unavailable.' });
   }

@@ -1,10 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 import {
+  CALENDAR_AVAILABILITY_ENABLED,
   handleCalendarAvailability,
   type CalendarAvailabilityDependencies,
 } from './calendarAvailabilityBoundary.ts';
 import { readMicrosoftGraphPrimaryCalendarAvailability } from '../_shared/microsoftGraphAvailability.ts';
+import { resolveTrustedCalendarAvailability } from './trustedCalendarAvailabilityResolver.ts';
 
 function callerClient(authorization: string) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -17,6 +19,8 @@ function callerClient(authorization: string) {
 }
 
 const dependencies: CalendarAvailabilityDependencies = {
+  isCalendarAvailabilityEnabled: () => CALENDAR_AVAILABILITY_ENABLED,
+  isReadCalendarAvailabilityEnabled: () => false,
   async getAuthenticatedUserId(authorization) {
     const { data, error } = await callerClient(authorization).auth.getUser();
     return error ? null : data.user?.id ?? null;
@@ -31,10 +35,7 @@ const dependencies: CalendarAvailabilityDependencies = {
       .maybeSingle();
     return !error && data?.status === 'active';
   },
-  async resolveTrustedCalendarAvailability() {
-    /* No trusted calendar connection/selection store is authorized yet. */
-    throw new Error('Trusted calendar resolver is not configured.');
-  },
+  resolveTrustedCalendarAvailability,
   readBusyIntervals: readMicrosoftGraphPrimaryCalendarAvailability,
   now: () => new Date().toISOString(),
 };

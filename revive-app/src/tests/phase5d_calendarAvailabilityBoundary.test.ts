@@ -19,6 +19,8 @@ const validPayload = {
 
 function dependencies(): CalendarAvailabilityDependencies {
   return {
+    isCalendarAvailabilityEnabled: () => CALENDAR_AVAILABILITY_ENABLED,
+    isReadCalendarAvailabilityEnabled: () => CALENDAR_CAPABILITIES.READ_CALENDAR_AVAILABILITY,
     getAuthenticatedUserId: vi.fn().mockResolvedValue('user-1'),
     hasActiveWorkspaceMembership: vi.fn().mockResolvedValue(true),
     resolveTrustedCalendarAvailability: vi.fn().mockResolvedValue({
