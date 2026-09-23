@@ -122,6 +122,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       classification,
       replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -145,6 +146,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       classification,
       replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -163,6 +165,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       classification,
       replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -190,6 +193,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       classification,
       replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -220,6 +224,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
       classification,
       replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
       workspaceId: 'workspace-a',
       message,
       contactMatch: {
@@ -243,6 +248,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
         classification,
         replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
         workspaceId: '',
         message,
         contactMatch: {
@@ -261,6 +267,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
         classification,
         replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
         workspaceId: 'workspace-a',
         message: {
           ...message,
@@ -289,6 +296,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
         classification,
         replyIntent: null,
       recommendedAction: null,
+      opportunityMatch: null,
         workspaceId: 'workspace-a',
         message,
         contactMatch: {
@@ -301,6 +309,7 @@ describe('Phase 4G.3 inbound email persistence', () => {
     );
   });
 });
+
 
 
 

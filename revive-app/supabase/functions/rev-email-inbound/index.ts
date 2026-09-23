@@ -22,6 +22,10 @@ import {
 } from './inboundEmailClassifier.ts';
 import { detectInboundReplyIntent } from './inboundReplyIntent.ts';
 import { recommendInboundAction } from './inboundActionRecommender.ts';
+import {
+  matchInboundOpportunity,
+  type InboundOpportunityCandidate,
+} from './inboundOpportunityMatcher.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -250,6 +254,34 @@ if (
         (contacts ?? []) as InboundContactCandidate[],
       );
 
+      let opportunityMatch = null;
+
+      if (contactMatch.status === 'matched') {
+        const { data: opportunities, error: opportunitiesError } =
+          await serviceClient
+            .from('opportunities')
+            .select('id, workspace_id, contact_id, stage')
+            .eq('workspace_id', workspaceId)
+            .eq('contact_id', contactMatch.contactId);
+
+        if (opportunitiesError) {
+          throw new Error(
+            `Failed to load contact opportunities: ${opportunitiesError.message}`,
+          );
+        }
+
+        opportunityMatch = matchInboundOpportunity(
+          workspaceId,
+          contactMatch.contactId,
+          (opportunities ?? []).map((opportunity) => ({
+            id: opportunity.id,
+            workspaceId: opportunity.workspace_id,
+            contactId: opportunity.contact_id,
+            stage: opportunity.stage,
+          })) as InboundOpportunityCandidate[],
+        );
+      }
+
       const classification = classifyInboundEmail({
         senderEmail: message.senderEmail,
         subject: message.subject,
@@ -311,6 +343,7 @@ if (
           classification,
           replyIntent,
           recommendedAction,
+          opportunityMatch,
         },
       );
 
@@ -353,6 +386,7 @@ if (
     );
   }
 });
+
 
 
 

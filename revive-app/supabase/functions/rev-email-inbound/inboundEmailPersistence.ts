@@ -3,6 +3,7 @@ import type { InboundContactMatch } from './inboundContactMatcher.ts';
 import type { InboundEmailClassificationResult } from './inboundEmailClassifier.ts';
 import type { InboundReplyIntentResult } from './inboundReplyIntent.ts';
 import type { InboundRecommendedActionResult } from './inboundActionRecommender.ts';
+import type { InboundOpportunityMatch } from './inboundOpportunityMatcher.ts';
 
 export interface InboundEmailPersistenceClient {
   from(table: string): {
@@ -19,6 +20,7 @@ export interface PersistInboundEmailInput {
   classification: InboundEmailClassificationResult;
   replyIntent: InboundReplyIntentResult | null;
   recommendedAction: InboundRecommendedActionResult | null;
+  opportunityMatch: InboundOpportunityMatch | null;
 }
 
 export interface PersistInboundEmailResult {
@@ -100,7 +102,10 @@ async function createThread(
     .insert({
       workspace_id: input.workspaceId,
       contact_id: contactId,
-      opportunity_id: null,
+      opportunity_id:
+        input.opportunityMatch?.status === 'matched'
+          ? input.opportunityMatch.opportunityId
+          : null,
       provider_key: 'microsoft_graph',
       provider_conversation_id:
         input.message.providerConversationId,
@@ -133,6 +138,10 @@ async function updateThread(
 
   if (input.contactMatch.status === 'matched') {
     values.contact_id = input.contactMatch.contactId;
+  }
+
+  if (input.opportunityMatch?.status === 'matched') {
+    values.opportunity_id = input.opportunityMatch.opportunityId;
   }
 
   const { error } = await client
@@ -222,7 +231,10 @@ export async function persistInboundEmail(
       workspace_id: workspaceId,
       thread_id: threadId,
       contact_id: contactId,
-      opportunity_id: null,
+      opportunity_id:
+        input.opportunityMatch?.status === 'matched'
+          ? input.opportunityMatch.opportunityId
+          : null,
       execution_id: null,
       provider_key: 'microsoft_graph',
       provider_message_id: providerMessageId,
@@ -265,5 +277,6 @@ export async function persistInboundEmail(
     processingStatus,
   };
 }
+
 
 
