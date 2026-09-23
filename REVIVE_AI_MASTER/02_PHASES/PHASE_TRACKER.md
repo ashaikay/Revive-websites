@@ -687,7 +687,18 @@
 
 **Safety state:** No autonomous sending. Approval remains mandatory. Provider execution is disabled by default.
 
-**Next phase:** Complete the reusable Email & Replies capability: inbound reply detection, conversation/thread history, and supervised follow-up creation before proceeding to Phase 5 Calendar & Meetings.
+## Phase 4G.3–4G.5: Reusable Email & Replies Capability COMPLETE (PASS)
+
+**Date:** 2026-09-23
+
+- Trusted read-only Microsoft Graph inbox ingestion, workspace mailbox routing, idempotent inbound-message persistence, and tenant-safe contact/opportunity matching are complete.
+- Inbound classification and reply-intent detection now produce recommended supervised actions, with durable REV action and approval creation and approval/rejection through the existing control plane.
+- Read-only chronological email conversation history is complete, including business-relevant triage into Customer conversations, Needs review, and collapsed Automated mail; unknown unlinked messages remain conservatively visible for review.
+- Stored messages are retained. Triage does not delete or mutate email, and conversation history exposes no Reply, Send, Compose, or Execute control.
+- Provider email execution is disabled, no autonomous sending is enabled, and approval remains mandatory for supervised REV actions.
+- Full regression passed: 44 files and 330 tests. Production build passed. Live FatherLegacy workspace validation completed. PR #1 and PR #2 merged into main.
+
+**Next phase:** Phase 5 — Calendar & Meetings planning and architecture review. No calendar provider, event creation or external scheduling is authorized by this tracker update.
 
 ---
 **Objective:** Build lead management and outreach workflow
