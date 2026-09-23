@@ -1,4 +1,4 @@
--- Phase 4G.4: bind inbound durable REV actions to the existing approval control plane.
+﻿-- Phase 4G.4: bind inbound durable REV actions to the existing approval control plane.
 
 -- Backfill approval bindings for existing inbound durable actions.
 insert into public.approvals (
@@ -24,13 +24,11 @@ where a.requires_approval is true
     from public.approvals ap
     where ap.workspace_id = a.workspace_id
       and ap.rev_action_id = a.id
-      and ap.decision is null
   );
 
--- Preserve approval history while allowing only one pending review per REV action.
-create unique index if not exists approvals_one_pending_per_action_idx
-  on public.approvals (workspace_id, rev_action_id)
-  where decision is null;
+-- One approval binding per REV action.
+create unique index if not exists approvals_workspace_rev_action_unique_idx
+  on public.approvals (workspace_id, rev_action_id);
 
 
 create or replace function public.create_inbound_rev_action(
