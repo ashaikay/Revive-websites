@@ -228,6 +228,7 @@ if (
     let alreadyStored = 0;
     let matched = 0;
     let needsReview = 0;
+    let latestCustomerSignal = null;
 
     for (const message of messages) {
       const { data: contacts, error: contactsError } =
@@ -279,6 +280,20 @@ if (
           ? recommendInboundAction(replyIntent)
           : null;
 
+      if (replyIntent && recommendedAction) {
+        latestCustomerSignal = {
+          senderEmail: message.senderEmail,
+          subject: message.subject,
+          classification: classification.classification,
+          intent: replyIntent.intent,
+          intentConfidence: replyIntent.confidence,
+          recommendedAction: recommendedAction.action,
+          recommendedActionReason: recommendedAction.reason,
+          requiresApproval: recommendedAction.requiresApproval,
+          receivedAt: message.receivedAt,
+        };
+      }
+
       const result = await persistInboundEmail(
         serviceClient,
         {
@@ -312,6 +327,7 @@ if (
       alreadyStored,
       matched,
       needsReview,
+      latestCustomerSignal,
     });
   } catch (error) {
     const message =
@@ -329,6 +345,7 @@ if (
     );
   }
 });
+
 
 
 

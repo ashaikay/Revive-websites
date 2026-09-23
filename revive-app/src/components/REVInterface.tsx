@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { GoalService } from '@/services/goalService';
@@ -803,9 +803,34 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             </button>
 
             {inboundResult && (
-              <p className="text-sm mt-3 text-white">
-                Inbox checked: {inboundResult.messagesRead} read, {inboundResult.stored} stored, {inboundResult.matched} matched, {inboundResult.needsReview} need review.
-              </p>
+              <>
+                <p className="text-sm mt-3 text-white">
+                  Inbox checked: {inboundResult.messagesRead} read, {inboundResult.stored} stored, {inboundResult.matched} matched, {inboundResult.needsReview} need review.
+                </p>
+
+                {inboundResult.latestCustomerSignal && (
+                  <div className="mt-4 rounded-lg border border-white/20 p-4">
+                    <p className="text-sm font-semibold text-white">
+                      Customer signal
+                    </p>
+                    <p className="text-sm mt-2 text-white">
+                      {inboundResult.latestCustomerSignal.senderEmail}
+                    </p>
+                    <p className="text-sm text-white">
+                      Intent: {inboundResult.latestCustomerSignal.intent}
+                    </p>
+                    <p className="text-sm text-white">
+                      REV recommends: {inboundResult.latestCustomerSignal.recommendedAction}
+                    </p>
+                    <p className="text-sm text-white">
+                      {inboundResult.latestCustomerSignal.recommendedActionReason}
+                    </p>
+                    <p className="text-sm text-white">
+                      Approval required: {inboundResult.latestCustomerSignal.requiresApproval ? 'Yes' : 'No'}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
 
             {inboundError && (
@@ -896,4 +921,5 @@ const LiveEmptySection: React.FC<{ title: string; message: string }> = ({ title,
     <div className="card p-6 text-center text-neutral-600">{message}</div>
   </section>
 );
+
 

@@ -1,4 +1,15 @@
-﻿import { supabaseClient } from '@/data/supabaseClient';
+﻿export interface InboundCustomerSignal {
+  senderEmail: string;
+  subject: string | null;
+  classification: string;
+  intent: string;
+  intentConfidence: string;
+  recommendedAction: string;
+  recommendedActionReason: string;
+  requiresApproval: boolean;
+  receivedAt: string;
+}
+import { supabaseClient } from '@/data/supabaseClient';
 
 export interface InboundEmailReadResult {
   status: string;
@@ -8,6 +19,7 @@ export interface InboundEmailReadResult {
   alreadyStored: number;
   matched: number;
   needsReview: number;
+  latestCustomerSignal: InboundCustomerSignal | null;
 }
 
 export async function requestInboundEmailRead(
@@ -42,3 +54,4 @@ export async function requestInboundEmailRead(
 
   return data as InboundEmailReadResult;
 }
+
