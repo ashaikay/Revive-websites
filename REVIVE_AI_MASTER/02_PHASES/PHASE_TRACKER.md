@@ -665,7 +665,31 @@
 - No migration, schema, RLS, grant, RPC/function, production Supabase, provider credential, protected quote/Telegram, legacy-family, marketing-site, or unrelated change occurred.
 
 **Stop condition:** Do not implement Phase 4G.2 server/RPC integration, provider credentials or adapter, live outcome transitions, or sending without separate authorization and security review.
+## Phase 4G.2B: Controlled Microsoft Graph Email Execution COMPLETE (PASS)
 
+**Date:** 2026-09-22
+
+- Implemented the trusted server-side Microsoft Graph email execution path for approved `PREPARE_FOLLOW_UP` actions.
+- Reused the existing Phase 4C durable execution control plane, approval fingerprints, workspace authority, suppression controls, idempotency and audit boundaries.
+- Microsoft Graph credentials remain server-side only. Exchange Application RBAC restricts the application to the authorised sender mailbox.
+- Final suppression status is rechecked immediately before the provider claim/send boundary.
+- Fixed the final suppression query to use an existing `contact_suppressions` field rather than the nonexistent `id` column.
+- Completed one controlled live FatherLegacy test through the full REV workflow: preparation -> approval -> durable execution claim -> Microsoft Graph -> provider acceptance.
+- Microsoft Graph returned provider acceptance and the test recipient independently confirmed receipt.
+- The execution record reached `succeeded / accepted_by_provider`. Provider acceptance remains distinct from confirmed delivery.
+- The tested execution/action/version must never be retried.
+- Microsoft Graph client-secret rotation was completed after testing; the superseded exposed secret was deleted.
+- Temporary diagnostic logging was removed from the local implementation.
+- Final regression: 34/34 test files and 263/263 tests passed; `git diff --check` passed.
+- Final completion commit: `d212cd3` (`Complete controlled Microsoft Graph email execution`).
+- After the controlled test, the server-side provider execution gate was returned to `false`.
+- Live external email execution is therefore OFF by default.
+
+**Safety state:** No autonomous sending. Approval remains mandatory. Provider execution is disabled by default.
+
+**Next phase:** Complete the reusable Email & Replies capability: inbound reply detection, conversation/thread history, and supervised follow-up creation before proceeding to Phase 5 Calendar & Meetings.
+
+---
 **Objective:** Build lead management and outreach workflow
 
 **Estimated Duration:** 4 weeks

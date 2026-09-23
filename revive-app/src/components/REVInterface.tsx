@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { GoalService } from '@/services/goalService';
@@ -13,7 +13,9 @@ import { TrustedExecutionBoundaryService } from '@/services/trustedExecutionBoun
 import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
-import { LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
+import { LivePendingAction, LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
+import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/services/liveEmailExecutionClient';
+import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -36,7 +38,7 @@ const SPECIALIST_SKILLS = [
 const WORK_QUEUE_LABEL: Record<ActionStatus, string> = {
   proposed: 'Planned',
   awaiting_approval: 'Waiting for approval',
-  approved: 'Approved — not executed',
+  approved: 'Approved - not executed',
   rejected: 'Rejected',
   cancelled: 'Cancelled',
   completed: 'Completed',
@@ -74,18 +76,21 @@ function revStatus(actions: REVActionRecord[], pendingApprovalCount: number): 'R
 interface PreparedFollowUpReviewProps {
   artifact: PreparedFollowUpArtifact;
   canReview: boolean;
+  onRefreshContext?: () => void;
   onEdit: (subject: string, draftMessage: string) => void;
   onApprove: () => void;
   onReject: () => void;
   canRequestExecution?: boolean;
+  executionMode?: 'dry_run' | 'live';
   onRequestExecution?: () => void;
   executionResult?: ControlledDryRunResult;
+  liveExecutionResult?: LiveEmailExecutionResult;
   executionError?: string;
 }
 
 export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
-  artifact, canReview, onEdit, onApprove, onReject, canRequestExecution = false,
-  onRequestExecution, executionResult, executionError,
+  artifact, canReview, onRefreshContext, onEdit, onApprove, onReject, canRequestExecution = false, executionMode = 'dry_run',
+  onRequestExecution, executionResult, liveExecutionResult, executionError,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [subject, setSubject] = useState(artifact.subject ?? '');
@@ -145,26 +150,58 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
 
         {pending && canReview && !isEditing && (
           <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-4">
+            <button className="btn-secondary text-sm" type="button" onClick={onRefreshContext}>Refresh context</button>
             <button className="btn-secondary text-sm" type="button" onClick={() => setIsEditing(true)}>Edit</button>
             <button className="btn-primary text-sm" type="button" onClick={onApprove}>Approve</button>
             <button className="btn-ghost text-sm" type="button" onClick={onReject}>Reject</button>
           </div>
         )}
         {pending && !canReview && <p className="text-sm text-amber-800">Owner or admin review is required.</p>}
-        {artifact.approvalState === 'approved_not_sent' && canRequestExecution && onRequestExecution && (
+        {artifact.approvalState === 'approved_not_sent' && executionMode === 'live' && (
+          <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-semibold">EMAIL SENDING DISABLED</p>
+            <p className="mt-1">Approved draft retained. Nothing has been sent and no email provider can be invoked.</p>
+          </div>
+        )}
+        {artifact.approvalState === 'approved_not_sent' && executionMode === 'dry_run' && canRequestExecution && onRequestExecution && (
           <div className="border-t border-neutral-200 pt-4">
             <p className="text-sm font-medium text-neutral-900">Phase 4F is dry-run only. Nothing will be sent.</p>
-            <button className="btn-secondary text-sm mt-3" type="button" onClick={onRequestExecution}>REQUEST EXECUTION</button>
+            <button
+              className="btn-secondary text-sm mt-3"
+              type="button"
+              onClick={onRequestExecution}
+            >
+              REQUEST EXECUTION
+            </button>
           </div>
         )}
         {executionResult && (
           <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>{executionResult.displayStatus}</strong>
-            <p className="mt-1">Provider calls: 0 · Cost: £0 · External effect: none</p>
+            <p className="mt-1">Provider calls: 0 | Cost: £0 | External effect: none</p>
+          </div>
+        )}
+        {liveExecutionResult && (
+          <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
+            <strong>
+              {liveExecutionResult.acceptedByProvider
+                ? 'ACCEPTED BY PROVIDER ? DELIVERY NOT CONFIRMED'
+                : liveExecutionResult.displayStatus ?? liveExecutionResult.status}
+            </strong>
+            {liveExecutionResult.acceptedByProvider && (
+              <p className="mt-1">Microsoft accepted the send request. This does not confirm delivery.</p>
+            )}
+            {liveExecutionResult.providerInvoked === 'unknown' && (
+              <p className="mt-1">Provider outcome is unknown. Do not retry automatically.</p>
+            )}
           </div>
         )}
         {executionError && <p className="text-sm text-red-700" role="alert">{executionError}</p>}
-        <p className="text-xs text-neutral-500">Preparation and approval do not send this draft. No provider is invoked.</p>
+        <p className="text-xs text-neutral-500">
+          {executionMode === 'live'
+            ? 'Email sending is disabled. Preparation and approval do not contact the recipient.'
+            : 'Preparation and approval do not send this draft. No provider is invoked.'}
+        </p>
       </div>
     </article>
   );
@@ -371,7 +408,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
               Ask REV
             </button>
           </form>
-          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only — REV AI execution is not connected yet.</p>
+          <p className="px-4 pb-4 text-xs text-neutral-500">Demo reasoning only - REV AI execution is not connected yet.</p>
         </div>
       </section>
 
@@ -498,7 +535,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 </div>
                 <div className="flex flex-wrap gap-3 mt-3 text-xs text-neutral-600">
                   <span>External effect: {plan.externalCommunication ? 'External communication' : 'None'}</span>
-                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? '£0' : `£${plan.estimatedExternalCost}`}</span>
+                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? '£0' : `GBP ${plan.estimatedExternalCost}`}</span>
                   <span>Execution: Disabled</span>
                 </div>
                 <button className="btn-secondary text-sm mt-3" type="button" onClick={() => setExpandedPlanId(expandedPlanId === plan.actionId ? null : plan.actionId)}>
@@ -537,7 +574,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                   <div className="mt-3 grid gap-1 text-xs text-neutral-600">
                     <p><strong>What REV will do:</strong> {action.description}</p>
                     <p><strong>External effect:</strong> NONE. Execution is disabled in this phase.</p>
-                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED — NOT EXECUTED' : 'Required before any future execution.'}</p>
+                    <p><strong>Approval:</strong> {action.status === 'approved' ? 'APPROVED - NOT EXECUTED' : 'Required before any future execution.'}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-3">
                     {!approval.decision && <button className="btn-primary text-sm" type="button" onClick={() => handleDecide(approval.id, 'approved')}>
@@ -571,7 +608,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                       </button>
                     </div>
                   )}
-                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED — NOT EXECUTED.</p>
+                  <p className="text-xs text-neutral-500 mt-2">Approved actions remain APPROVED - NOT EXECUTED.</p>
                 </div>
               );
             })}
@@ -643,27 +680,75 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const repository = useMemo(() => new SupabasePreparedWorkRepository(), []);
   const [context, setContext] = useState<LivePreparedWorkContext | null>(null);
   const [preparedFollowUps, setPreparedFollowUps] = useState<PreparedFollowUpArtifact[]>([]);
+  const [pendingActions, setPendingActions] = useState<LivePendingAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [liveExecutionErrors, setLiveExecutionErrors] = useState<Record<string, string>>({});
+  const [liveExecutionResults, setLiveExecutionResults] = useState<Record<string, LiveEmailExecutionResult>>({});
+  const [inboundResult, setInboundResult] = useState<InboundEmailReadResult | null>(null);
+  const [inboundError, setInboundError] = useState<string | null>(null);
+  const [checkingInbox, setCheckingInbox] = useState(false);
+
+  const handleCheckInbox = async () => {
+    setCheckingInbox(true);
+    setInboundError(null);
+
+    try {
+      const result = await requestInboundEmailRead(workspaceId);
+      setInboundResult(result);
+      await reload();
+    } catch (inboundReadError) {
+      setInboundError(
+        inboundReadError instanceof Error
+          ? inboundReadError.message
+          : 'Inbound email read failed.',
+      );
+    } finally {
+      setCheckingInbox(false);
+    }
+  };
+
+  const handleLiveExecutionRequest = async (artifact: PreparedFollowUpArtifact) => {
+    setBusyId(artifact.id);
+    setLiveExecutionErrors((current) => ({ ...current, [artifact.id]: '' }));
+
+    try {
+      const result = await requestLiveEmailExecution(workspaceId, artifact.revActionId);
+      setLiveExecutionResults((current) => ({ ...current, [artifact.id]: result }));
+      await reload();
+    } catch (executionError) {
+      setLiveExecutionErrors((current) => ({
+        ...current,
+        [artifact.id]: executionError instanceof Error
+          ? executionError.message
+          : 'Trusted email execution request failed.',
+      }));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const reload = async () => {
-    const [nextContext, nextPrepared] = await Promise.all([
+    const [nextContext, nextPrepared, nextPendingActions] = await Promise.all([
       repository.loadContext(workspaceId, currentUser.id),
       repository.list(workspaceId),
+      repository.listPendingActions(workspaceId),
     ]);
     setContext(nextContext);
     setPreparedFollowUps(nextPrepared);
+    setPendingActions(nextPendingActions);
   };
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([repository.loadContext(workspaceId, currentUser.id), repository.list(workspaceId)])
-      .then(([nextContext, nextPrepared]) => {
+    Promise.all([repository.loadContext(workspaceId, currentUser.id), repository.list(workspaceId), repository.listPendingActions(workspaceId)])
+      .then(([nextContext, nextPrepared, nextPendingActions]) => {
         if (!active) return;
         setContext(nextContext);
         setPreparedFollowUps(nextPrepared);
+        setPendingActions(nextPendingActions);
         setError(null);
       })
       .catch((loadError: unknown) => {
@@ -685,6 +770,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   }) : undefined;
   const canReview = context?.membership?.role === 'owner' || context?.membership?.role === 'admin';
 
+
   const runChange = async (id: string, operation: () => Promise<unknown>) => {
     setBusyId(id);
     try {
@@ -704,12 +790,118 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
         <p className="text-xs font-semibold tracking-[0.2em] text-primary-100">REV LIVE</p>
         <h1 className="text-3xl font-bold mt-1">Your AI Growth Employee</h1>
         <span className="badge bg-white/15 text-white mt-4 inline-block" role="status">
-          {loading ? 'Loading workspace' : preparedFollowUps.some((item) => item.approvalState === 'pending') ? 'Waiting for approval' : 'Ready'}
+          {loading ? 'Loading workspace' : (preparedFollowUps.some((item) => item.approvalState === 'pending') || pendingActions.length > 0) ? 'Waiting for approval' : 'Ready'}
         </span>
+
+        {canReview && (
+          <div className="mt-4">
+            <button
+              type="button"
+              className="btn-secondary text-sm"
+              disabled={checkingInbox}
+              onClick={handleCheckInbox}
+            >
+              {checkingInbox ? 'Checking inbox...' : 'Check inbox'}
+            </button>
+
+            {inboundResult && (
+              <>
+                <p className="text-sm mt-3 text-white">
+                  Inbox checked: {inboundResult.messagesRead} read, {inboundResult.stored} stored, {inboundResult.matched} matched, {inboundResult.needsReview} need review.
+                </p>
+
+                {inboundResult.latestCustomerSignal && (
+                  <div className="mt-4 rounded-lg border border-white/20 p-4">
+                    <p className="text-sm font-semibold text-white">
+                      Customer signal
+                    </p>
+                    <p className="text-sm mt-2 text-white">
+                      {inboundResult.latestCustomerSignal.senderEmail}
+                    </p>
+                    <p className="text-sm text-white">
+                      Intent: {inboundResult.latestCustomerSignal.intent}
+                    </p>
+                    <p className="text-sm text-white">
+                      REV recommends: {inboundResult.latestCustomerSignal.recommendedAction}
+                    </p>
+                    <p className="text-sm text-white">
+                      {inboundResult.latestCustomerSignal.recommendedActionReason}
+                    </p>
+                    <p className="text-sm text-white">
+                      Approval required: {inboundResult.latestCustomerSignal.requiresApproval ? 'Yes' : 'No'}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {inboundError && (
+              <p className="text-sm mt-3 text-red-100" role="alert">
+                {inboundError}
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
+      {!loading && pendingActions.length > 0 && (
+        <section aria-labelledby="live-actions-heading" className="rev-motion-in">
+          <h2 id="live-actions-heading" className="text-xl font-bold text-neutral-900 mb-4">
+            REV NEEDS YOUR APPROVAL
+          </h2>
+          <div className="card divide-y divide-neutral-100">
+            {pendingActions.map((action) => (
+              <div key={action.id} className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-neutral-900">{action.title}</p>
+                    <p className="text-sm text-neutral-600 mt-1">{action.description}</p>
+                    {action.rationale && (
+                      <p className="text-sm text-neutral-600 mt-2">{action.rationale}</p>
+                    )}
+                  </div>
+                  <span className="badge-warning whitespace-nowrap">Approval required</span>
+                </div>
+                <p className="text-xs text-neutral-500 mt-3">
+                  REV has prepared this action but has not executed it.
+                </p>
+
+                {canReview && (
+                  <div className="flex gap-3 mt-4">
+                    <button
+                      type="button"
+                      className="btn-primary text-sm"
+                      disabled={busyId === action.id}
+                      onClick={() =>
+                        runChange(action.id, () =>
+                          repository.decidePendingAction(action, 'approved')
+                        )
+                      }
+                    >
+                      {busyId === action.id ? 'Saving...' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      disabled={busyId === action.id}
+                      onClick={() =>
+                        runChange(action.id, () =>
+                          repository.decidePendingAction(action, 'rejected')
+                        )
+                      }
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {error && <div role="alert" className="card p-4 border border-red-200 bg-red-50 text-sm text-red-800">{error}</div>}
-      {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work…" />}
+      {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work..." />}
 
       {!loading && context && (
         <>
@@ -737,7 +929,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                         </div>
                         {context.membership?.role !== 'viewer' && (
                           <button className="btn-secondary text-sm" type="button" disabled={unavailable} onClick={() => runChange(candidate.id, () => repository.prepare(candidate, currentUser.id))}>
-                            {alreadyPrepared ? 'Draft prepared' : contact?.doNotContact ? 'Suppressed' : busyId === candidate.id ? 'Preparing…' : 'Prepare follow-up'}
+                            {alreadyPrepared ? 'Draft prepared' : contact?.doNotContact ? 'Suppressed' : busyId === candidate.id ? 'Preparing...' : 'Prepare follow-up'}
                           </button>
                         )}
                       </div>
@@ -757,9 +949,15 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     key={artifact.id}
                     artifact={artifact}
                     canReview={canReview && busyId !== artifact.id}
+                    onRefreshContext={() => runChange(artifact.id, () => repository.refreshContext(workspaceId, artifact.id, currentUser.id))}
                     onEdit={(subject, draftMessage) => runChange(artifact.id, () => repository.edit(workspaceId, artifact.id, currentUser.id, subject, draftMessage))}
                     onApprove={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'approved'))}
                     onReject={() => runChange(artifact.id, () => repository.decide(workspaceId, artifact.id, currentUser.id, 'rejected'))}
+                    canRequestExecution={canReview && artifact.approvalState === 'approved_not_sent'}
+                    executionMode="live"
+                    onRequestExecution={() => handleLiveExecutionRequest(artifact)}
+                    liveExecutionResult={liveExecutionResults[artifact.id]}
+                    executionError={liveExecutionErrors[artifact.id]}
                   />
                 ))}
               </div>
@@ -767,7 +965,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
           </section>
 
           <section className="card p-4 text-sm text-neutral-700">
-            <strong>Execution remains disabled.</strong> Prepared work costs £0, invokes no provider, and cannot be sent from REV.
+            <strong>Live execution is controlled.</strong> Only an approved follow-up can be sent, and sending requires explicit confirmation.
           </section>
         </>
       )}

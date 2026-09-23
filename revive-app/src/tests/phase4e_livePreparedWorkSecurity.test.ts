@@ -29,6 +29,11 @@ describe('Phase 4E live prepared-work security contracts', () => {
     const interfaceSource = source('../components/REVInterface.tsx');
     expect(PLATFORM_EXECUTION_ENABLED).toBe(false);
     expect(interfaceSource).toContain('APPROVED — NOT SENT');
+    expect(interfaceSource).toContain('EMAIL SENDING DISABLED');
+    expect(interfaceSource).toContain('Approved draft retained. Nothing has been sent and no email provider can be invoked.');
+    expect(interfaceSource).not.toContain('LIVE EMAIL SEND');
+    expect(interfaceSource).not.toContain('SEND APPROVED EMAIL');
+    expect(interfaceSource).not.toContain('Send this approved email now?');
     expect(interfaceSource).not.toMatch(/<button[^>]*>\s*Send\s*<\/button>/i);
     expect(interfaceSource).not.toMatch(/<button[^>]*>\s*Execute\s*<\/button>/i);
   });
