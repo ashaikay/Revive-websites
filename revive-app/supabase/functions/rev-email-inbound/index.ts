@@ -350,19 +350,27 @@ if (
 
       if (result.status === 'stored') {
         stored += 1;
-
-        if (
-          recommendedAction &&
-          contactMatch.status === 'matched' &&
-          opportunityMatch?.status === 'matched'
-        ) {
-          await createInboundDurableAction(serviceClient, {
-            workspaceId,
-            messageId: result.messageId,
-          });
-        }
       } else {
         alreadyStored += 1;
+      }
+
+      /*
+       * Reconcile the durable action for every eligible persisted message.
+       *
+       * The database RPC is idempotent: newly stored messages create an
+       * action, while already-linked messages return the existing action.
+       * This also recovers a message that was stored before action creation
+       * completed.
+       */
+      if (
+        recommendedAction &&
+        contactMatch.status === 'matched' &&
+        opportunityMatch?.status === 'matched'
+      ) {
+        await createInboundDurableAction(serviceClient, {
+          workspaceId,
+          messageId: result.messageId,
+        });
       }
 
       if (result.processingStatus === 'matched') {
