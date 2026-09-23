@@ -31,6 +31,8 @@ describe('Phase 4E live prepared-work security contracts', () => {
     expect(interfaceSource).toContain('APPROVED — NOT SENT');
     expect(interfaceSource).toContain('EMAIL SENDING DISABLED');
     expect(interfaceSource).toContain('Approved draft retained. Nothing has been sent and no email provider can be invoked.');
+    expect(interfaceSource).not.toContain('Live execution is controlled.');
+    expect(interfaceSource).not.toContain('Only an approved follow-up can be sent');
     expect(interfaceSource).not.toContain('LIVE EMAIL SEND');
     expect(interfaceSource).not.toContain('SEND APPROVED EMAIL');
     expect(interfaceSource).not.toContain('Send this approved email now?');
