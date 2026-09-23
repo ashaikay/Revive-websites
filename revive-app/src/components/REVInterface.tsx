@@ -14,6 +14,7 @@ import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
 import { LivePendingAction, LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
+import { LiveEmailThread, SupabaseEmailThreadRepository } from '@/data/supabaseEmailThreadRepository';
 import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/services/liveEmailExecutionClient';
 import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
 
@@ -211,6 +212,81 @@ export const REVInterface: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   if (dataProviderMode === 'supabase') return <LiveRevWorkspace workspaceId={workspaceId} />;
   return <MockRevWorkspace workspaceId={workspaceId} />;
 };
+
+export interface EmailConversationHistoryProps {
+  threads: LiveEmailThread[];
+  contacts: ContactRecord[];
+  opportunities: { id: string; title: string }[];
+}
+
+function formatEmailTimestamp(value: string | undefined): string {
+  if (!value) return 'Date not recorded';
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString();
+}
+
+export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> = ({
+  threads,
+  contacts,
+  opportunities,
+}) => (
+  <section aria-labelledby="email-conversations-heading" className="rev-motion-in">
+    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <h2 id="email-conversations-heading" className="text-xl font-bold text-neutral-900">
+        EMAIL CONVERSATIONS
+      </h2>
+      <span className="badge-neutral">READ-ONLY HISTORY</span>
+    </div>
+    {threads.length === 0 ? (
+      <div className="card p-6 text-center text-neutral-600">
+        No email conversation history is recorded for this workspace.
+      </div>
+    ) : (
+      <div className="grid gap-4">
+        {threads.map((thread) => {
+          const contact = thread.contactId
+            ? contacts.find((item) => item.id === thread.contactId)
+            : undefined;
+          const opportunity = thread.opportunityId
+            ? opportunities.find((item) => item.id === thread.opportunityId)
+            : undefined;
+          return (
+            <article key={thread.id} className="card divide-y divide-neutral-100 overflow-hidden">
+              <header className="p-5">
+                <h3 className="font-semibold text-neutral-900">
+                  {thread.subject ?? 'Email conversation'}
+                </h3>
+                <p className="text-sm text-neutral-600 mt-2">
+                  {contact && <>Contact: {contact.name}</>}
+                  {contact && opportunity && ' | '}
+                  {opportunity && <>Opportunity: {opportunity.title}</>}
+                  {!contact && !opportunity && 'No linked contact or opportunity'}
+                </p>
+                <p className="text-xs text-neutral-500 mt-2">
+                  Last message: {formatEmailTimestamp(thread.lastMessageAt)}
+                </p>
+              </header>
+              <div className="divide-y divide-neutral-100">
+                {thread.messages.map((message) => (
+                  <div key={message.id} className="p-5 text-sm text-neutral-700">
+                    <p className="font-semibold text-neutral-900">
+                      {message.direction === 'inbound' ? 'INBOUND' : 'OUTBOUND'}
+                    </p>
+                    <p className="mt-2">From: {message.senderEmail}</p>
+                    <p>To: {message.recipientEmails.join(', ') || 'No recipients recorded'}</p>
+                    <p>Date: {formatEmailTimestamp(message.communicationAt)}</p>
+                    {message.subject && <p className="mt-2 font-medium">Subject: {message.subject}</p>}
+                    {message.bodyText && <p className="mt-2 whitespace-pre-wrap">{message.bodyText}</p>}
+                  </div>
+                ))}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    )}
+  </section>
+);
 
 const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const { currentUser } = useAppStore();
@@ -678,9 +754,11 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
 const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const { currentUser } = useAppStore();
   const repository = useMemo(() => new SupabasePreparedWorkRepository(), []);
+  const emailThreadRepository = useMemo(() => new SupabaseEmailThreadRepository(), []);
   const [context, setContext] = useState<LivePreparedWorkContext | null>(null);
   const [preparedFollowUps, setPreparedFollowUps] = useState<PreparedFollowUpArtifact[]>([]);
   const [pendingActions, setPendingActions] = useState<LivePendingAction[]>([]);
+  const [emailThreads, setEmailThreads] = useState<LiveEmailThread[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -730,25 +808,33 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   };
 
   const reload = async () => {
-    const [nextContext, nextPrepared, nextPendingActions] = await Promise.all([
+    const [nextContext, nextPrepared, nextPendingActions, nextEmailThreads] = await Promise.all([
       repository.loadContext(workspaceId, currentUser.id),
       repository.list(workspaceId),
       repository.listPendingActions(workspaceId),
+      emailThreadRepository.list(workspaceId),
     ]);
     setContext(nextContext);
     setPreparedFollowUps(nextPrepared);
     setPendingActions(nextPendingActions);
+    setEmailThreads(nextEmailThreads);
   };
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([repository.loadContext(workspaceId, currentUser.id), repository.list(workspaceId), repository.listPendingActions(workspaceId)])
-      .then(([nextContext, nextPrepared, nextPendingActions]) => {
+    Promise.all([
+      repository.loadContext(workspaceId, currentUser.id),
+      repository.list(workspaceId),
+      repository.listPendingActions(workspaceId),
+      emailThreadRepository.list(workspaceId),
+    ])
+      .then(([nextContext, nextPrepared, nextPendingActions, nextEmailThreads]) => {
         if (!active) return;
         setContext(nextContext);
         setPreparedFollowUps(nextPrepared);
         setPendingActions(nextPendingActions);
+        setEmailThreads(nextEmailThreads);
         setError(null);
       })
       .catch((loadError: unknown) => {
@@ -756,7 +842,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [currentUser.id, repository, workspaceId]);
+  }, [currentUser.id, emailThreadRepository, repository, workspaceId]);
 
   const primaryGoal = context?.goals.find((goal) => goal.status === 'active') ?? context?.goals[0];
   const recovery = context ? analyzeRecovery({
@@ -909,6 +995,12 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             <h2 id="live-objective-heading" className="text-xl font-bold text-neutral-900 mb-4">CURRENT OBJECTIVE</h2>
             <div className="card p-5 text-neutral-700">{primaryGoal?.objective ?? 'No active objective is recorded for this workspace.'}</div>
           </section>
+
+          <EmailConversationHistory
+            threads={emailThreads}
+            contacts={context.contacts}
+            opportunities={context.opportunities}
+          />
 
           <section aria-labelledby="live-recovery-heading" className="rev-motion-in">
             <h2 id="live-recovery-heading" className="text-xl font-bold text-neutral-900 mb-4">RECOVERY OPPORTUNITIES</h2>
