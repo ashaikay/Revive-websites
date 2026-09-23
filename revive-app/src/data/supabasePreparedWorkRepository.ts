@@ -33,6 +33,12 @@ export interface LiveApproval {
   decidedAt?: string;
 }
 
+export interface LivePendingAction extends LiveREVAction {
+  approvalId: string;
+  approvalActionVersion: number;
+  approvalActionFingerprint: string;
+}
+
 export interface StoredPreparedFollowUp {
   recoveryCandidateId: string;
   recoveryType: RecoverySignalType;
@@ -70,6 +76,7 @@ export interface LivePreparedWorkState {
 export interface LivePreparedWorkGateway {
   loadContext(workspaceId: string, actorUserId: string): Promise<LivePreparedWorkContext>;
   loadPreparedState(workspaceId: string): Promise<LivePreparedWorkState>;
+  loadPendingActions?(workspaceId: string): Promise<LivePendingAction[]>;
   insertAction(action: LiveREVAction): Promise<void>;
   insertApproval(approval: LiveApproval): Promise<void>;
   insertMemory(event: BusinessMemoryEventRecord): Promise<void>;
@@ -210,6 +217,43 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     };
   },
 
+  async loadPendingActions(workspaceId) {
+    const client = requiredClient();
+    const [actions, approvals] = await Promise.all([
+      client
+        .from('rev_actions')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('status', 'awaiting_approval')
+        .eq('requires_approval', true)
+        .order('proposed_at', { ascending: false }),
+      client
+        .from('approvals')
+        .select('id,workspace_id,rev_action_id,action_version,action_fingerprint,decision')
+        .eq('workspace_id', workspaceId)
+        .is('decision', null),
+    ]);
+
+    throwOnError(actions.error);
+    throwOnError(approvals.error);
+
+    const approvalByAction = new Map(
+      (approvals.data ?? []).map((row) => [String(row.rev_action_id), row]),
+    );
+
+    return (actions.data ?? []).flatMap((row) => {
+      const action = mapAction(row);
+      const approval = approvalByAction.get(action.id);
+      if (!approval || !approval.action_version || !approval.action_fingerprint) return [];
+      return [{
+        ...action,
+        approvalId: String(approval.id),
+        approvalActionVersion: Number(approval.action_version),
+        approvalActionFingerprint: String(approval.action_fingerprint),
+      }];
+    });
+  },
+
   async loadPreparedState(workspaceId) {
     const client = requiredClient();
     const [actions, approvals, memories] = await Promise.all([
@@ -267,7 +311,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     const { error } = await requiredClient().rpc('decide_rev_action_approval', {
       target_approval_id: input.approvalId, expected_action_version: input.actionVersion,
       expected_action_fingerprint: input.actionFingerprint, approval_decision: input.decision,
-      decision_notes: 'Prepared follow-up reviewed. Nothing sent.',
+      decision_notes: 'REV action reviewed. Nothing executed.',
     });
     throwOnError(error);
   },
@@ -295,8 +339,25 @@ function toArtifact(action: LiveREVAction, approval: LiveApproval, memory: Prepa
 export class SupabasePreparedWorkRepository {
   constructor(private readonly gateway: LivePreparedWorkGateway = browserSupabasePreparedWorkGateway) {}
 
+  async decidePendingAction(
+    action: LivePendingAction,
+    decision: 'approved' | 'rejected',
+  ): Promise<void> {
+    await this.gateway.decideApproval({
+      approvalId: action.approvalId,
+      actionVersion: action.approvalActionVersion,
+      actionFingerprint: action.approvalActionFingerprint,
+      decision,
+    });
+  }
+
   loadContext(workspaceId: string, actorUserId: string): Promise<LivePreparedWorkContext> {
     return this.gateway.loadContext(workspaceId, actorUserId);
+  }
+
+  async listPendingActions(workspaceId: string): Promise<LivePendingAction[]> {
+    if (!this.gateway.loadPendingActions) return [];
+    return this.gateway.loadPendingActions(workspaceId);
   }
 
   async list(workspaceId: string): Promise<PreparedFollowUpArtifact[]> {

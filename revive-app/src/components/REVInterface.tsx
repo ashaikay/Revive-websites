@@ -13,7 +13,7 @@ import { TrustedExecutionBoundaryService } from '@/services/trustedExecutionBoun
 import { dataProviderMode } from '@/data/provider';
 import { ActionStatus, ApprovalDecision, ContactRecord, GoalRecord, REVActionRecord } from '@/domain/models';
 import { PreparedFollowUpArtifact } from '@/domain/preparedWork';
-import { LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
+import { LivePendingAction, LivePreparedWorkContext, SupabasePreparedWorkRepository } from '@/data/supabasePreparedWorkRepository';
 import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/services/liveEmailExecutionClient';
 import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
 
@@ -104,7 +104,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-2 mt-1">
           <h3 className="font-semibold text-neutral-900">{artifact.subject}</h3>
           <span className={pending ? 'badge-warning' : artifact.approvalState === 'approved_not_sent' ? 'badge-success' : 'badge-danger'}>
-            {pending ? 'DRAFT - REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED - NOT SENT' : 'REJECTED - NOT SENT'}
+            {pending ? 'DRAFT — REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED — NOT SENT' : 'REJECTED — NOT SENT'}
           </span>
         </div>
       </header>
@@ -113,7 +113,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           <p><strong>Recovery reason:</strong> {artifact.recoveryReason}</p>
           <p><strong>Objective:</strong> {artifact.objective}</p>
           <p><strong>Suggested channel:</strong> {artifact.suggestedChannel.replace('_', ' ')}</p>
-          <p><strong>External effect:</strong> None. GBP 0 cost.</p>
+          <p><strong>External effect:</strong> None. £0 cost.</p>
         </div>
 
         {isEditing ? (
@@ -182,7 +182,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
         {executionResult && (
           <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>{executionResult.displayStatus}</strong>
-            <p className="mt-1">Provider calls: 0 | Cost: GBP 0 | External effect: none</p>
+            <p className="mt-1">Provider calls: 0 | Cost: £0 | External effect: none</p>
           </div>
         )}
         {liveExecutionResult && (
@@ -539,7 +539,7 @@ const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 </div>
                 <div className="flex flex-wrap gap-3 mt-3 text-xs text-neutral-600">
                   <span>External effect: {plan.externalCommunication ? 'External communication' : 'None'}</span>
-                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? 'GBP 0' : `GBP ${plan.estimatedExternalCost}`}</span>
+                  <span>Expected cost: {plan.estimatedExternalCost === 0 ? '£0' : `GBP ${plan.estimatedExternalCost}`}</span>
                   <span>Execution: Disabled</span>
                 </div>
                 <button className="btn-secondary text-sm mt-3" type="button" onClick={() => setExpandedPlanId(expandedPlanId === plan.actionId ? null : plan.actionId)}>
@@ -684,6 +684,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const repository = useMemo(() => new SupabasePreparedWorkRepository(), []);
   const [context, setContext] = useState<LivePreparedWorkContext | null>(null);
   const [preparedFollowUps, setPreparedFollowUps] = useState<PreparedFollowUpArtifact[]>([]);
+  const [pendingActions, setPendingActions] = useState<LivePendingAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -700,6 +701,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     try {
       const result = await requestInboundEmailRead(workspaceId);
       setInboundResult(result);
+      await reload();
     } catch (inboundReadError) {
       setInboundError(
         inboundReadError instanceof Error
@@ -732,22 +734,25 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   };
 
   const reload = async () => {
-    const [nextContext, nextPrepared] = await Promise.all([
+    const [nextContext, nextPrepared, nextPendingActions] = await Promise.all([
       repository.loadContext(workspaceId, currentUser.id),
       repository.list(workspaceId),
+      repository.listPendingActions(workspaceId),
     ]);
     setContext(nextContext);
     setPreparedFollowUps(nextPrepared);
+    setPendingActions(nextPendingActions);
   };
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([repository.loadContext(workspaceId, currentUser.id), repository.list(workspaceId)])
-      .then(([nextContext, nextPrepared]) => {
+    Promise.all([repository.loadContext(workspaceId, currentUser.id), repository.list(workspaceId), repository.listPendingActions(workspaceId)])
+      .then(([nextContext, nextPrepared, nextPendingActions]) => {
         if (!active) return;
         setContext(nextContext);
         setPreparedFollowUps(nextPrepared);
+        setPendingActions(nextPendingActions);
         setError(null);
       })
       .catch((loadError: unknown) => {
@@ -769,6 +774,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   }) : undefined;
   const canReview = context?.membership?.role === 'owner' || context?.membership?.role === 'admin';
 
+
   const runChange = async (id: string, operation: () => Promise<unknown>) => {
     setBusyId(id);
     try {
@@ -788,7 +794,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
         <p className="text-xs font-semibold tracking-[0.2em] text-primary-100">REV LIVE</p>
         <h1 className="text-3xl font-bold mt-1">Your AI Growth Employee</h1>
         <span className="badge bg-white/15 text-white mt-4 inline-block" role="status">
-          {loading ? 'Loading workspace' : preparedFollowUps.some((item) => item.approvalState === 'pending') ? 'Waiting for approval' : 'Ready'}
+          {loading ? 'Loading workspace' : (preparedFollowUps.some((item) => item.approvalState === 'pending') || pendingActions.length > 0) ? 'Waiting for approval' : 'Ready'}
         </span>
 
         {canReview && (
@@ -841,6 +847,62 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
           </div>
         )}
       </section>
+
+      {!loading && pendingActions.length > 0 && (
+        <section aria-labelledby="live-actions-heading" className="rev-motion-in">
+          <h2 id="live-actions-heading" className="text-xl font-bold text-neutral-900 mb-4">
+            REV NEEDS YOUR APPROVAL
+          </h2>
+          <div className="card divide-y divide-neutral-100">
+            {pendingActions.map((action) => (
+              <div key={action.id} className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-neutral-900">{action.title}</p>
+                    <p className="text-sm text-neutral-600 mt-1">{action.description}</p>
+                    {action.rationale && (
+                      <p className="text-sm text-neutral-600 mt-2">{action.rationale}</p>
+                    )}
+                  </div>
+                  <span className="badge-warning whitespace-nowrap">Approval required</span>
+                </div>
+                <p className="text-xs text-neutral-500 mt-3">
+                  REV has prepared this action but has not executed it.
+                </p>
+
+                {canReview && (
+                  <div className="flex gap-3 mt-4">
+                    <button
+                      type="button"
+                      className="btn-primary text-sm"
+                      disabled={busyId === action.id}
+                      onClick={() =>
+                        runChange(action.id, () =>
+                          repository.decidePendingAction(action, 'approved')
+                        )
+                      }
+                    >
+                      {busyId === action.id ? 'Saving...' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      disabled={busyId === action.id}
+                      onClick={() =>
+                        runChange(action.id, () =>
+                          repository.decidePendingAction(action, 'rejected')
+                        )
+                      }
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {error && <div role="alert" className="card p-4 border border-red-200 bg-red-50 text-sm text-red-800">{error}</div>}
       {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work..." />}
@@ -921,5 +983,3 @@ const LiveEmptySection: React.FC<{ title: string; message: string }> = ({ title,
     <div className="card p-6 text-center text-neutral-600">{message}</div>
   </section>
 );
-
-
