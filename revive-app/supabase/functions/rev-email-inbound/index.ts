@@ -280,7 +280,15 @@ if (
           ? recommendInboundAction(replyIntent)
           : null;
 
-      if (replyIntent && recommendedAction) {
+      if (
+        replyIntent &&
+        recommendedAction &&
+        (
+          !latestCustomerSignal ||
+          new Date(message.receivedAt).getTime() >
+            new Date(latestCustomerSignal.receivedAt).getTime()
+        )
+      ) {
         latestCustomerSignal = {
           senderEmail: message.senderEmail,
           subject: message.subject,
@@ -345,6 +353,7 @@ if (
     );
   }
 });
+
 
 
 
