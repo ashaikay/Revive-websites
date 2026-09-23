@@ -225,12 +225,28 @@ function formatEmailTimestamp(value: string | undefined): string {
   return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString();
 }
 
+export function emailBodyPreview(bodyText: string, limit = 240): string {
+  const normalized = bodyText.replace(/\s+/g, ' ').trim();
+  return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
+}
+
+function hasLinkedEmailRecord(thread: LiveEmailThread): boolean {
+  return Boolean(thread.contactId || thread.opportunityId);
+}
+
 export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> = ({
   threads,
   contacts,
   opportunities,
-}) => (
-  <section aria-labelledby="email-conversations-heading" className="rev-motion-in">
+}) => {
+  const displayThreads = [...threads].sort((left, right) => {
+    const linkedDifference = Number(hasLinkedEmailRecord(right)) - Number(hasLinkedEmailRecord(left));
+    if (linkedDifference !== 0) return linkedDifference;
+    return (right.lastMessageAt ?? '').localeCompare(left.lastMessageAt ?? '');
+  });
+
+  return (
+    <section aria-labelledby="email-conversations-heading" className="rev-motion-in">
     <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
       <h2 id="email-conversations-heading" className="text-xl font-bold text-neutral-900">
         EMAIL CONVERSATIONS
@@ -243,7 +259,7 @@ export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> =
       </div>
     ) : (
       <div className="grid gap-4">
-        {threads.map((thread) => {
+        {displayThreads.map((thread) => {
           const contact = thread.contactId
             ? contacts.find((item) => item.id === thread.contactId)
             : undefined;
@@ -276,7 +292,21 @@ export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> =
                     <p>To: {message.recipientEmails.join(', ') || 'No recipients recorded'}</p>
                     <p>Date: {formatEmailTimestamp(message.communicationAt)}</p>
                     {message.subject && <p className="mt-2 font-medium">Subject: {message.subject}</p>}
-                    {message.bodyText && <p className="mt-2 whitespace-pre-wrap">{message.bodyText}</p>}
+                    {message.bodyText && (
+                      <>
+                        <p className="mt-2">{emailBodyPreview(message.bodyText)}</p>
+                        {message.bodyText.replace(/\s+/g, ' ').trim().length > 240 && (
+                          <details className="mt-3">
+                            <summary className="cursor-pointer font-medium text-primary-700">
+                              View full message
+                            </summary>
+                            <p className="mt-2 max-h-80 overflow-y-auto break-words whitespace-pre-wrap rounded border border-neutral-200 bg-neutral-50 p-3">
+                              {message.bodyText}
+                            </p>
+                          </details>
+                        )}
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -285,8 +315,9 @@ export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> =
         })}
       </div>
     )}
-  </section>
-);
+    </section>
+  );
+};
 
 const MockRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const { currentUser } = useAppStore();
