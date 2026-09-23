@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+﻿import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 import {
   acquireMicrosoftGraphAccessToken,
@@ -16,6 +16,10 @@ import {
 import {
   persistInboundEmail,
 } from './inboundEmailPersistence.ts';
+
+import {
+  classifyInboundEmail,
+} from './inboundEmailClassifier.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -243,6 +247,23 @@ if (
         (contacts ?? []) as InboundContactCandidate[],
       );
 
+      const classification = classifyInboundEmail({
+        senderEmail: message.senderEmail,
+        subject: message.subject,
+        matchedContactId:
+          contactMatch.status === 'matched'
+            ? contactMatch.contactId
+            : null,
+      });
+
+      console.info('REV_INBOUND_CLASSIFICATION', {
+        workspaceId,
+        providerMessageId: message.providerMessageId,
+        classification: classification.classification,
+        confidence: classification.confidence,
+        reason: classification.reason,
+      });
+
       const result = await persistInboundEmail(
         serviceClient,
         {
@@ -290,3 +311,4 @@ if (
     );
   }
 });
+
