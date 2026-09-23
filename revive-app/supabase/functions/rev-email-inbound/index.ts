@@ -26,6 +26,7 @@ import {
   matchInboundOpportunity,
   type InboundOpportunityCandidate,
 } from './inboundOpportunityMatcher.ts';
+import { createInboundDurableAction } from './inboundDurableAction.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -349,6 +350,17 @@ if (
 
       if (result.status === 'stored') {
         stored += 1;
+
+        if (
+          recommendedAction &&
+          contactMatch.status === 'matched' &&
+          opportunityMatch?.status === 'matched'
+        ) {
+          await createInboundDurableAction(serviceClient, {
+            workspaceId,
+            messageId: result.messageId,
+          });
+        }
       } else {
         alreadyStored += 1;
       }
@@ -386,6 +398,8 @@ if (
     );
   }
 });
+
+
 
 
 
