@@ -1,0 +1,150 @@
+import {
+  CALENDAR_CAPABILITIES,
+  calculateAvailability,
+  type AvailabilityPolicy,
+  type BusyInterval,
+  type SelectedCalendar,
+} from '../../../src/services/calendarAvailabilityService.ts';
+import { readMicrosoftGraphPrimaryCalendarAvailability } from '../_shared/microsoftGraphAvailability.ts';
+
+export const CALENDAR_AVAILABILITY_ENABLED = false;
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+export interface TrustedCalendarAvailabilityConfig {
+  selectedCalendar: SelectedCalendar & { provider: 'microsoft_graph' };
+  primaryMailboxUserPrincipalName: string;
+  accessToken: string;
+  policy: AvailabilityPolicy;
+}
+
+export interface CalendarAvailabilityDependencies {
+  getAuthenticatedUserId: (authorization: string) => Promise<string | null>;
+  hasActiveWorkspaceMembership: (authorization: string, workspaceId: string, userId: string) => Promise<boolean>;
+  resolveTrustedCalendarAvailability: (workspaceId: string) => Promise<TrustedCalendarAvailabilityConfig>;
+  readBusyIntervals: typeof readMicrosoftGraphPrimaryCalendarAvailability;
+  now: () => string;
+}
+
+type CalendarAvailabilityPayload = {
+  workspaceId: string;
+  searchStartAt: string;
+  searchEndAt: string;
+  requestedDurationMinutes: number;
+  timezone: string;
+};
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function validUtcInstant(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function validTimezone(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    Intl.DateTimeFormat('en-GB', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parsePayload(value: unknown): CalendarAvailabilityPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const payload = value as Record<string, unknown>;
+  const allowedKeys = new Set(['workspaceId', 'searchStartAt', 'searchEndAt', 'requestedDurationMinutes', 'timezone']);
+  if (Object.keys(payload).some((key) => !allowedKeys.has(key))) return null;
+  if (typeof payload.workspaceId !== 'string' || !payload.workspaceId.trim()
+    || !validUtcInstant(payload.searchStartAt) || !validUtcInstant(payload.searchEndAt)
+    || Date.parse(payload.searchStartAt) >= Date.parse(payload.searchEndAt)
+    || typeof payload.requestedDurationMinutes !== 'number'
+    || !Number.isInteger(payload.requestedDurationMinutes) || payload.requestedDurationMinutes <= 0
+    || !validTimezone(payload.timezone)) return null;
+  return {
+    workspaceId: payload.workspaceId.trim(),
+    searchStartAt: payload.searchStartAt,
+    searchEndAt: payload.searchEndAt,
+    requestedDurationMinutes: payload.requestedDurationMinutes,
+    timezone: payload.timezone,
+  };
+}
+
+export async function handleCalendarAvailability(
+  request: Request,
+  dependencies: CalendarAvailabilityDependencies,
+): Promise<Response> {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
+  if (request.method !== 'POST') return json(405, { error: 'Method not allowed.' });
+
+  const authorization = request.headers.get('Authorization');
+  if (!authorization?.startsWith('Bearer ')) return json(401, { error: 'Authentication required.' });
+
+  let userId: string | null;
+  try {
+    userId = await dependencies.getAuthenticatedUserId(authorization);
+  } catch {
+    return json(401, { error: 'Authentication failed.' });
+  }
+  if (!userId) return json(401, { error: 'Authentication failed.' });
+
+  const rawPayload = await request.json().catch(() => null);
+  const payload = parsePayload(rawPayload);
+  if (!payload) return json(400, { error: 'Invalid availability request.' });
+
+  try {
+    if (!await dependencies.hasActiveWorkspaceMembership(authorization, payload.workspaceId, userId)) {
+      return json(403, { error: 'Workspace access denied.' });
+    }
+  } catch {
+    return json(403, { error: 'Workspace access denied.' });
+  }
+
+  if (!CALENDAR_AVAILABILITY_ENABLED || !CALENDAR_CAPABILITIES.READ_CALENDAR_AVAILABILITY) {
+    return json(503, { status: 'disabled', providerCalls: 0, externalEffect: 'none' });
+  }
+
+  try {
+    const trusted = await dependencies.resolveTrustedCalendarAvailability(payload.workspaceId);
+    if (trusted.selectedCalendar.workspaceId !== payload.workspaceId
+      || trusted.selectedCalendar.timezone !== payload.timezone
+      || trusted.selectedCalendar.provider !== 'microsoft_graph') {
+      return json(403, { error: 'Trusted calendar binding is unavailable.' });
+    }
+    const busyIntervals: BusyInterval[] = await dependencies.readBusyIntervals({
+      accessToken: trusted.accessToken,
+      workspaceId: payload.workspaceId,
+      selectedCalendarId: trusted.selectedCalendar.id,
+      selectedCalendar: trusted.selectedCalendar,
+      mailboxUserPrincipalName: trusted.primaryMailboxUserPrincipalName,
+      searchStartAt: payload.searchStartAt,
+      searchEndAt: payload.searchEndAt,
+      timezone: trusted.selectedCalendar.timezone,
+    });
+    return json(200, calculateAvailability({
+      workspaceId: payload.workspaceId,
+      selectedCalendarId: trusted.selectedCalendar.id,
+      selectedCalendar: trusted.selectedCalendar,
+      timezone: trusted.selectedCalendar.timezone,
+      requestedDurationMinutes: payload.requestedDurationMinutes,
+      searchStartAt: payload.searchStartAt,
+      searchEndAt: payload.searchEndAt,
+      now: dependencies.now(),
+      policy: trusted.policy,
+      busyIntervals,
+    }));
+  } catch {
+    return json(503, { error: 'Calendar availability is unavailable.' });
+  }
+}
