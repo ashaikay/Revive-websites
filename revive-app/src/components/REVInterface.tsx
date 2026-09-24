@@ -17,6 +17,7 @@ import { LivePendingAction, LivePreparedWorkContext, SupabasePreparedWorkReposit
 import { LiveEmailThread, SupabaseEmailThreadRepository } from '@/data/supabaseEmailThreadRepository';
 import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/services/liveEmailExecutionClient';
 import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
+import { CalendarAvailabilityPanel } from '@/components/CalendarAvailabilityPanel';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -1108,6 +1109,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             contacts={context.contacts}
             opportunities={context.opportunities}
           />
+
+          <CalendarAvailabilityPanel workspaceId={workspaceId} />
 
           <section aria-labelledby="live-recovery-heading" className="rev-motion-in">
             <h2 id="live-recovery-heading" className="text-xl font-bold text-neutral-900 mb-4">RECOVERY OPPORTUNITIES</h2>

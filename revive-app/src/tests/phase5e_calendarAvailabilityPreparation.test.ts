@@ -115,7 +115,7 @@ describe('Phase 5E controlled calendar availability-read preparation', () => {
     expect(body).not.toContain(token);
     expect(body).not.toContain(mailbox);
     expect(JSON.parse(body).slots[0]).toEqual({
-      workspaceId, selectedCalendarId: 'configured-primary-calendar', startAt: '2026-09-24T10:00:00.000Z', endAt: '2026-09-24T10:30:00.000Z',
+      startAt: '2026-09-24T10:00:00.000Z', endAt: '2026-09-24T10:30:00.000Z',
     });
   });
 

@@ -162,7 +162,11 @@ export async function handleCalendarAvailability(
     });
     return json(200, {
       ...availability,
-      slots: availability.slots.slice(0, MAXIMUM_AVAILABLE_SLOTS),
+      slots: availability.slots.slice(0, MAXIMUM_AVAILABLE_SLOTS).map((slot) => ({
+        startAt: slot.startAt,
+        endAt: slot.endAt,
+      })),
+      timezone: trusted.selectedCalendar.timezone,
     });
   } catch (error) {
     if (error instanceof TrustedCalendarAvailabilityBindingError) {
