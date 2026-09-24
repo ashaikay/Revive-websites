@@ -4,11 +4,15 @@ import {
   type MicrosoftGraphAccessToken,
 } from '../_shared/microsoftGraphAuth.ts';
 import type { TrustedCalendarAvailabilityConfig } from './calendarAvailabilityBoundary.ts';
+import { buildBusinessHoursAvailabilityWindows } from './businessHoursPolicy.ts';
 
 export const CALENDAR_AVAILABILITY_ENVIRONMENT = {
   authorizedWorkspaceId: 'REV_CALENDAR_AVAILABILITY_WORKSPACE_ID',
   primaryMailbox: 'REV_CALENDAR_AVAILABILITY_PRIMARY_MAILBOX',
   timezone: 'REV_CALENDAR_AVAILABILITY_TIMEZONE',
+  workingDays: 'REV_CALENDAR_AVAILABILITY_WORKING_DAYS',
+  businessStartLocal: 'REV_CALENDAR_AVAILABILITY_BUSINESS_START_LOCAL',
+  businessEndLocal: 'REV_CALENDAR_AVAILABILITY_BUSINESS_END_LOCAL',
 } as const;
 
 const DEFAULT_TIMEZONE = 'Europe/London';
@@ -69,6 +73,13 @@ export function createTrustedCalendarAvailabilityResolver(
       throw new TrustedCalendarAvailabilityBindingError();
     }
 
+    const availabilityWindows = buildBusinessHoursAvailabilityWindows({
+      workingDays: dependencies.getEnvironment(CALENDAR_AVAILABILITY_ENVIRONMENT.workingDays),
+      businessStartLocal: dependencies.getEnvironment(CALENDAR_AVAILABILITY_ENVIRONMENT.businessStartLocal),
+      businessEndLocal: dependencies.getEnvironment(CALENDAR_AVAILABILITY_ENVIRONMENT.businessEndLocal),
+      timezone,
+    }, searchStartAt, searchEndAt);
+
     const auth = await dependencies.acquireAccessToken({
       tenantId: required(dependencies.getEnvironment('MICROSOFT_GRAPH_TENANT_ID')),
       clientId: required(dependencies.getEnvironment('MICROSOFT_GRAPH_CLIENT_ID')),
@@ -93,7 +104,7 @@ export function createTrustedCalendarAvailabilityResolver(
         minimumNoticeMinutes: 0,
         beforeBufferMinutes: 0,
         afterBufferMinutes: 0,
-        availabilityWindows: [{ startAt: searchStartAt, endAt: searchEndAt }],
+        availabilityWindows,
       },
     };
   };

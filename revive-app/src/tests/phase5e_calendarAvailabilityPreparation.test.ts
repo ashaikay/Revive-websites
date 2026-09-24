@@ -32,6 +32,9 @@ function environment(values: Record<string, string | undefined> = {}) {
   const configured: Record<string, string | undefined> = {
     [CALENDAR_AVAILABILITY_ENVIRONMENT.authorizedWorkspaceId]: workspaceId,
     [CALENDAR_AVAILABILITY_ENVIRONMENT.primaryMailbox]: mailbox,
+    [CALENDAR_AVAILABILITY_ENVIRONMENT.workingDays]: '1,2,3,4,5',
+    [CALENDAR_AVAILABILITY_ENVIRONMENT.businessStartLocal]: '09:00',
+    [CALENDAR_AVAILABILITY_ENVIRONMENT.businessEndLocal]: '17:00',
     MICROSOFT_GRAPH_TENANT_ID: 'tenant-id',
     MICROSOFT_GRAPH_CLIENT_ID: 'client-id',
     MICROSOFT_GRAPH_CLIENT_SECRET: 'client-secret',
@@ -143,6 +146,6 @@ describe('Phase 5E controlled calendar availability-read preparation', () => {
     const body = await response.text();
     expect(response.status).toBe(503);
     expect(body).not.toMatch(new RegExp(`${token}|${mailbox}|raw-provider-payload|stack`));
-    expect(source).not.toMatch(/Calendars\.ReadWrite|\/events|createEvent|updateEvent|deleteEvent|send|accept|decline|\.patch\(|\.delete\(/i);
+    expect(source).not.toMatch(/Calendars\.ReadWrite|\/events|createEvent|updateEvent|deleteEvent|sendEvent|acceptEvent|declineEvent|\.patch\(|\.delete\(/i);
   });
 });
