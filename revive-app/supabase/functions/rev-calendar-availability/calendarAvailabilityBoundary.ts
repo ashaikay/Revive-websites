@@ -192,11 +192,16 @@ export async function handleCalendarAvailability(
       }
       return json(502, { error: 'Calendar provider rejected the availability request.', code: 'provider_rejected' });
     }
-    console.error({
+    const diagnostic = {
       event: 'calendar_availability_failure',
       stage,
       errorName: error instanceof Error ? error.name : 'UnknownError',
+    };
+    console.error(JSON.stringify(diagnostic));
+    return json(503, {
+      error: 'Calendar availability is unavailable.',
+      code: 'unexpected_calendar_failure',
+      stage,
     });
-    return json(503, { error: 'Calendar availability is unavailable.' });
   }
 }

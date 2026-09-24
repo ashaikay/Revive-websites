@@ -53,16 +53,23 @@ describe('Phase 5G.2 calendar availability diagnostics', () => {
     const deps = dependencies();
     arrange(deps);
     const response = await handleCalendarAvailability(post(), deps);
+    const responseBody = await response.json();
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: 'Calendar availability is unavailable.' });
+    expect(responseBody).toEqual({
+      error: 'Calendar availability is unavailable.',
+      code: 'unexpected_calendar_failure',
+      stage,
+    });
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith({
+    expect(errorSpy).toHaveBeenCalledWith(JSON.stringify({
       event: 'calendar_availability_failure',
       stage,
       errorName: 'Error',
-    });
-    expect(JSON.stringify(errorSpy.mock.calls[0][0])).not.toContain(secret);
-    expect(Object.keys(errorSpy.mock.calls[0][0])).toEqual(['event', 'stage', 'errorName']);
+    }));
+    const diagnostic = JSON.parse(errorSpy.mock.calls[0][0]);
+    expect(Object.keys(diagnostic)).toEqual(['event', 'stage', 'errorName']);
+    expect(JSON.stringify(diagnostic)).not.toContain(secret);
+    expect(JSON.stringify(responseBody)).not.toContain('errorName');
   });
 
   it('keeps disabled requests silent with no resolver or provider access', async () => {
