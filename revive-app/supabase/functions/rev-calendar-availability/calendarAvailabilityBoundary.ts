@@ -48,6 +48,11 @@ type CalendarAvailabilityPayload = {
   timezone: string;
 };
 
+type CalendarAvailabilityStage =
+  | 'resolve_trusted_configuration'
+  | 'read_busy_intervals'
+  | 'calculate_availability';
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -126,6 +131,7 @@ export async function handleCalendarAvailability(
     return json(503, { status: 'disabled', providerCalls: 0, externalEffect: 'none' });
   }
 
+  let stage: CalendarAvailabilityStage = 'resolve_trusted_configuration';
   try {
     const trusted = await dependencies.resolveTrustedCalendarAvailability(
       payload.workspaceId,
@@ -138,6 +144,7 @@ export async function handleCalendarAvailability(
       || trusted.selectedCalendar.provider !== 'microsoft_graph') {
       return json(403, { error: 'Trusted calendar binding is unavailable.' });
     }
+    stage = 'read_busy_intervals';
     const busyIntervals: BusyInterval[] = await dependencies.readBusyIntervals({
       accessToken: trusted.accessToken,
       workspaceId: payload.workspaceId,
@@ -148,6 +155,7 @@ export async function handleCalendarAvailability(
       searchEndAt: payload.searchEndAt,
       timezone: trusted.selectedCalendar.timezone,
     });
+    stage = 'calculate_availability';
     const availability = calculateAvailability({
       workspaceId: payload.workspaceId,
       selectedCalendarId: trusted.selectedCalendar.id,
@@ -184,6 +192,11 @@ export async function handleCalendarAvailability(
       }
       return json(502, { error: 'Calendar provider rejected the availability request.', code: 'provider_rejected' });
     }
+    console.error({
+      event: 'calendar_availability_failure',
+      stage,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
     return json(503, { error: 'Calendar availability is unavailable.' });
   }
 }
