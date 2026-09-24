@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { CALENDAR_CAPABILITIES } from '@/services/calendarAvailabilityService';
 import {
-  CALENDAR_AVAILABILITY_ENABLED,
   handleCalendarAvailability,
   type CalendarAvailabilityDependencies,
 } from '../../supabase/functions/rev-calendar-availability/calendarAvailabilityBoundary';
@@ -19,8 +18,7 @@ const validPayload = {
 
 function dependencies(): CalendarAvailabilityDependencies {
   return {
-    isCalendarAvailabilityEnabled: () => CALENDAR_AVAILABILITY_ENABLED,
-    isReadCalendarAvailabilityEnabled: () => CALENDAR_CAPABILITIES.READ_CALENDAR_AVAILABILITY,
+    isCalendarAvailabilityEnabled: () => false,
     getAuthenticatedUserId: vi.fn().mockResolvedValue('user-1'),
     hasActiveWorkspaceMembership: vi.fn().mockResolvedValue(true),
     resolveTrustedCalendarAvailability: vi.fn().mockResolvedValue({
@@ -95,7 +93,6 @@ describe('Phase 5D controlled calendar availability boundary', () => {
 
   it('has only disabled availability and event-creation capabilities with no mutation endpoint', () => {
     const source = readFileSync(new URL('../../supabase/functions/rev-calendar-availability/calendarAvailabilityBoundary.ts', import.meta.url), 'utf8');
-    expect(CALENDAR_AVAILABILITY_ENABLED).toBe(false);
     expect(CALENDAR_CAPABILITIES.READ_CALENDAR_AVAILABILITY).toBe(false);
     expect(CALENDAR_CAPABILITIES.CREATE_CALENDAR_EVENT).toBe(false);
     expect(source).not.toMatch(/\/events|createEvent|updateEvent|deleteEvent|accept|decline|\.patch\(|\.delete\(/i);

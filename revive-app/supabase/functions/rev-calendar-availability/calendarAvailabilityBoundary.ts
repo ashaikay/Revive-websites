@@ -4,11 +4,19 @@ import {
   type BusyInterval,
   type SelectedCalendar,
 } from '../../../src/services/calendarAvailabilityService.ts';
-import { readMicrosoftGraphPrimaryCalendarAvailability } from '../_shared/microsoftGraphAvailability.ts';
+import {
+  MicrosoftGraphAvailabilityError,
+  readMicrosoftGraphPrimaryCalendarAvailability,
+} from '../_shared/microsoftGraphAvailability.ts';
+import { MicrosoftGraphAuthError } from '../_shared/microsoftGraphAuth.ts';
+import { TrustedCalendarAvailabilityBindingError } from './trustedCalendarAvailabilityResolver.ts';
 
-export const CALENDAR_AVAILABILITY_ENABLED = false;
 export const MAXIMUM_AVAILABILITY_QUERY_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAXIMUM_AVAILABLE_SLOTS = 100;
+
+export function isCalendarAvailabilityEnabled(value: string | undefined): boolean {
+  return value === 'true';
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,8 +35,7 @@ export interface CalendarAvailabilityDependencies {
   getAuthenticatedUserId: (authorization: string) => Promise<string | null>;
   hasActiveWorkspaceMembership: (authorization: string, workspaceId: string, userId: string) => Promise<boolean>;
   isCalendarAvailabilityEnabled: () => boolean;
-  isReadCalendarAvailabilityEnabled: () => boolean;
-  resolveTrustedCalendarAvailability: (workspaceId: string, searchStartAt: string, searchEndAt: string) => Promise<TrustedCalendarAvailabilityConfig>;
+  resolveTrustedCalendarAvailability: (workspaceId: string, searchStartAt: string, searchEndAt: string, timezone: string) => Promise<TrustedCalendarAvailabilityConfig>;
   readBusyIntervals: typeof readMicrosoftGraphPrimaryCalendarAvailability;
   now: () => string;
 }
@@ -115,7 +122,7 @@ export async function handleCalendarAvailability(
     return json(403, { error: 'Workspace access denied.' });
   }
 
-  if (!dependencies.isCalendarAvailabilityEnabled() || !dependencies.isReadCalendarAvailabilityEnabled()) {
+  if (!dependencies.isCalendarAvailabilityEnabled()) {
     return json(503, { status: 'disabled', providerCalls: 0, externalEffect: 'none' });
   }
 
@@ -124,6 +131,7 @@ export async function handleCalendarAvailability(
       payload.workspaceId,
       payload.searchStartAt,
       payload.searchEndAt,
+      payload.timezone,
     );
     if (trusted.selectedCalendar.workspaceId !== payload.workspaceId
       || trusted.selectedCalendar.timezone !== payload.timezone
@@ -156,7 +164,22 @@ export async function handleCalendarAvailability(
       ...availability,
       slots: availability.slots.slice(0, MAXIMUM_AVAILABLE_SLOTS),
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof TrustedCalendarAvailabilityBindingError) {
+      return json(403, { error: 'Trusted calendar binding is unavailable.' });
+    }
+    if (error instanceof MicrosoftGraphAuthError) {
+      return json(502, { error: 'Calendar authentication is unavailable.', code: 'authentication_failed' });
+    }
+    if (error instanceof MicrosoftGraphAvailabilityError) {
+      if (error.kind === 'rate_limited') {
+        return json(429, { error: 'Calendar provider is rate limited.', code: 'provider_rate_limited' });
+      }
+      if (error.kind === 'read_outcome_unknown') {
+        return json(503, { error: 'Calendar availability outcome is unknown.', code: 'provider_outcome_unknown' });
+      }
+      return json(502, { error: 'Calendar provider rejected the availability request.', code: 'provider_rejected' });
+    }
     return json(503, { error: 'Calendar availability is unavailable.' });
   }
 }

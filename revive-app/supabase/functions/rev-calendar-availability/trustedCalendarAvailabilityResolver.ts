@@ -13,6 +13,13 @@ export const CALENDAR_AVAILABILITY_ENVIRONMENT = {
 
 const DEFAULT_TIMEZONE = 'Europe/London';
 
+export class TrustedCalendarAvailabilityBindingError extends Error {
+  constructor() {
+    super('Trusted calendar binding is unavailable.');
+    this.name = 'TrustedCalendarAvailabilityBindingError';
+  }
+}
+
 export interface TrustedCalendarResolverDependencies {
   getEnvironment: (name: string) => string | undefined;
   acquireAccessToken: (config: MicrosoftGraphAuthConfig) => Promise<MicrosoftGraphAccessToken>;
@@ -40,12 +47,13 @@ export function createTrustedCalendarAvailabilityResolver(
     workspaceId: string,
     searchStartAt: string,
     searchEndAt: string,
+    requestedTimezone: string,
   ): Promise<TrustedCalendarAvailabilityConfig> {
     const configuredWorkspaceId = required(dependencies.getEnvironment(
       CALENDAR_AVAILABILITY_ENVIRONMENT.authorizedWorkspaceId,
     ));
     if (workspaceId !== configuredWorkspaceId) {
-      throw new Error('Trusted calendar binding is unavailable.');
+      throw new TrustedCalendarAvailabilityBindingError();
     }
 
     const mailbox = required(dependencies.getEnvironment(
@@ -56,6 +64,9 @@ export function createTrustedCalendarAvailabilityResolver(
     )?.trim() || DEFAULT_TIMEZONE;
     if (!validTimezone(timezone)) {
       throw new Error('Trusted calendar configuration is incomplete.');
+    }
+    if (requestedTimezone !== timezone) {
+      throw new TrustedCalendarAvailabilityBindingError();
     }
 
     const auth = await dependencies.acquireAccessToken({

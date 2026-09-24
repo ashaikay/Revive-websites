@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { CALENDAR_CAPABILITIES } from '@/services/calendarAvailabilityService';
 import {
-  CALENDAR_AVAILABILITY_ENABLED,
   handleCalendarAvailability,
   MAXIMUM_AVAILABLE_SLOTS,
   type CalendarAvailabilityDependencies,
@@ -51,7 +50,6 @@ function configuredResolver(acquireAccessToken = vi.fn().mockResolvedValue({ acc
 function dependencies(resolver: CalendarAvailabilityDependencies['resolveTrustedCalendarAvailability'], graph = vi.fn().mockResolvedValue([]), enabled = false): CalendarAvailabilityDependencies {
   return {
     isCalendarAvailabilityEnabled: () => enabled,
-    isReadCalendarAvailabilityEnabled: () => enabled,
     getAuthenticatedUserId: vi.fn().mockResolvedValue('user-1'),
     hasActiveWorkspaceMembership: vi.fn().mockResolvedValue(true),
     resolveTrustedCalendarAvailability: resolver,
@@ -72,7 +70,6 @@ describe('Phase 5E controlled calendar availability-read preparation', () => {
     expect(resolveTrustedCalendarAvailability).not.toHaveBeenCalled();
     expect(acquireAccessToken).not.toHaveBeenCalled();
     expect(graph).not.toHaveBeenCalled();
-    expect(CALENDAR_AVAILABILITY_ENABLED).toBe(false);
     expect(CALENDAR_CAPABILITIES.READ_CALENDAR_AVAILABILITY).toBe(false);
     expect(CALENDAR_CAPABILITIES.CREATE_CALENDAR_EVENT).toBe(false);
   });
@@ -89,7 +86,7 @@ describe('Phase 5E controlled calendar availability-read preparation', () => {
     expect(graph).not.toHaveBeenCalled();
 
     const { resolver, acquireAccessToken: configuredAuth } = configuredResolver();
-    expect((await handleCalendarAvailability(post({ ...payload, workspaceId: 'another-workspace' }), dependencies(resolver, graph, true))).status).toBe(503);
+    expect((await handleCalendarAvailability(post({ ...payload, workspaceId: 'another-workspace' }), dependencies(resolver, graph, true))).status).toBe(403);
     expect(configuredAuth).not.toHaveBeenCalled();
     expect(graph).not.toHaveBeenCalled();
   });

@@ -1,8 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 import {
-  CALENDAR_AVAILABILITY_ENABLED,
   handleCalendarAvailability,
+  isCalendarAvailabilityEnabled,
   type CalendarAvailabilityDependencies,
 } from './calendarAvailabilityBoundary.ts';
 import { readMicrosoftGraphPrimaryCalendarAvailability } from '../_shared/microsoftGraphAvailability.ts';
@@ -19,8 +19,9 @@ function callerClient(authorization: string) {
 }
 
 const dependencies: CalendarAvailabilityDependencies = {
-  isCalendarAvailabilityEnabled: () => CALENDAR_AVAILABILITY_ENABLED,
-  isReadCalendarAvailabilityEnabled: () => false,
+  isCalendarAvailabilityEnabled: () => isCalendarAvailabilityEnabled(
+    Deno.env.get('REV_CALENDAR_AVAILABILITY_ENABLED'),
+  ),
   async getAuthenticatedUserId(authorization) {
     const { data, error } = await callerClient(authorization).auth.getUser();
     return error ? null : data.user?.id ?? null;
