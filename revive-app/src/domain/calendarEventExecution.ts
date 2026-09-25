@@ -1,4 +1,4 @@
-import type { Id, MemberRole } from './models';
+import type { Id, MemberRole } from './models.ts';
 
 export const CREATE_CALENDAR_EVENT_CAPABILITY =
   'CREATE_CALENDAR_EVENT' as const;
