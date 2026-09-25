@@ -753,7 +753,25 @@
 
 ---
 
-## Phase 5: Calendar & Meetings ⏳
+## Phase 5: Calendar & Meetings — 5A–5K COMPLETE (PASS); EVENT CREATION DISABLED
+
+**Completion checkpoint date:** 2026-09-25
+
+- Phase 5A documented the provider-independent, customer-meeting architecture and separated customer scheduling from future workforce scheduling.
+- Phase 5B–5F added deterministic availability calculation, a server-only Microsoft Graph `getSchedule` adapter, authenticated workspace boundary, trusted single-mailbox pilot configuration and an exact server-side availability enablement gate.
+- Phase 5G–5H.1 added the read-only live availability UI, timezone/DST-safe business hours, non-working-day handling and local slot selection. Availability checks create no event or invitation.
+- Phase 5I added local supervised meeting-proposal preparation with validation, edit and discard controls.
+- Phase 5J added durable, idempotent meeting-proposal submission linked atomically to the existing REV action and approval control plane. Production RLS prevents browser insertion, mutation, conversion and cross-tenant disclosure of meeting actions/proposal PII.
+- Phase 5K added an owner/admin review surface for the exact meeting snapshot and reused the existing version/fingerprint-bound approval RPC. Approval and rejection record intent only; execution remains `not_executed`.
+- The production migration and trusted proposal-submission Edge Function were deployed. A controlled FatherLegacy proposal was submitted and approved, ending in `APPROVED — NOT BOOKED` with no Microsoft event, invitation, email or provider mutation.
+- Disposable PostgreSQL migration/RLS validation passed, including role authority, tenant isolation, PII visibility, direct-write denial, stale-approval rejection, semantic idempotency and preservation of non-meeting action access.
+- Final Phase 5K regression passed: 57 test files and 434 tests. Production build and whitespace checks passed.
+
+**Current pilot limitation:** Microsoft availability is bound to the authorised FatherLegacy workspace/mailbox. Customer self-service calendar connections and per-tenant provider configuration are not yet implemented.
+
+**Safety state:** `Calendars.Read` is used only for controlled availability. Calendar event creation, invitations, reminders, RSVP tracking, provider update/delete operations and autonomous booking remain disabled.
+
+**Next controlled slice:** Phase 5L — controlled calendar event creation architecture and permission preflight. This checkpoint does not authorize `Calendars.ReadWrite`, provider event creation or production booking.
 
 **Objective:** Integrate calendar and enable meeting booking
 
