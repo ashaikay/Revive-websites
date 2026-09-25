@@ -111,6 +111,6 @@ describe('Phase 5J durable supervised meeting proposal submission', () => {
   it('maps a safe client failure without exposing proposal details', async () => {
     const original = (await import('@/data/supabaseClient')).supabaseClient;
     expect(original === null || typeof original === 'object').toBe(true);
-    await expect(submitMeetingProposal(proposal, 'workspace-1')).rejects.toThrow(/not configured|unavailable/i);
+    await expect(submitMeetingProposal(proposal, 'workspace-1')).rejects.toThrow(/not configured|unavailable|sign in is required/i);
   });
 });

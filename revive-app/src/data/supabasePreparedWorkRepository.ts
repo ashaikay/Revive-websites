@@ -17,6 +17,7 @@ import { supabaseClient } from './supabaseClient';
 import { buildPreparedFollowUpDraft } from '@/services/preparedFollowUpDraft';
 import { analyzeRecovery } from '@/services/recoveryService';
 import { deterministicUuid, fingerprintREVAction } from '@/services/revActionFingerprint';
+import type { PreparedMeetingProposal } from '@/services/meetingProposalService';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
 
@@ -37,6 +38,7 @@ export interface LivePendingAction extends LiveREVAction {
   approvalId: string;
   approvalActionVersion: number;
   approvalActionFingerprint: string;
+  meetingProposal?: PreparedMeetingProposal;
 }
 
 export interface StoredPreparedFollowUp {
@@ -196,6 +198,29 @@ function isStoredPreparedFollowUp(value: unknown): value is StoredPreparedFollow
     && Array.isArray(record.evidenceContext) && Array.isArray(record.missingInformation);
 }
 
+function mapMeetingProposalPayload(value: unknown): PreparedMeetingProposal | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const payload = value as Record<string, unknown>;
+  if (typeof payload.title !== 'string'
+    || typeof payload.attendeeEmail !== 'string'
+    || typeof payload.startAt !== 'string'
+    || typeof payload.endAt !== 'string'
+    || typeof payload.timezone !== 'string'
+    || !['online', 'phone', 'in_person'].includes(String(payload.meetingMethod))
+    || typeof payload.locationDetails !== 'string'
+    || typeof payload.notes !== 'string') return undefined;
+  return {
+    title: payload.title,
+    attendeeEmail: payload.attendeeEmail,
+    startAt: payload.startAt,
+    endAt: payload.endAt,
+    timezone: payload.timezone,
+    meetingMethod: payload.meetingMethod as PreparedMeetingProposal['meetingMethod'],
+    locationDetails: payload.locationDetails,
+    notes: payload.notes,
+  };
+}
+
 export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
   async loadContext(workspaceId, actorUserId) {
     const client = requiredClient();
@@ -219,7 +244,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
 
   async loadPendingActions(workspaceId) {
     const client = requiredClient();
-    const [actions, approvals] = await Promise.all([
+    const [actions, approvals, meetingProposals] = await Promise.all([
       client
         .from('rev_actions')
         .select('*')
@@ -232,13 +257,24 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .select('id,workspace_id,rev_action_id,action_version,action_fingerprint,decision')
         .eq('workspace_id', workspaceId)
         .is('decision', null),
+      client
+        .from('meeting_proposals')
+        .select('rev_action_id,proposal_payload')
+        .eq('workspace_id', workspaceId),
     ]);
 
     throwOnError(actions.error);
     throwOnError(approvals.error);
+    throwOnError(meetingProposals.error);
 
     const approvalByAction = new Map(
       (approvals.data ?? []).map((row) => [String(row.rev_action_id), row]),
+    );
+    const meetingProposalByAction = new Map(
+      (meetingProposals.data ?? []).flatMap((row) => {
+        const proposal = mapMeetingProposalPayload(row.proposal_payload);
+        return proposal ? [[String(row.rev_action_id), proposal] as const] : [];
+      }),
     );
 
     return (actions.data ?? []).flatMap((row) => {
@@ -250,6 +286,9 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         approvalId: String(approval.id),
         approvalActionVersion: Number(approval.action_version),
         approvalActionFingerprint: String(approval.action_fingerprint),
+        meetingProposal: action.actionType === 'meeting_proposal'
+          ? meetingProposalByAction.get(action.id)
+          : undefined,
       }];
     });
   },
