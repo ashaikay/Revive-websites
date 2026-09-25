@@ -35,3 +35,24 @@ test('preflight allows only configured origin and does not invoke service', asyn
   const response = await handleMeetingExecutionHttp(req(ids, {}, 'OPTIONS'), { allowedOrigin: origin, execute: async () => { throw new Error('unreachable'); } });
   assert.equal(response.status, 204); assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
 });
+test('default HTTP gate rejects a live result even if an executor returns one', async () => {
+  const response = await handleMeetingExecutionHttp(req(ids), { allowedOrigin: origin,
+    execute: async () => ({ status: 'event_created', executionId: disabled.executionId,
+      providerOutcome: 'accepted_by_provider', providerInvoked: true, eventCreated: true, invitationSent: false }) });
+  assert.equal(response.status, 403);
+});
+test('test enabled HTTP contract distinguishes accepted, rejected and unknown outcomes', async () => {
+  for (const [status, outcome, created, invited, httpStatus] of [
+    ['event_created', 'accepted_by_provider', true, false, 200],
+    ['provider_rejected', 'rejected_by_provider', false, false, 409],
+    ['outcome_unknown', 'provider_outcome_unknown', null, null, 202],
+  ] as const) {
+    const body = { status, executionId: disabled.executionId, providerOutcome: outcome,
+      providerInvoked: true as const, eventCreated: created, invitationSent: invited };
+    const response = await handleMeetingExecutionHttp(req(ids), { allowedOrigin: origin,
+      execute: async () => body }, true);
+    assert.equal(response.status, httpStatus);
+    assert.deepEqual(await response.json(), body);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  }
+});

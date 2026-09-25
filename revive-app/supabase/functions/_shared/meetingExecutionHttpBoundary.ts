@@ -1,7 +1,8 @@
 import type { MeetingEventExecutionResult } from './meetingEventExecutionBoundary.ts';
+import { MEETING_PROVIDER_HTTP_ENABLED, type MeetingProviderHttpResult } from './meetingProviderHttpService.ts';
 
 export interface MeetingExecutionHttpDependencies {
-  execute: (input: unknown, authorization: string) => Promise<MeetingEventExecutionResult>;
+  execute: (input: unknown, authorization: string) => Promise<MeetingEventExecutionResult | MeetingProviderHttpResult>;
   allowedOrigin: string;
 }
 const json = (status: number, body: object, origin: string) => new Response(JSON.stringify(body), {
@@ -9,7 +10,8 @@ const json = (status: number, body: object, origin: string) => new Response(JSON
     'Access-Control-Allow-Origin': origin, Vary: 'Origin' },
 });
 /** HTTP shell only. Identity and durable authorization remain in the server service and RPC. */
-export async function handleMeetingExecutionHttp(request: Request, deps: MeetingExecutionHttpDependencies): Promise<Response> {
+export async function handleMeetingExecutionHttp(request: Request, deps: MeetingExecutionHttpDependencies,
+  allowLive: boolean = MEETING_PROVIDER_HTTP_ENABLED): Promise<Response> {
   const origin = request.headers.get('Origin');
   if (!deps.allowedOrigin || origin !== deps.allowedOrigin) return new Response(null, { status: 403 });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
@@ -31,11 +33,22 @@ export async function handleMeetingExecutionHttp(request: Request, deps: Meeting
   } catch { return json(400, { error: 'Invalid request.' }, deps.allowedOrigin); }
   try {
     const result = await deps.execute(body, authorization);
-    // Assert the disabled result before crossing the HTTP boundary.
-    if (result.status !== 'provider_disabled' || result.executionEnabled !== false ||
-      result.providerInvoked !== false || result.eventCreated !== false || result.providerOutcome !== 'provider_not_invoked') {
-      throw new Error('Invalid disabled execution response.');
+    if (result.status === 'provider_disabled') {
+      if (result.executionEnabled !== false || result.providerInvoked !== false ||
+        result.eventCreated !== false || result.providerOutcome !== 'provider_not_invoked') {
+        throw new Error('Invalid disabled execution response.');
+      }
+      return json(200, result, deps.allowedOrigin);
     }
-    return json(200, result, deps.allowedOrigin);
+    if (!allowLive || !/^[0-9a-f-]{36}$/i.test(result.executionId) ||
+      result.providerInvoked !== true ||
+      (result.status === 'event_created' && (result.providerOutcome !== 'accepted_by_provider' || result.eventCreated !== true || result.invitationSent !== false)) ||
+      (result.status === 'provider_rejected' && (result.providerOutcome !== 'rejected_by_provider' || result.eventCreated !== false || result.invitationSent !== false)) ||
+      (result.status === 'outcome_unknown' && (result.providerOutcome !== 'provider_outcome_unknown' || result.eventCreated !== null || result.invitationSent !== null)) ||
+      !['event_created', 'provider_rejected', 'outcome_unknown'].includes(result.status)) {
+      throw new Error('Invalid meeting provider response.');
+    }
+    return json(result.status === 'event_created' ? 200 : result.status === 'outcome_unknown' ? 202 : 409,
+      result, deps.allowedOrigin);
   } catch { return json(403, { error: 'Meeting execution unavailable.' }, deps.allowedOrigin); }
 }
