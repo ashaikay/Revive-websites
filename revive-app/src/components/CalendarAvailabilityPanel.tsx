@@ -12,6 +12,18 @@ export interface CalendarAvailabilityPanelProps {
   initialTimezone?: string;
 }
 
+export interface SelectedCalendarSlot {
+  startAt: string;
+  endAt: string;
+}
+
+export function selectedSlotMatches(
+  selectedSlot: SelectedCalendarSlot | null,
+  slot: SelectedCalendarSlot,
+): boolean {
+  return selectedSlot?.startAt === slot.startAt && selectedSlot.endAt === slot.endAt;
+}
+
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -27,18 +39,24 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
   const [result, setResult] = useState<CalendarAvailabilityResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<SelectedCalendarSlot | null>(null);
+
+  const clearSelection = () => setSelectedSlot(null);
 
   const handleCheckAvailability = async () => {
     if (checking) return;
     setChecking(true);
     setError(null);
     setResult(null);
+    clearSelection();
     try {
       const range = businessDateToUtcRange(date, timezone);
       const nextResult = await requestAvailability({ workspaceId, ...range, requestedDurationMinutes: duration, timezone });
       setTimezone(nextResult.timezone);
       setResult(nextResult);
+      setSelectedSlot((current) => current && nextResult.slots.some((slot) => selectedSlotMatches(current, slot)) ? current : null);
     } catch (requestError) {
+      clearSelection();
       setError(requestError instanceof Error ? requestError.message : 'Calendar availability could not be checked safely.');
     } finally {
       setChecking(false);
@@ -56,11 +74,11 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
         <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
           <label className="grid gap-1 text-sm font-medium text-neutral-800" htmlFor="calendar-availability-date">
             Date
-            <input id="calendar-availability-date" className="input-field" type="date" value={date} onChange={(event) => setDate(event.target.value)} disabled={checking} />
+            <input id="calendar-availability-date" className="input-field" type="date" value={date} onChange={(event) => { setDate(event.target.value); clearSelection(); }} disabled={checking} />
           </label>
           <label className="grid gap-1 text-sm font-medium text-neutral-800" htmlFor="calendar-availability-duration">
             Meeting duration
-            <select id="calendar-availability-duration" className="input-field" value={duration} onChange={(event) => setDuration(Number(event.target.value) as 30 | 60)} disabled={checking}>
+            <select id="calendar-availability-duration" className="input-field" value={duration} onChange={(event) => { setDuration(Number(event.target.value) as 30 | 60); clearSelection(); }} disabled={checking}>
               <option value={30}>30 minutes</option>
               <option value={60}>60 minutes</option>
             </select>
@@ -74,9 +92,21 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
         {checking && <p className="mt-4 text-sm text-neutral-600" role="status">Checking calendar availability...</p>}
         {result?.status === 'unavailable' && <p className="mt-4 text-sm text-neutral-700" role="status">No availability can be confirmed for this request.</p>}
         {result?.status === 'available' && result.slots.length === 0 && <p className="mt-4 text-sm text-neutral-700" role="status">No available times were returned for this date.</p>}
+        {selectedSlot && (
+          <div className="mt-4 border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900" role="status">
+            <p className="font-semibold">SELECTED — NOT BOOKED</p>
+            <p className="mt-1">{new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(selectedSlot.startAt))}</p>
+            <p>{formatAvailabilitySlot(selectedSlot.startAt, selectedSlot.endAt, timezone)} ({timezone})</p>
+            <p className="mt-1">No calendar event or invitation has been created.</p>
+            <button className="btn-ghost mt-3 text-sm" type="button" onClick={clearSelection}>CLEAR SELECTION</button>
+          </div>
+        )}
         {result?.slots.length ? (
           <ul className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Available times">
-            {result.slots.map((slot) => <li key={`${slot.startAt}-${slot.endAt}`} className="border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-800">{formatAvailabilitySlot(slot.startAt, slot.endAt, result.timezone)}</li>)}
+            {result.slots.map((slot) => {
+              const selected = selectedSlotMatches(selectedSlot, slot);
+              return <li key={`${slot.startAt}-${slot.endAt}`}><button className={selected ? 'w-full border border-primary-500 bg-primary-50 px-3 py-2 text-left text-sm font-medium text-primary-900' : 'w-full border border-neutral-200 bg-neutral-50 px-3 py-2 text-left text-sm font-medium text-neutral-800'} type="button" aria-pressed={selected} onClick={() => setSelectedSlot({ startAt: slot.startAt, endAt: slot.endAt })}>{formatAvailabilitySlot(slot.startAt, slot.endAt, result.timezone)}</button></li>;
+            })}
           </ul>
         ) : null}
       </div>
