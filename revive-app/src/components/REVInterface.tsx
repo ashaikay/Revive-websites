@@ -17,6 +17,8 @@ import { LivePendingAction, LivePreparedWorkContext, SupabasePreparedWorkReposit
 import { LiveEmailThread, SupabaseEmailThreadRepository } from '@/data/supabaseEmailThreadRepository';
 import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/services/liveEmailExecutionClient';
 import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
+import { MeetingProposalReviewCard } from '@/components/MeetingProposalReviewCard';
+import { CalendarAvailabilityPanel } from '@/components/CalendarAvailabilityPanel';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -874,6 +876,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [inboundResult, setInboundResult] = useState<InboundEmailReadResult | null>(null);
   const [inboundError, setInboundError] = useState<string | null>(null);
   const [checkingInbox, setCheckingInbox] = useState(false);
+  const [meetingDecisionNotice, setMeetingDecisionNotice] = useState<{ title: string; decision: 'approved' | 'rejected' } | null>(null);
 
   const handleCheckInbox = async () => {
     setCheckingInbox(true);
@@ -964,14 +967,16 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const canReview = context?.membership?.role === 'owner' || context?.membership?.role === 'admin';
 
 
-  const runChange = async (id: string, operation: () => Promise<unknown>) => {
+  const runChange = async (id: string, operation: () => Promise<unknown>): Promise<boolean> => {
     setBusyId(id);
     try {
       await operation();
       await reload();
       setError(null);
+      return true;
     } catch (operationError) {
       setError(operationError instanceof Error ? operationError.message : 'Live prepared work could not be updated.');
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -1043,7 +1048,18 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             REV NEEDS YOUR APPROVAL
           </h2>
           <div className="card divide-y divide-neutral-100">
-            {pendingActions.map((action) => (
+            {pendingActions.map((action) => action.actionType === 'meeting_proposal' ? (
+              <MeetingProposalReviewCard
+                key={action.id}
+                action={action}
+                canReview={canReview}
+                busy={busyId === action.id}
+                onDecision={async (decision) => {
+                  const succeeded = await runChange(action.id, () => repository.decidePendingAction(action, decision));
+                  if (succeeded) setMeetingDecisionNotice({ title: action.title, decision });
+                }}
+              />
+            ) : (
               <div key={action.id} className="p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -1093,6 +1109,14 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
         </section>
       )}
 
+      {meetingDecisionNotice && (
+        <div className="card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+          <p className="font-semibold">{meetingDecisionNotice.decision === 'approved' ? 'APPROVED — NOT BOOKED' : 'REJECTED — NOT BOOKED'}</p>
+          <p className="mt-1">{meetingDecisionNotice.title}</p>
+          <p>No calendar event, invitation, email or provider action has occurred.</p>
+        </div>
+      )}
+
       {error && <div role="alert" className="card p-4 border border-red-200 bg-red-50 text-sm text-red-800">{error}</div>}
       {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work..." />}
 
@@ -1108,6 +1132,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             contacts={context.contacts}
             opportunities={context.opportunities}
           />
+
+          <CalendarAvailabilityPanel workspaceId={workspaceId} />
 
           <section aria-labelledby="live-recovery-heading" className="rev-motion-in">
             <h2 id="live-recovery-heading" className="text-xl font-bold text-neutral-900 mb-4">RECOVERY OPPORTUNITIES</h2>
