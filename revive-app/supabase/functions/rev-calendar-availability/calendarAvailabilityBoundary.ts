@@ -37,6 +37,7 @@ export interface CalendarAvailabilityDependencies {
   isCalendarAvailabilityEnabled: () => boolean;
   resolveTrustedCalendarAvailability: (workspaceId: string, searchStartAt: string, searchEndAt: string, timezone: string) => Promise<TrustedCalendarAvailabilityConfig>;
   readBusyIntervals: typeof readMicrosoftGraphPrimaryCalendarAvailability;
+  calculateAvailability?: typeof calculateAvailability;
   now: () => string;
 }
 
@@ -144,6 +145,14 @@ export async function handleCalendarAvailability(
       || trusted.selectedCalendar.provider !== 'microsoft_graph') {
       return json(403, { error: 'Trusted calendar binding is unavailable.' });
     }
+    if (trusted.policy.availabilityWindows.length === 0) {
+      return json(200, {
+        status: 'unavailable',
+        slots: [],
+        code: 'outside_business_hours',
+        timezone: trusted.selectedCalendar.timezone,
+      });
+    }
     stage = 'read_busy_intervals';
     const busyIntervals: BusyInterval[] = await dependencies.readBusyIntervals({
       accessToken: trusted.accessToken,
@@ -156,7 +165,7 @@ export async function handleCalendarAvailability(
       timezone: trusted.selectedCalendar.timezone,
     });
     stage = 'calculate_availability';
-    const availability = calculateAvailability({
+    const availability = (dependencies.calculateAvailability ?? calculateAvailability)({
       workspaceId: payload.workspaceId,
       selectedCalendarId: trusted.selectedCalendar.id,
       selectedCalendar: trusted.selectedCalendar,

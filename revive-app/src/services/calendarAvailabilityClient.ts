@@ -10,6 +10,7 @@ export interface CalendarAvailabilitySlot {
 export interface CalendarAvailabilityResult {
   status: 'available' | 'unavailable';
   slots: CalendarAvailabilitySlot[];
+  code?: 'outside_business_hours';
   timezone: string;
 }
 
@@ -73,6 +74,9 @@ function parseResult(data: unknown): CalendarAvailabilityResult {
   if ((value.status !== 'available' && value.status !== 'unavailable') || !validTimezone(value.timezone) || !Array.isArray(value.slots)) {
     throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
   }
+  if (value.code !== undefined && value.code !== 'outside_business_hours') {
+    throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+  }
   const slots = value.slots.map((slot): CalendarAvailabilitySlot => {
     if (!slot || typeof slot !== 'object') throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
     const item = slot as Record<string, unknown>;
@@ -82,7 +86,10 @@ function parseResult(data: unknown): CalendarAvailabilityResult {
     }
     return { startAt: item.startAt, endAt: item.endAt };
   });
-  return { status: value.status, slots, timezone: value.timezone };
+  if (value.code === 'outside_business_hours' && (value.status !== 'unavailable' || slots.length !== 0)) {
+    throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+  }
+  return { status: value.status, slots, ...(value.code === 'outside_business_hours' ? { code: value.code } : {}), timezone: value.timezone };
 }
 
 async function invokeCalendarAvailability(body: CalendarAvailabilityRequest): Promise<InvokeResult> {

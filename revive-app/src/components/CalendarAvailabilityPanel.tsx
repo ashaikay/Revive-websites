@@ -54,7 +54,11 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
       const nextResult = await requestAvailability({ workspaceId, ...range, requestedDurationMinutes: duration, timezone });
       setTimezone(nextResult.timezone);
       setResult(nextResult);
-      setSelectedSlot((current) => current && nextResult.slots.some((slot) => selectedSlotMatches(current, slot)) ? current : null);
+      if (nextResult.code === 'outside_business_hours') {
+        clearSelection();
+      } else {
+        setSelectedSlot((current) => current && nextResult.slots.some((slot) => selectedSlotMatches(current, slot)) ? current : null);
+      }
     } catch (requestError) {
       clearSelection();
       setError(requestError instanceof Error ? requestError.message : 'Calendar availability could not be checked safely.');
@@ -90,7 +94,8 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
         <p className="mt-3 text-xs text-neutral-500">Workspace timezone: {timezone}</p>
         {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
         {checking && <p className="mt-4 text-sm text-neutral-600" role="status">Checking calendar availability...</p>}
-        {result?.status === 'unavailable' && <p className="mt-4 text-sm text-neutral-700" role="status">No availability can be confirmed for this request.</p>}
+        {result?.code === 'outside_business_hours' && <p className="mt-4 text-sm text-neutral-700" role="status">No business hours are configured for this date. Please choose a working day.</p>}
+        {result?.status === 'unavailable' && result.code !== 'outside_business_hours' && <p className="mt-4 text-sm text-neutral-700" role="status">No availability can be confirmed for this request.</p>}
         {result?.status === 'available' && result.slots.length === 0 && <p className="mt-4 text-sm text-neutral-700" role="status">No available times were returned for this date.</p>}
         {selectedSlot && (
           <div className="mt-4 border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900" role="status">
