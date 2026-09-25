@@ -77,7 +77,7 @@ describe('Phase 5H.1 truthful non-working-day availability', () => {
     expect(panel).toContain('No business hours are configured for this date. Please choose a working day.');
     expect(panel).toMatch(/if \(nextResult\.code === 'outside_business_hours'\) \{\s+clearSelection\(\);/);
     expect(panel).toContain('aria-pressed={selected}');
-    expect(panel).toContain('onClick={() => setSelectedSlot({ startAt: slot.startAt, endAt: slot.endAt })}');
+    expect(panel).toContain('onClick={() => { setSelectedSlot({ startAt: slot.startAt, endAt: slot.endAt }); clearProposal(); }}');
     expect(panel).not.toMatch(/\bBook\b|\bSchedule\b|Create event|Send invitation|Confirm booking|\.rpc\(|localStorage|sessionStorage|\/events|createEvent|updateEvent|deleteEvent/i);
     expect(boundary).not.toMatch(/At least one availability window is required\.|createEvent|updateEvent|deleteEvent|\.rpc\(/i);
   });

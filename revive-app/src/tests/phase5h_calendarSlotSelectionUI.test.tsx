@@ -17,7 +17,7 @@ describe('Phase 5H read-only calendar slot selection', () => {
     expect(markup).toContain('CHECK AVAILABILITY');
     const source = readFileSync(new URL('../components/CalendarAvailabilityPanel.tsx', import.meta.url), 'utf8');
     expect(source).toContain('aria-pressed={selected}');
-    expect(source).toContain('onClick={() => setSelectedSlot({ startAt: slot.startAt, endAt: slot.endAt })}');
+    expect(source).toContain('onClick={() => { setSelectedSlot({ startAt: slot.startAt, endAt: slot.endAt }); clearProposal(); }}');
     expect(source).toContain('SELECTED — NOT BOOKED');
     expect(source).toContain('No calendar event or invitation has been created.');
   });
