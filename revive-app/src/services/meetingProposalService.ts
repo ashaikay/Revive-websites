@@ -57,3 +57,8 @@ export function prepareMeetingProposal(
     proposal: { title, attendeeEmail, meetingMethod: input.meetingMethod, locationDetails, notes, startAt: selectedSlot.startAt, endAt: selectedSlot.endAt, timezone },
   };
 }
+
+export interface SubmittedMeetingProposalState {
+  actionStatus: 'proposed' | 'awaiting_approval' | 'approved' | 'rejected' | 'cancelled' | 'completed' | 'failed';
+  executionStatus: 'not_started' | 'not_executed' | 'in_progress' | 'succeeded' | 'failed';
+}

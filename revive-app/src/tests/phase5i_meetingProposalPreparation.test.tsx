@@ -52,9 +52,9 @@ describe('Phase 5I local supervised meeting proposal preparation', () => {
     expect(source).toContain('EDIT PROPOSAL');
     expect(source).toContain('DISCARD PROPOSAL');
     expect(source).toContain('{selectedSlot && !preparedProposal && (');
-    expect(source).toContain('{preparedProposal && (');
-    expect(source).toContain('onClick={() => { setPreparedProposal(null); setProposalErrors({}); }}>EDIT PROPOSAL');
-    expect(source).toContain('onClick={() => { setPreparedProposal(null); setProposalErrors({}); setProposalInput(INITIAL_MEETING_PROPOSAL_INPUT); }}>DISCARD PROPOSAL');
+    expect(source).toContain('{preparedProposal && !submittedProposal && (');
+    expect(source).toContain('onClick={() => { setPreparedProposal(null); setProposalErrors({}); setSubmissionConfirmation(false); setSubmissionError(null); }}>EDIT PROPOSAL');
+    expect(source).toContain('onClick={clearProposal}>DISCARD PROPOSAL');
     expect(source).toMatch(/setDate\(event\.target\.value\); clearSelection\(\);/);
     expect(source).toMatch(/setDuration\(Number\(event\.target\.value\) as 30 \| 60\); clearSelection\(\);/);
     expect(source).toMatch(/setSelectedSlot\(\{ startAt: slot\.startAt, endAt: slot\.endAt \}\); clearProposal\(\);/);

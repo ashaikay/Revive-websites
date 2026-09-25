@@ -10,12 +10,15 @@ import {
   type MeetingProposalInput,
   type MeetingProposalValidationErrors,
   type PreparedMeetingProposal,
+  type SubmittedMeetingProposalState,
 } from '@/services/meetingProposalService';
+import { submitMeetingProposal, type MeetingProposalSubmitter } from '@/services/meetingProposalSubmissionClient';
 import { businessDateToUtcRange, formatAvailabilitySlot } from '@/utils/calendarAvailabilityTime';
 
 export interface CalendarAvailabilityPanelProps {
   workspaceId: string;
   requestAvailability?: typeof requestCalendarAvailability;
+  submitProposal?: MeetingProposalSubmitter;
   initialTimezone?: string;
 }
 
@@ -38,6 +41,7 @@ function today(): string {
 export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps> = ({
   workspaceId,
   requestAvailability = requestCalendarAvailability,
+  submitProposal = submitMeetingProposal,
   initialTimezone = DEFAULT_AVAILABILITY_TIMEZONE,
 }) => {
   const [date, setDate] = useState(today);
@@ -50,10 +54,18 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
   const [proposalInput, setProposalInput] = useState<MeetingProposalInput>(INITIAL_MEETING_PROPOSAL_INPUT);
   const [proposalErrors, setProposalErrors] = useState<MeetingProposalValidationErrors>({});
   const [preparedProposal, setPreparedProposal] = useState<PreparedMeetingProposal | null>(null);
+  const [submissionConfirmation, setSubmissionConfirmation] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [submittedProposal, setSubmittedProposal] = useState<SubmittedMeetingProposalState | null>(null);
 
   const clearProposal = () => {
     setPreparedProposal(null);
     setProposalErrors({});
+    setSubmissionConfirmation(false);
+    setSubmitting(false);
+    setSubmissionError(null);
+    setSubmittedProposal(null);
   };
   const clearSelection = () => {
     setSelectedSlot(null);
@@ -73,6 +85,20 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
     }
     setProposalErrors({});
     setPreparedProposal(prepared.proposal);
+  };
+  const handleConfirmSubmission = async () => {
+    if (!preparedProposal || submitting) return;
+    setSubmitting(true);
+    setSubmissionError(null);
+    try {
+      const submitted = await submitProposal(preparedProposal, workspaceId);
+      setSubmittedProposal(submitted);
+      setSubmissionConfirmation(false);
+    } catch (submissionFailure) {
+      setSubmissionError(submissionFailure instanceof Error ? submissionFailure.message : 'Meeting proposal submission is unavailable. Your prepared proposal has been retained.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCheckAvailability = async () => {
@@ -173,7 +199,7 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
             <button className="btn-primary text-sm" type="submit">PREPARE MEETING PROPOSAL</button>
           </form>
         )}
-        {preparedProposal && (
+        {preparedProposal && !submittedProposal && (
           <div className="mt-4 border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900" role="status">
             <p className="font-semibold">PREPARED — NOT BOOKED</p>
             <p className="mt-1">{preparedProposal.title}</p>
@@ -185,11 +211,15 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
             {preparedProposal.notes && <p>{preparedProposal.notes}</p>}
             <p className="mt-2">Owner approval and controlled execution are required before any calendar event or invitation can be created.</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn-ghost text-sm" type="button" onClick={() => { setPreparedProposal(null); setProposalErrors({}); }}>EDIT PROPOSAL</button>
-              <button className="btn-ghost text-sm" type="button" onClick={() => { setPreparedProposal(null); setProposalErrors({}); setProposalInput(INITIAL_MEETING_PROPOSAL_INPUT); }}>DISCARD PROPOSAL</button>
+              <button className="btn-ghost text-sm" type="button" onClick={() => { setPreparedProposal(null); setProposalErrors({}); setSubmissionConfirmation(false); setSubmissionError(null); }}>EDIT PROPOSAL</button>
+              <button className="btn-ghost text-sm" type="button" onClick={clearProposal}>DISCARD PROPOSAL</button>
+              <button className="btn-primary text-sm" type="button" disabled={submitting} onClick={() => setSubmissionConfirmation(true)}>SUBMIT FOR OWNER APPROVAL</button>
             </div>
+            {submissionConfirmation && <div className="mt-3 border border-neutral-200 bg-white p-3 text-neutral-800"><p>Submit this meeting proposal for owner approval? No calendar event or invitation will be created.</p><button className="btn-primary mt-3 text-sm" type="button" disabled={submitting} onClick={handleConfirmSubmission}>{submitting ? 'SUBMITTING...' : 'CONFIRM SUBMISSION'}</button></div>}
+            {submissionError && <p className="mt-3 text-sm text-red-700" role="alert">{submissionError}</p>}
           </div>
         )}
+        {submittedProposal && <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status"><p className="font-semibold">{submittedProposal.actionStatus === 'awaiting_approval' ? 'AWAITING OWNER APPROVAL — NOT BOOKED' : 'MEETING PROPOSAL STATUS — NOT BOOKED'}</p><p className="mt-1">Action state: {submittedProposal.actionStatus.replace(/_/g, ' ')}.</p><p>Execution state: {submittedProposal.executionStatus.replace(/_/g, ' ')}.</p><p className="mt-1">No calendar event or invitation has been created.</p></div>}
         {result?.slots.length ? (
           <ul className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Available times">
             {result.slots.map((slot) => {
