@@ -11,7 +11,12 @@ function fixture(overrides: Partial<TrustedMeetingBindingDependencies> = {}) {
   const deps: TrustedMeetingBindingDependencies = {
     getConfiguredCalendar: async () => { calls.push('configured'); return configured; },
     loadPersistedBinding: async () => { calls.push('binding'); return binding; },
-    reserveDurably: async () => { calls.push('reserve'); return result; },
+    reserveDurably: async (received, expected) => {
+      calls.push('reserve');
+      assert.deepEqual(received, input);
+      assert.deepEqual(expected, { calendarReference: binding.calendar_reference, timezone: binding.timezone, bindingVersion: binding.version });
+      return result;
+    },
     ...overrides,
   };
   return { calls, deps };

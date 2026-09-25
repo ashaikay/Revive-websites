@@ -24,7 +24,11 @@ export interface TrustedMeetingBindingDependencies {
   /** Trusted server-only database read; binding table is not exposed to authenticated clients. */
   loadPersistedBinding: (workspaceId: string) => Promise<PersistedMeetingBinding | null>;
   /** Caller-JWT-scoped meeting reservation RPC. */
-  reserveDurably: (input: MeetingEventExecutionRequest & { actorUserId: string }) => Promise<DurableMeetingEventReservation>;
+  reserveDurably: (input: MeetingEventExecutionRequest & { actorUserId: string }, expected: {
+    calendarReference: string;
+    timezone: string;
+    bindingVersion: number;
+  }) => Promise<DurableMeetingEventReservation>;
 }
 export class TrustedMeetingBindingMismatch extends Error {
   constructor() { super('Trusted meeting calendar binding is unavailable.'); this.name = 'TrustedMeetingBindingMismatch'; }
@@ -43,7 +47,7 @@ function compare(workspaceId: string, configured: ConfiguredMeetingCalendar, bin
 
 /** A comparison before and after the RPC detects drift while the disabled gateway
  * prevents external effects. The database still rechecks its own binding under lock.
- * A later live gateway needs an atomic expected-binding check inside the RPC. */
+ * The bound RPC atomically checks the expected binding under its row lock. */
 export function createTrustedMeetingReservation(deps: TrustedMeetingBindingDependencies) {
   return async (input: MeetingEventExecutionRequest & { actorUserId: string }): Promise<DurableMeetingEventReservation> => {
     let configured: ConfiguredMeetingCalendar;
@@ -52,7 +56,11 @@ export function createTrustedMeetingReservation(deps: TrustedMeetingBindingDepen
       configured = await deps.getConfiguredCalendar(input.workspaceId);
       before = compare(input.workspaceId, configured, await deps.loadPersistedBinding(input.workspaceId));
     } catch { throw new TrustedMeetingBindingMismatch(); }
-    const reserved = await deps.reserveDurably(input);
+    const reserved = await deps.reserveDurably(input, {
+      calendarReference: before.calendar_reference,
+      timezone: before.timezone,
+      bindingVersion: before.version,
+    });
     try {
       const after = compare(input.workspaceId, configured, await deps.loadPersistedBinding(input.workspaceId));
       if (before.version !== after.version || before.calendar_reference !== after.calendar_reference ||
