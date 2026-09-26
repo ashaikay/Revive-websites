@@ -42,7 +42,7 @@ export async function handleMeetingExecutionHttp(request: Request, deps: Meeting
     }
     if (!allowLive || !/^[0-9a-f-]{36}$/i.test(result.executionId) ||
       result.providerInvoked !== true ||
-      (result.status === 'event_created' && (result.providerOutcome !== 'accepted_by_provider' || result.eventCreated !== true || result.invitationSent !== false)) ||
+      (result.status === 'event_created' && (result.providerOutcome !== 'accepted_by_provider' || result.eventCreated !== true || result.invitationSent !== null)) ||
       (result.status === 'provider_rejected' && (result.providerOutcome !== 'rejected_by_provider' || result.eventCreated !== false || result.invitationSent !== false)) ||
       (result.status === 'outcome_unknown' && (result.providerOutcome !== 'provider_outcome_unknown' || result.eventCreated !== null || result.invitationSent !== null)) ||
       !['event_created', 'provider_rejected', 'outcome_unknown'].includes(result.status)) {

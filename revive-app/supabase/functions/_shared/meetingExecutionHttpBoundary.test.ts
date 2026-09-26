@@ -38,12 +38,12 @@ test('preflight allows only configured origin and does not invoke service', asyn
 test('default HTTP gate rejects a live result even if an executor returns one', async () => {
   const response = await handleMeetingExecutionHttp(req(ids), { allowedOrigin: origin,
     execute: async () => ({ status: 'event_created', executionId: disabled.executionId,
-      providerOutcome: 'accepted_by_provider', providerInvoked: true, eventCreated: true, invitationSent: false }) });
+      providerOutcome: 'accepted_by_provider', providerInvoked: true, eventCreated: true, invitationSent: null }) });
   assert.equal(response.status, 403);
 });
 test('test enabled HTTP contract distinguishes accepted, rejected and unknown outcomes', async () => {
   for (const [status, outcome, created, invited, httpStatus] of [
-    ['event_created', 'accepted_by_provider', true, false, 200],
+    ['event_created', 'accepted_by_provider', true, null, 200],
     ['provider_rejected', 'rejected_by_provider', false, false, 409],
     ['outcome_unknown', 'provider_outcome_unknown', null, null, 202],
   ] as const) {

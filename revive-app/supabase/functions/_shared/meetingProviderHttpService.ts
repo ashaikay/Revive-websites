@@ -6,7 +6,7 @@ import type { ClaimedMeetingAttempt, RecordedMeetingAttempt } from './trustedMee
  * gates remain independent. No runtime environment variable can override it. */
 export const MEETING_PROVIDER_HTTP_ENABLED = false as boolean;
 export type MeetingProviderHttpResult =
-  | { status: 'event_created'; executionId: string; providerOutcome: 'accepted_by_provider'; providerInvoked: true; eventCreated: true; invitationSent: false }
+  | { status: 'event_created'; executionId: string; providerOutcome: 'accepted_by_provider'; providerInvoked: true; eventCreated: true; invitationSent: null }
   | { status: 'provider_rejected'; executionId: string; providerOutcome: 'rejected_by_provider'; providerInvoked: true; eventCreated: false; invitationSent: false }
   | { status: 'outcome_unknown'; executionId: string; providerOutcome: 'provider_outcome_unknown'; providerInvoked: true; eventCreated: null; invitationSent: null };
 
@@ -48,7 +48,7 @@ export function createMeetingProviderHttpService(deps: Dependencies, enabled: bo
     }
     switch (recorded.outcome) {
       case 'accepted_by_provider': return { status: 'event_created', executionId: reservation.executionId,
-        providerOutcome: recorded.outcome, providerInvoked: true, eventCreated: true, invitationSent: false };
+        providerOutcome: recorded.outcome, providerInvoked: true, eventCreated: true, invitationSent: null };
       case 'rejected_by_provider': return { status: 'provider_rejected', executionId: reservation.executionId,
         providerOutcome: recorded.outcome, providerInvoked: true, eventCreated: false, invitationSent: false };
       case 'provider_outcome_unknown': return { status: 'outcome_unknown', executionId: reservation.executionId,

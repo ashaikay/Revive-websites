@@ -23,10 +23,10 @@ test('default HTTP service only performs authenticated disabled reservation', as
 });
 
 test('test enabled path forwards only durable attempt material and maps all terminal outcomes', async () => {
-  for (const [outcome, status, eventCreated] of [
-    ['accepted_by_provider', 'event_created', true],
-    ['rejected_by_provider', 'provider_rejected', false],
-    ['provider_outcome_unknown', 'outcome_unknown', null],
+  for (const [outcome, status, eventCreated, invitationSent] of [
+    ['accepted_by_provider', 'event_created', true, null],
+    ['rejected_by_provider', 'provider_rejected', false, false],
+    ['provider_outcome_unknown', 'outcome_unknown', null, null],
   ] as const) {
     const calls: string[] = [];
     const run = createMeetingProviderHttpService({
@@ -42,6 +42,7 @@ test('test enabled path forwards only durable attempt material and maps all term
     const result = await run(request);
     assert.equal(result.status, status);
     assert.equal(result.eventCreated, eventCreated);
+    assert.equal(result.invitationSent, invitationSent);
     assert.deepEqual(calls, ['authorized reservation', 'snapshot', 'provider']);
   }
 });
