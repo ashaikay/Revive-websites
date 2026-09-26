@@ -68,7 +68,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
       </dl>
       {proposal.notes && <div className="mt-3 text-sm text-neutral-700"><p className="font-medium text-neutral-900">Notes</p><p className="whitespace-pre-wrap break-words">{proposal.notes}</p></div>}
 
-      <p className="text-xs text-neutral-500 mt-4">Approval records intent only. No calendar event, invitation, email or provider action will occur.</p>
+      <p className="text-xs text-neutral-500 mt-4">Approval does not book an event or send an invitation. No email or provider action will occur.</p>
 
       {canReview && !confirmation && (
         <div className="flex flex-wrap gap-3 mt-4">

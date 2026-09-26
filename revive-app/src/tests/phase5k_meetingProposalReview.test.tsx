@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { MeetingProposalReviewCard } from '@/components/MeetingProposalReviewCard';
-import type { LivePendingAction } from '@/data/supabasePreparedWorkRepository';
+import {
+  SupabasePreparedWorkRepository,
+  type LivePendingAction,
+  type LivePreparedWorkGateway,
+} from '@/data/supabasePreparedWorkRepository';
 
 const action: LivePendingAction = {
   id: 'action-1', workspaceId: 'workspace-1', actionType: 'meeting_proposal', title: 'Discovery call',
@@ -26,8 +30,23 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(markup).toContain('Discuss requirements.');
     expect(markup).toContain('APPROVE PROPOSAL');
     expect(markup).toContain('REJECT PROPOSAL');
+    expect(markup).toContain('Approval does not book an event or send an invitation.');
     expect(markup).not.toContain('secret-internal-fingerprint');
     expect(markup).not.toMatch(/BOOK MEETING|CREATE EVENT|SEND INVITATION/i);
+  });
+
+  it('submits the saved approval version and fingerprint unchanged', async () => {
+    const decideApproval = vi.fn<LivePreparedWorkGateway['decideApproval']>().mockResolvedValue();
+    const repository = new SupabasePreparedWorkRepository({ decideApproval } as unknown as LivePreparedWorkGateway);
+
+    await repository.decidePendingAction(action, 'approved');
+
+    expect(decideApproval).toHaveBeenCalledWith({
+      approvalId: 'approval-1',
+      actionVersion: 1,
+      actionFingerprint: 'a'.repeat(64),
+      decision: 'approved',
+    });
   });
 
   it('keeps decision controls owner/admin-only and fails closed without the trusted snapshot', () => {
