@@ -21,3 +21,34 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: node scripts/verify-rev-meeting.mjs
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - name: Start isolated local Supabase and apply migrations
+        run: npx --yes supabase@2.117.0 start --exclude studio
+      - name: Test durable reservation and provider controls
+        shell: bash
+        run: |
+          while IFS='=' read -r key value; do
+            value="${value%\"}"
+            value="${value#\"}"
+            case "$key" in
+              ANON_KEY) export REV_LOCAL_SUPABASE_ANON_KEY="$value" ;;
+              SERVICE_ROLE_KEY) export REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY="$value" ;;
+            esac
+          done < <(npx --yes supabase@2.117.0 status -o env)
+          test -n "${REV_LOCAL_SUPABASE_ANON_KEY:-}"
+          test -n "${REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY:-}"
+          node src/tests/phase5w_local_claim_validation.mjs
+          node --experimental-strip-types src/tests/phase6f_local_provider_lifecycle.mjs
