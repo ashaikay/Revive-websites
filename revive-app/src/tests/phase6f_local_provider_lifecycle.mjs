@@ -126,7 +126,7 @@ if (sql('select enabled from public.rev_meeting_provider_gate where singleton=tr
   throw new Error('Local provider gate must be off before this test.');
 }
 try {
-  sql('update public.rev_meeting_provider_gate set enabled=true where singleton=true');
+  sql("update public.rev_meeting_provider_gate set enabled=true, allowed_workspace_id='" + workspaceId + "'::uuid where singleton=true");
   lifecycleResult = await createMeetingProviderWorkflow({
     loadGraphRequest: async () => graphRequest,
     claim: lifecycle.claim,
@@ -142,9 +142,9 @@ try {
 } catch (error) {
   lifecycleError = error;
 } finally {
-  sql('update public.rev_meeting_provider_gate set enabled=false where singleton=true');
+  sql('update public.rev_meeting_provider_gate set enabled=false, allowed_workspace_id=null where singleton=true');
 }
-check('LOCAL_GATE_RESTORED_OFF', sql('select enabled from public.rev_meeting_provider_gate where singleton=true') === 'f');
+check('LOCAL_GATE_RESTORED_OFF', sql("select enabled::text || ':' || (allowed_workspace_id is null)::text from public.rev_meeting_provider_gate where singleton=true") === 'false:true');
 check('REAL_DURABLE_CLAIM_AND_RESULT_WITH_FAKE_GRAPH',
   !lifecycleError && graphCalls === 1 && lifecycleResult?.executionId === execution.id &&
   lifecycleResult?.status === 'succeeded' && lifecycleResult?.outcome === 'accepted_by_provider');

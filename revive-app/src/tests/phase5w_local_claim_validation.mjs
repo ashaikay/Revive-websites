@@ -78,17 +78,23 @@ check('OWNER_DURABLE_NO_PROVIDER', accepted.status === 200 && execution?.capabil
 
 if (!execution?.id || !execution?.request_fingerprint) throw new Error('Prepared meeting execution unavailable.');
 check('GATE_DEFAULTS_OFF', sql('select enabled::text from public.rev_meeting_provider_gate where singleton') === 'false');
+check('GATE_REQUIRES_ONE_WORKSPACE', sqlRejectedGateBinding());
+function sqlRejectedGateBinding() {
+  try { sql('update public.rev_meeting_provider_gate set enabled=true where singleton'); return false; } catch { return true; }
+}
 check('TRUSTED_ONLY_CLAIM_AND_RESULT', sql("select has_function_privilege('authenticated','public.claim_rev_meeting_provider_attempt(uuid,text,bigint)','EXECUTE')::text || ':' || has_function_privilege('authenticated','public.record_rev_meeting_provider_result(uuid,text,text)','EXECUTE')::text") === 'false:false');
 function sqlRejected(query) {
   try { sql(query); return false; } catch { return true; }
 }
 const claim = "select public.claim_rev_meeting_provider_attempt('" + execution.id + "'::uuid,'" + execution.request_fingerprint + "',1)";
 check('DISABLED_GATE_DENIES_CLAIM', sqlRejected('begin; set local role service_role; ' + claim + '; rollback;'));
+check('WRONG_WORKSPACE_GATE_DENIES_CLAIM', sqlRejected(
+  "begin; update public.rev_meeting_provider_gate set enabled=true, allowed_workspace_id='" + otherId + "'::uuid where singleton; set local role service_role; " + claim + '; rollback;'));
 // The postgres-only gate change and all provider-state mutations are rolled back together.
 // No Graph call is made. The service_role tests use exactly the RPC grants the backend has.
 function transaction(outcome, reference) {
   const ref = reference === null ? 'null' : "'" + reference + "'";
-  return sql("begin; update public.rev_meeting_provider_gate set enabled=true where singleton; " +
+  return sql("begin; update public.rev_meeting_provider_gate set enabled=true, allowed_workspace_id='" + workspaceId + "'::uuid where singleton; " +
     "set local role service_role; " +
     "select (public.claim_rev_meeting_provider_attempt('" + execution.id + "'::uuid,'" + execution.request_fingerprint + "',1)).provider_outcome; " +
     "select (public.record_rev_meeting_provider_result('" + execution.id + "'::uuid,'" + outcome + "'," + ref + ")).provider_outcome; " +
@@ -100,15 +106,15 @@ for (const [outcome, reference] of [['accepted_by_provider','local-event-id'], [
   check('TRANSIENT_' + outcome.toUpperCase(), output.includes('provider_attempt_claimed') && output.includes(outcome) && output.split('\n').includes('1'));
 }
 check('DUPLICATE_CLAIM_DENIED', sqlRejected(
-  "begin; update public.rev_meeting_provider_gate set enabled=true where singleton; set local role service_role; " +
+  "begin; update public.rev_meeting_provider_gate set enabled=true, allowed_workspace_id='" + workspaceId + "'::uuid where singleton; set local role service_role; " +
   claim + '; ' + claim + '; rollback;'));
 check('DUPLICATE_RESULT_DENIED', sqlRejected(
-  "begin; update public.rev_meeting_provider_gate set enabled=true where singleton; set local role service_role; " +
+  "begin; update public.rev_meeting_provider_gate set enabled=true, allowed_workspace_id='" + workspaceId + "'::uuid where singleton; set local role service_role; " +
   claim + "; select public.record_rev_meeting_provider_result('" + execution.id + "'::uuid,'accepted_by_provider','local-event-id'); " +
   "select public.record_rev_meeting_provider_result('" + execution.id + "'::uuid,'accepted_by_provider','local-event-id'); rollback;"));
 check('ROLLBACK_PRESERVES_DISABLED_RESERVATION',
   sql("select provider_outcome || ':' || status from public.rev_action_executions where id='" + execution.id + "'::uuid") === 'provider_not_invoked:prepared' &&
-  sql('select enabled::text from public.rev_meeting_provider_gate where singleton') === 'false' &&
+  sql('select enabled::text || \':\' || (allowed_workspace_id is null)::text from public.rev_meeting_provider_gate where singleton') === 'false:true' &&
   sql("select count(*) from public.provider_usage_events where execution_id='" + execution.id + "'::uuid") === '0');
 console.log('PHASE5W_LOCAL_CLAIM=' + (failures ? 'FAIL' : 'PASS'));
 if (failures) process.exitCode = 1;
