@@ -1,0 +1,23 @@
+﻿name: REV meeting verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  meeting:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - run: node scripts/verify-rev-meeting.mjs
