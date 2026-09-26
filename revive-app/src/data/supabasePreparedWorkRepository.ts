@@ -249,14 +249,13 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .from('rev_actions')
         .select('*')
         .eq('workspace_id', workspaceId)
-        .eq('status', 'awaiting_approval')
+        .in('status', ['awaiting_approval', 'approved'])
         .eq('requires_approval', true)
         .order('proposed_at', { ascending: false }),
       client
         .from('approvals')
         .select('id,workspace_id,rev_action_id,action_version,action_fingerprint,decision')
-        .eq('workspace_id', workspaceId)
-        .is('decision', null),
+        .eq('workspace_id', workspaceId),
       client
         .from('meeting_proposals')
         .select('rev_action_id,proposal_payload')
@@ -280,6 +279,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     return (actions.data ?? []).flatMap((row) => {
       const action = mapAction(row);
       const approval = approvalByAction.get(action.id);
+      if (action.status === 'approved' && action.actionType !== 'meeting_proposal') return [];
       if (!approval || !approval.action_version || !approval.action_fingerprint) return [];
       return [{
         ...action,

@@ -19,6 +19,7 @@ import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/serv
 import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
 import { MeetingProposalReviewCard } from '@/components/MeetingProposalReviewCard';
 import { CalendarAvailabilityPanel } from '@/components/CalendarAvailabilityPanel';
+import { requestMeetingDryRun, type MeetingDryRunResult } from '@/services/meetingExecutionClient';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -877,6 +878,9 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [inboundError, setInboundError] = useState<string | null>(null);
   const [checkingInbox, setCheckingInbox] = useState(false);
   const [meetingDecisionNotice, setMeetingDecisionNotice] = useState<{ title: string; decision: 'approved' | 'rejected' } | null>(null);
+  const [meetingExecutionBusyId, setMeetingExecutionBusyId] = useState<string | null>(null);
+  const [meetingExecutionErrors, setMeetingExecutionErrors] = useState<Record<string, string>>({});
+  const [meetingExecutionResults, setMeetingExecutionResults] = useState<Record<string, MeetingDryRunResult>>({});
 
   const handleCheckInbox = async () => {
     setCheckingInbox(true);
@@ -965,7 +969,24 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     discoveryCandidates: [],
   }) : undefined;
   const canReview = context?.membership?.role === 'owner' || context?.membership?.role === 'admin';
+  const hasPendingActions = pendingActions.some((action) => action.status === 'awaiting_approval');
 
+  const handleMeetingDryRun = async (action: LivePendingAction) => {
+    if (meetingExecutionBusyId || meetingExecutionResults[action.id]) return;
+    setMeetingExecutionBusyId(action.id);
+    setMeetingExecutionErrors((current) => ({ ...current, [action.id]: '' }));
+    try {
+      const result = await requestMeetingDryRun(workspaceId, action.id);
+      setMeetingExecutionResults((current) => ({ ...current, [action.id]: result }));
+    } catch (executionError) {
+      setMeetingExecutionErrors((current) => ({
+        ...current,
+        [action.id]: executionError instanceof Error ? executionError.message : 'Meeting dry-run reservation failed.',
+      }));
+    } finally {
+      setMeetingExecutionBusyId(null);
+    }
+  };
 
   const runChange = async (id: string, operation: () => Promise<unknown>): Promise<boolean> => {
     setBusyId(id);
@@ -988,7 +1009,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
         <p className="text-xs font-semibold tracking-[0.2em] text-primary-100">REV LIVE</p>
         <h1 className="text-3xl font-bold mt-1">Your AI Growth Employee</h1>
         <span className="badge bg-white/15 text-white mt-4 inline-block" role="status">
-          {loading ? 'Loading workspace' : (preparedFollowUps.some((item) => item.approvalState === 'pending') || pendingActions.length > 0) ? 'Waiting for approval' : 'Ready'}
+          {loading ? 'Loading workspace' : (preparedFollowUps.some((item) => item.approvalState === 'pending') || hasPendingActions) ? 'Waiting for approval' : 'Ready'}
         </span>
 
         {canReview && (
@@ -1045,7 +1066,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
       {!loading && pendingActions.length > 0 && (
         <section aria-labelledby="live-actions-heading" className="rev-motion-in">
           <h2 id="live-actions-heading" className="text-xl font-bold text-neutral-900 mb-4">
-            REV NEEDS YOUR APPROVAL
+            {hasPendingActions ? 'REV NEEDS YOUR APPROVAL' : 'APPROVED MEETING PROPOSALS'}
           </h2>
           <div className="card divide-y divide-neutral-100">
             {pendingActions.map((action) => action.actionType === 'meeting_proposal' ? (
@@ -1054,6 +1075,10 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 action={action}
                 canReview={canReview}
                 busy={busyId === action.id}
+                executionBusy={meetingExecutionBusyId === action.id}
+                executionError={meetingExecutionErrors[action.id]}
+                executionResult={meetingExecutionResults[action.id]}
+                onRequestDryRun={() => handleMeetingDryRun(action)}
                 onDecision={async (decision) => {
                   const succeeded = await runChange(action.id, () => repository.decidePendingAction(action, decision));
                   if (succeeded) setMeetingDecisionNotice({ title: action.title, decision });

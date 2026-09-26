@@ -7,6 +7,11 @@ import {
   type LivePendingAction,
   type LivePreparedWorkGateway,
 } from '@/data/supabasePreparedWorkRepository';
+import {
+  requestMeetingDryRun,
+  type MeetingDryRunResult,
+  type MeetingExecutionInvoker,
+} from '@/services/meetingExecutionClient';
 
 const action: LivePendingAction = {
   id: 'action-1', workspaceId: 'workspace-1', actionType: 'meeting_proposal', title: 'Discovery call',
@@ -18,6 +23,14 @@ const action: LivePendingAction = {
     endAt: '2030-09-30T09:30:00.000Z', timezone: 'Europe/London', meetingMethod: 'online',
     locationDetails: 'Teams details supplied after booking', notes: 'Discuss requirements.',
   },
+};
+
+const requestId = '11111111-1111-4111-8111-111111111111';
+const executionId = '22222222-2222-4222-8222-222222222222';
+const disabledResult: MeetingDryRunResult = {
+  status: 'provider_disabled', displayStatus: 'DRY RUN — NOTHING BOOKED', executionEnabled: false,
+  providerInvoked: false, eventCreated: false, executionId, correlationId: requestId,
+  providerOutcome: 'provider_not_invoked',
 };
 
 describe('Phase 5K supervised meeting proposal review', () => {
@@ -56,6 +69,49 @@ describe('Phase 5K supervised meeting proposal review', () => {
     const unavailableMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={{ ...action, meetingProposal: undefined }} canReview busy={false} onDecision={vi.fn()} />);
     expect(unavailableMarkup).toContain('Meeting proposal unavailable');
     expect(unavailableMarkup).not.toContain('APPROVE PROPOSAL');
+  });
+
+  it('offers an owner/admin one-shot reservation only after approval', () => {
+    const approved = { ...action, status: 'approved' as const };
+    const ownerMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} onRequestDryRun={vi.fn()} />);
+    const busyMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionBusy onRequestDryRun={vi.fn()} />);
+    const memberMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview={false} busy={false} onDecision={vi.fn()} onRequestDryRun={vi.fn()} />);
+    const completedMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionResult={disabledResult} onRequestDryRun={vi.fn()} />);
+
+    expect(ownerMarkup).toContain('RECORD DRY-RUN RESERVATION');
+    expect(ownerMarkup).not.toContain('APPROVE PROPOSAL');
+    expect(busyMarkup).toMatch(/<button[^>]*disabled=""[^>]*>RECORDING\.\.\.<\/button>/);
+    expect(memberMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
+    expect(completedMarkup).toContain('DRY RUN — NOTHING BOOKED');
+    expect(completedMarkup).toContain('no invitation was sent');
+    expect(completedMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
+  });
+
+  it('sends only generated request, workspace and action IDs and accepts the disabled envelope', async () => {
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
+    const invoke = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({ data: disabledResult, error: null });
+
+    await expect(requestMeetingDryRun('workspace-1', 'action-1', invoke)).resolves.toEqual(disabledResult);
+    expect(invoke).toHaveBeenCalledWith('rev-meeting-execute', {
+      body: { requestId, workspaceId: 'workspace-1', actionId: 'action-1' },
+    });
+    expect(Object.keys(invoke.mock.calls[0][1].body)).toEqual(['requestId', 'workspaceId', 'actionId']);
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    { status: 'event_created' },
+    { executionEnabled: true },
+    { providerInvoked: true },
+    { eventCreated: true },
+    { providerOutcome: 'accepted_by_provider' },
+    { executionId: 'invalid' },
+    { correlationId: '33333333-3333-4333-8333-333333333333' },
+  ])('rejects an unsafe meeting execution response: %o', async (override) => {
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
+    const invoke = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({ data: { ...disabledResult, ...override }, error: null });
+    await expect(requestMeetingDryRun('workspace-1', 'action-1', invoke)).rejects.toThrow(/unsafe response/);
+    vi.restoreAllMocks();
   });
 
   it('reuses the fingerprint-bound owner/admin approval RPC and introduces no provider mutation', () => {

@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import type { LivePendingAction } from '@/data/supabasePreparedWorkRepository';
+import type { MeetingDryRunResult } from '@/services/meetingExecutionClient';
 
 export interface MeetingProposalReviewCardProps {
   action: LivePendingAction;
   canReview: boolean;
   busy: boolean;
   onDecision: (decision: 'approved' | 'rejected') => Promise<void>;
+  executionBusy?: boolean;
+  executionError?: string;
+  executionResult?: MeetingDryRunResult;
+  onRequestDryRun?: () => Promise<void>;
 }
 
 function formatMeetingDate(value: string, timezone: string): string {
@@ -37,6 +42,10 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   canReview,
   busy,
   onDecision,
+  executionBusy = false,
+  executionError,
+  executionResult,
+  onRequestDryRun,
 }) => {
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
   const proposal = action.meetingProposal;
@@ -57,7 +66,9 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
           <p id={`meeting-proposal-${action.id}`} className="font-semibold text-neutral-900">{proposal.title}</p>
           <p className="text-sm text-neutral-600 mt-1">Attendee: {proposal.attendeeEmail}</p>
         </div>
-        <span className="badge-warning whitespace-nowrap">MEETING PROPOSAL — NOT BOOKED</span>
+        <span className={action.status === 'approved' ? 'badge-success whitespace-nowrap' : 'badge-warning whitespace-nowrap'}>
+          {action.status === 'approved' ? 'APPROVED — NOT BOOKED' : 'MEETING PROPOSAL — NOT BOOKED'}
+        </span>
       </div>
 
       <dl className="grid gap-2 mt-4 text-sm text-neutral-700 sm:grid-cols-2">
@@ -70,14 +81,14 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
 
       <p className="text-xs text-neutral-500 mt-4">Approval does not book an event or send an invitation. No email or provider action will occur.</p>
 
-      {canReview && !confirmation && (
+      {canReview && action.status === 'awaiting_approval' && !confirmation && (
         <div className="flex flex-wrap gap-3 mt-4">
           <button type="button" className="btn-primary text-sm" disabled={busy} onClick={() => setConfirmation('approved')}>APPROVE PROPOSAL</button>
           <button type="button" className="btn-secondary text-sm" disabled={busy} onClick={() => setConfirmation('rejected')}>REJECT PROPOSAL</button>
         </div>
       )}
 
-      {canReview && confirmation && (
+      {canReview && action.status === 'awaiting_approval' && confirmation && (
         <div className="mt-4 rounded border border-neutral-200 bg-neutral-50 p-4">
           <p className="text-sm text-neutral-800">
             {confirmation === 'approved'
@@ -90,6 +101,20 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
             </button>
             <button type="button" className="btn-ghost text-sm" disabled={busy} onClick={() => setConfirmation(null)}>CANCEL</button>
           </div>
+        </div>
+      )}
+
+      {canReview && action.status === 'approved' && onRequestDryRun && !executionResult && (
+        <button type="button" className="btn-secondary text-sm mt-4" disabled={executionBusy} onClick={onRequestDryRun}>
+          {executionBusy ? 'RECORDING...' : 'RECORD DRY-RUN RESERVATION'}
+        </button>
+      )}
+
+      {executionError && <p className="text-sm text-red-700 mt-3" role="alert">{executionError}</p>}
+      {executionResult && (
+        <div className="mt-4 rounded border border-green-200 bg-green-50 p-4" role="status">
+          <p className="font-semibold text-green-900">DRY RUN — NOTHING BOOKED</p>
+          <p className="text-sm text-green-800 mt-1">The reservation was recorded. No calendar event was created and no invitation was sent.</p>
         </div>
       )}
     </article>
