@@ -1,4 +1,4 @@
-﻿name: REV meeting verification
+name: REV meeting verification
 
 on:
   push:
@@ -21,6 +21,7 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: node scripts/verify-rev-meeting.mjs
+      - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx
 
   database:
     runs-on: ubuntu-latest
