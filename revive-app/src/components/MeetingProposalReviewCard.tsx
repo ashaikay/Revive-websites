@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { LivePendingAction } from '@/data/supabasePreparedWorkRepository';
-import type { MeetingDryRunResult } from '@/services/meetingExecutionClient';
+import type { MeetingExecutionResult } from '@/services/meetingExecutionClient';
 
 export interface MeetingProposalReviewCardProps {
   action: LivePendingAction;
@@ -9,7 +9,7 @@ export interface MeetingProposalReviewCardProps {
   onDecision: (decision: 'approved' | 'rejected') => Promise<void>;
   executionBusy?: boolean;
   executionError?: string;
-  executionResult?: MeetingDryRunResult;
+  executionResult?: MeetingExecutionResult;
   onRequestDryRun?: () => Promise<void>;
 }
 
@@ -37,6 +37,37 @@ function meetingMethodLabel(method: 'online' | 'phone' | 'in_person'): string {
   return method === 'phone' ? 'Phone' : 'Online';
 }
 
+function executionPresentation(result: MeetingExecutionResult) {
+  switch (result.status) {
+    case 'event_created': return {
+      title: 'EVENT CREATED',
+      message: 'The provider confirmed event creation. Invitation delivery was not confirmed.',
+      tone: 'border-green-200 bg-green-50 text-green-900',
+    };
+    case 'provider_rejected': return {
+      title: 'EVENT NOT CREATED',
+      message: 'The provider rejected the request. No calendar event was created and no invitation was sent.',
+      tone: 'border-red-200 bg-red-50 text-red-900',
+    };
+    case 'outcome_unknown': return {
+      title: 'OUTCOME UNKNOWN — CHECK CALENDAR',
+      message: 'Event creation and invitation delivery could not be confirmed. Check the calendar before retrying.',
+      tone: 'border-amber-200 bg-amber-50 text-amber-900',
+    };
+    default: return {
+      title: 'DRY RUN — NOTHING BOOKED',
+      message: 'The reservation was recorded. No calendar event was created and no invitation was sent.',
+      tone: 'border-green-200 bg-green-50 text-green-900',
+    };
+  }
+}
+
+function proposalStatusLabel(result: MeetingExecutionResult | undefined): string {
+  if (result?.status === 'event_created') return 'EVENT CREATED';
+  if (result?.status === 'outcome_unknown') return 'OUTCOME UNKNOWN';
+  return 'APPROVED — NOT BOOKED';
+}
+
 export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps> = ({
   action,
   canReview,
@@ -50,6 +81,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
   const proposal = action.meetingProposal;
   const displayedExecution = executionResult ?? action.meetingDryRun;
+  const presentation = displayedExecution ? executionPresentation(displayedExecution) : undefined;
 
   if (!proposal) {
     return (
@@ -68,7 +100,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
           <p className="text-sm text-neutral-600 mt-1">Attendee: {proposal.attendeeEmail}</p>
         </div>
         <span className={action.status === 'approved' ? 'badge-success whitespace-nowrap' : 'badge-warning whitespace-nowrap'}>
-          {action.status === 'approved' ? 'APPROVED — NOT BOOKED' : 'MEETING PROPOSAL — NOT BOOKED'}
+          {action.status === 'approved' ? proposalStatusLabel(displayedExecution) : 'MEETING PROPOSAL — NOT BOOKED'}
         </span>
       </div>
 
@@ -80,7 +112,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
       </dl>
       {proposal.notes && <div className="mt-3 text-sm text-neutral-700"><p className="font-medium text-neutral-900">Notes</p><p className="whitespace-pre-wrap break-words">{proposal.notes}</p></div>}
 
-      <p className="text-xs text-neutral-500 mt-4">Approval does not book an event or send an invitation. No email or provider action will occur.</p>
+      <p className="text-xs text-neutral-500 mt-4">Approval alone does not book an event or prove invitation delivery. Any later execution result is shown separately.</p>
 
       {canReview && action.status === 'awaiting_approval' && !confirmation && (
         <div className="flex flex-wrap gap-3 mt-4">
@@ -112,10 +144,10 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
       )}
 
       {executionError && <p className="text-sm text-red-700 mt-3" role="alert">{executionError}</p>}
-      {displayedExecution && (
-        <div className="mt-4 rounded border border-green-200 bg-green-50 p-4" role="status">
-          <p className="font-semibold text-green-900">DRY RUN — NOTHING BOOKED</p>
-          <p className="text-sm text-green-800 mt-1">The reservation was recorded. No calendar event was created and no invitation was sent.</p>
+      {presentation && (
+        <div className={`mt-4 rounded border p-4 ${presentation.tone}`} role="status">
+          <p className="font-semibold">{presentation.title}</p>
+          <p className="text-sm mt-1">{presentation.message}</p>
         </div>
       )}
     </article>

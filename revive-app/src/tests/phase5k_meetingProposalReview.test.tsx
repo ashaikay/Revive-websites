@@ -8,8 +8,9 @@ import {
   type LivePreparedWorkGateway,
 } from '@/data/supabasePreparedWorkRepository';
 import {
-  requestMeetingDryRun,
+  requestMeetingExecution,
   type MeetingDryRunResult,
+  type MeetingProviderResult,
   type MeetingExecutionInvoker,
 } from '@/services/meetingExecutionClient';
 
@@ -32,6 +33,11 @@ const disabledResult: MeetingDryRunResult = {
   providerInvoked: false, eventCreated: false, executionId, correlationId: requestId,
   providerOutcome: 'provider_not_invoked',
 };
+const providerResults: MeetingProviderResult[] = [
+  { status: 'event_created', executionId, providerOutcome: 'accepted_by_provider', providerInvoked: true, eventCreated: true, invitationSent: null },
+  { status: 'provider_rejected', executionId, providerOutcome: 'rejected_by_provider', providerInvoked: true, eventCreated: false, invitationSent: false },
+  { status: 'outcome_unknown', executionId, providerOutcome: 'provider_outcome_unknown', providerInvoked: true, eventCreated: null, invitationSent: null },
+];
 
 describe('Phase 5K supervised meeting proposal review', () => {
   it('renders the exact proposal snapshot without internal markers or mutation claims', () => {
@@ -43,7 +49,7 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(markup).toContain('Discuss requirements.');
     expect(markup).toContain('APPROVE PROPOSAL');
     expect(markup).toContain('REJECT PROPOSAL');
-    expect(markup).toContain('Approval does not book an event or send an invitation.');
+    expect(markup).toContain('Approval alone does not book an event or prove invitation delivery.');
     expect(markup).not.toContain('secret-internal-fingerprint');
     expect(markup).not.toMatch(/BOOK MEETING|CREATE EVENT|SEND INVITATION/i);
   });
@@ -96,12 +102,35 @@ describe('Phase 5K supervised meeting proposal review', () => {
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
     const invoke = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({ data: disabledResult, error: null });
 
-    await expect(requestMeetingDryRun('workspace-1', 'action-1', invoke)).resolves.toEqual(disabledResult);
+    await expect(requestMeetingExecution('workspace-1', 'action-1', invoke)).resolves.toEqual(disabledResult);
     expect(invoke).toHaveBeenCalledWith('rev-meeting-execute', {
       body: { requestId, workspaceId: 'workspace-1', actionId: 'action-1' },
     });
     expect(Object.keys(invoke.mock.calls[0][1].body)).toEqual(['requestId', 'workspaceId', 'actionId']);
     vi.restoreAllMocks();
+  });
+
+  it.each(providerResults)('accepts the existing server response: $status', async (result) => {
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
+    const invoke = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({ data: result, error: null });
+    await expect(requestMeetingExecution('workspace-1', 'action-1', invoke)).resolves.toEqual(result);
+    vi.restoreAllMocks();
+  });
+
+  it('renders provider outcomes without claiming unproven invitation delivery', () => {
+    const approved = { ...action, status: 'approved' as const };
+    const createdMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionResult={providerResults[0]} />);
+    const rejectedMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionResult={providerResults[1]} />);
+    const unknownMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionResult={providerResults[2]} />);
+
+    expect(createdMarkup).toContain('EVENT CREATED');
+    expect(createdMarkup).toContain('Invitation delivery was not confirmed.');
+    expect(createdMarkup).not.toMatch(/invitation (?:was )?sent/i);
+    expect(rejectedMarkup).toContain('EVENT NOT CREATED');
+    expect(rejectedMarkup).toContain('no invitation was sent');
+    expect(unknownMarkup).toContain('OUTCOME UNKNOWN — CHECK CALENDAR');
+    expect(unknownMarkup).toContain('Event creation and invitation delivery could not be confirmed.');
+    expect(unknownMarkup).toContain('Check the calendar before retrying.');
   });
 
   it.each([
@@ -115,7 +144,7 @@ describe('Phase 5K supervised meeting proposal review', () => {
   ])('rejects an unsafe meeting execution response: %o', async (override) => {
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
     const invoke = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({ data: { ...disabledResult, ...override }, error: null });
-    await expect(requestMeetingDryRun('workspace-1', 'action-1', invoke)).rejects.toThrow(/unsafe response/);
+    await expect(requestMeetingExecution('workspace-1', 'action-1', invoke)).rejects.toThrow(/unsafe response/);
     vi.restoreAllMocks();
   });
 

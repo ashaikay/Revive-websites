@@ -19,7 +19,7 @@ import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/serv
 import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
 import { MeetingProposalReviewCard } from '@/components/MeetingProposalReviewCard';
 import { CalendarAvailabilityPanel } from '@/components/CalendarAvailabilityPanel';
-import { requestMeetingDryRun, type MeetingDryRunResult } from '@/services/meetingExecutionClient';
+import { requestMeetingExecution, type MeetingExecutionResult } from '@/services/meetingExecutionClient';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -880,7 +880,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [meetingDecisionNotice, setMeetingDecisionNotice] = useState<{ title: string; decision: 'approved' | 'rejected' } | null>(null);
   const [meetingExecutionBusyId, setMeetingExecutionBusyId] = useState<string | null>(null);
   const [meetingExecutionErrors, setMeetingExecutionErrors] = useState<Record<string, string>>({});
-  const [meetingExecutionResults, setMeetingExecutionResults] = useState<Record<string, MeetingDryRunResult>>({});
+  const [meetingExecutionResults, setMeetingExecutionResults] = useState<Record<string, MeetingExecutionResult>>({});
 
   const handleCheckInbox = async () => {
     setCheckingInbox(true);
@@ -976,7 +976,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     setMeetingExecutionBusyId(action.id);
     setMeetingExecutionErrors((current) => ({ ...current, [action.id]: '' }));
     try {
-      const result = await requestMeetingDryRun(workspaceId, action.id);
+      const result = await requestMeetingExecution(workspaceId, action.id);
       setMeetingExecutionResults((current) => ({ ...current, [action.id]: result }));
     } catch (executionError) {
       setMeetingExecutionErrors((current) => ({
