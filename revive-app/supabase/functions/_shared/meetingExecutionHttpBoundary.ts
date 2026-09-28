@@ -1,5 +1,5 @@
 import type { MeetingEventExecutionResult } from './meetingEventExecutionBoundary.ts';
-import { MEETING_PROVIDER_HTTP_ENABLED, type MeetingProviderHttpResult } from './meetingProviderHttpService.ts';
+import type { MeetingProviderHttpResult } from './meetingProviderHttpService.ts';
 
 export interface MeetingExecutionHttpDependencies {
   execute: (input: unknown, authorization: string) => Promise<MeetingEventExecutionResult | MeetingProviderHttpResult>;
@@ -11,7 +11,7 @@ const json = (status: number, body: object, origin: string) => new Response(JSON
 });
 /** HTTP shell only. Identity and durable authorization remain in the server service and RPC. */
 export async function handleMeetingExecutionHttp(request: Request, deps: MeetingExecutionHttpDependencies,
-  allowLive: boolean = MEETING_PROVIDER_HTTP_ENABLED): Promise<Response> {
+  liveWorkspaceId: string | null = null): Promise<Response> {
   const origin = request.headers.get('Origin');
   if (!deps.allowedOrigin || origin !== deps.allowedOrigin) return new Response(null, { status: 403 });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
@@ -40,7 +40,9 @@ export async function handleMeetingExecutionHttp(request: Request, deps: Meeting
       }
       return json(200, result, deps.allowedOrigin);
     }
-    if (!allowLive || !/^[0-9a-f-]{36}$/i.test(result.executionId) ||
+    const requestedWorkspaceId = body && typeof body === 'object' && !Array.isArray(body)
+      ? String((body as Record<string, unknown>).workspaceId ?? '').toLowerCase() : '';
+    if (!liveWorkspaceId || requestedWorkspaceId !== liveWorkspaceId || !/^[0-9a-f-]{36}$/i.test(result.executionId) ||
       result.providerInvoked !== true ||
       (result.status === 'event_created' && (result.providerOutcome !== 'accepted_by_provider' || result.eventCreated !== true || result.invitationSent !== null)) ||
       (result.status === 'provider_rejected' && (result.providerOutcome !== 'rejected_by_provider' || result.eventCreated !== false || result.invitationSent !== false)) ||

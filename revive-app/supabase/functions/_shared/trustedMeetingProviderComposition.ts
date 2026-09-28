@@ -8,13 +8,13 @@ import { createMicrosoftGraphCalendarEvent } from './microsoftGraphCalendarEvent
 export interface TrustedMeetingProviderCompositionDependencies {
   trustedClient: TrustedMeetingReadClient & MeetingProviderAttemptClient;
   trustedWorkspaceId: string;
+  liveWorkspaceId: string;
   primaryMailboxUserPrincipalName: string;
   getAccessToken: () => Promise<string>;
   // A test may supply a fake transport. Production uses the existing Graph adapter.
   invokeGraph?: MeetingProviderWorkflowDependencies['invokeGraph'];
 }
 
-/** The default workflow gate is off. No caller-supplied flag can enable it. */
 export function createTrustedMeetingProviderComposition(deps: TrustedMeetingProviderCompositionDependencies) {
   const loadSnapshot = createTrustedMeetingExecutionReadModel(deps.trustedClient);
   const providerAttempt = createTrustedMeetingProviderAttempt(deps.trustedClient);
@@ -38,6 +38,6 @@ export function createTrustedMeetingProviderComposition(deps: TrustedMeetingProv
       record: providerAttempt.record,
       invokeGraph: deps.invokeGraph ?? createMicrosoftGraphCalendarEvent,
     });
-    return workflow(attempt);
+    return workflow(attempt, deps.liveWorkspaceId === deps.trustedWorkspaceId);
   };
 }

@@ -2,6 +2,7 @@ import { createTrustedMeetingProviderComposition, type TrustedMeetingProviderCom
 import { createTrustedMeetingGraphTokenSupplier } from './trustedMeetingGraphTokenSupplier.ts';
 
 type ServerInput = Pick<TrustedMeetingProviderCompositionDependencies, 'trustedClient' | 'invokeGraph'> & {
+  liveWorkspaceId: string;
   getEnvironment: (key: string) => string | undefined;
   tokenFetch?: typeof fetch;
 };
@@ -11,7 +12,7 @@ const required = (value: string | undefined) => value?.trim() || '';
 /** Reads existing server configuration. Microsoft secrets are accessed lazily,
  * only after the hard provider workflow gate and trusted snapshot checks. */
 export function createTrustedMeetingProviderServer(input: ServerInput) {
-  const workspaceId = required(input.getEnvironment('REV_CALENDAR_AVAILABILITY_WORKSPACE_ID'));
+  const workspaceId = required(input.getEnvironment('REV_CALENDAR_AVAILABILITY_WORKSPACE_ID')).toLowerCase();
   const mailbox = required(input.getEnvironment('REV_CALENDAR_AVAILABILITY_PRIMARY_MAILBOX'));
   if (!uuid.test(workspaceId) || !mailbox || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox)) {
     throw new Error('Trusted meeting provider configuration unavailable.');
@@ -19,6 +20,7 @@ export function createTrustedMeetingProviderServer(input: ServerInput) {
   return createTrustedMeetingProviderComposition({
     trustedClient: input.trustedClient,
     trustedWorkspaceId: workspaceId,
+    liveWorkspaceId: input.liveWorkspaceId,
     primaryMailboxUserPrincipalName: mailbox,
     getAccessToken: createTrustedMeetingGraphTokenSupplier(() => ({
       tenantId: required(input.getEnvironment('MICROSOFT_GRAPH_TENANT_ID')),

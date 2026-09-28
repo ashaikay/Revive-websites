@@ -18,6 +18,7 @@ test('disabled composition never reads configuration or contacts Microsoft token
   const execute = createTrustedMeetingProviderComposition({
     trustedClient: { from: () => { calls.push('database'); throw new Error('read reached'); }, rpc: () => { calls.push('RPC'); throw new Error('RPC reached'); } } as never,
     trustedWorkspaceId: '11111111-1111-4111-8111-111111111111',
+    liveWorkspaceId: '55555555-5555-4555-8555-555555555555',
     primaryMailboxUserPrincipalName: 'owner@example.test',
     getAccessToken: tokenSupplier,
     invokeGraph: async () => { calls.push('Graph'); throw new Error('Graph reached'); },

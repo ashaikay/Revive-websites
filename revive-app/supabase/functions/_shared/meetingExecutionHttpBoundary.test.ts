@@ -50,9 +50,17 @@ test('test enabled HTTP contract distinguishes accepted, rejected and unknown ou
     const body = { status, executionId: disabled.executionId, providerOutcome: outcome,
       providerInvoked: true as const, eventCreated: created, invitationSent: invited };
     const response = await handleMeetingExecutionHttp(req(ids), { allowedOrigin: origin,
-      execute: async () => body }, true);
+      execute: async () => body }, ids.workspaceId);
     assert.equal(response.status, httpStatus);
     assert.deepEqual(await response.json(), body);
     assert.equal(response.headers.get('Cache-Control'), 'no-store');
   }
+});
+
+test('live HTTP result cannot cross the activated workspace boundary', async () => {
+  const response = await handleMeetingExecutionHttp(req(ids), { allowedOrigin: origin,
+    execute: async () => ({ status: 'event_created', executionId: disabled.executionId,
+      providerOutcome: 'accepted_by_provider', providerInvoked: true, eventCreated: true, invitationSent: null })
+  }, '55555555-5555-4555-8555-555555555555');
+  assert.equal(response.status, 403);
 });

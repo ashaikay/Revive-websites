@@ -5,11 +5,16 @@ import { createMeetingProviderHttpService } from '../_shared/meetingProviderHttp
 import { createTrustedMeetingExecutionReadModel, type TrustedMeetingReadClient } from '../_shared/trustedMeetingExecutionReadModel.ts';
 import { createTrustedMeetingProviderServer } from '../_shared/trustedMeetingProviderServer.ts';
 import type { MeetingProviderAttemptClient } from '../_shared/trustedMeetingProviderAttempt.ts';
+import { resolveMeetingProviderLiveWorkspace } from '../_shared/meetingProviderActivation.ts';
 
 const url = Deno.env.get('SUPABASE_URL')!;
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const allowedOrigin = Deno.env.get('REV_MEETING_EXECUTION_ALLOWED_ORIGIN') ?? '';
+const liveWorkspaceId = resolveMeetingProviderLiveWorkspace(
+  Deno.env.get('REV_MEETING_PROVIDER_LIVE_WORKSPACE_ID'),
+  Deno.env.get('REV_CALENDAR_AVAILABILITY_WORKSPACE_ID'),
+);
 
 Deno.serve(request => handleMeetingExecutionHttp(request, {
   allowedOrigin,
@@ -27,8 +32,9 @@ Deno.serve(request => handleMeetingExecutionHttp(request, {
       loadSnapshot: createTrustedMeetingExecutionReadModel(providerClient),
       createProvider: () => createTrustedMeetingProviderServer({
         trustedClient: providerClient,
+        liveWorkspaceId: liveWorkspaceId!,
         getEnvironment: key => Deno.env.get(key),
       }),
-    })(input);
+    }, liveWorkspaceId)(input);
   },
-}));
+}, liveWorkspaceId));

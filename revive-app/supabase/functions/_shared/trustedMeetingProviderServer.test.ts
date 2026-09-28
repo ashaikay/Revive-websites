@@ -11,6 +11,7 @@ const attempt = {
 test('existing server settings configure the composed provider; disabled gate reads no credentials or durable records', async () => {
   const reads: string[] = [];
   const run = createTrustedMeetingProviderServer({
+    liveWorkspaceId: '44444444-4444-4444-8444-444444444444',
     getEnvironment: key => {
       reads.push(key);
       return ({
@@ -34,6 +35,7 @@ test('existing server settings configure the composed provider; disabled gate re
 
 test('missing server workspace or mailbox fails before provider workflow construction', () => {
   assert.throws(() => createTrustedMeetingProviderServer({
+    liveWorkspaceId: workspace,
     getEnvironment: () => undefined,
     trustedClient: {} as never,
   }), /configuration unavailable/);

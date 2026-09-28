@@ -11,6 +11,7 @@ test('composed real adapters remain unreachable behind the hard default gate', a
   const execute = createTrustedMeetingProviderComposition({
     trustedClient: client as never,
     trustedWorkspaceId: '11111111-1111-4111-8111-111111111111',
+    liveWorkspaceId: '44444444-4444-4444-8444-444444444444',
     primaryMailboxUserPrincipalName: 'owner@example.test',
     getAccessToken: async () => { calls.push('credential'); throw new Error('token reached'); },
     invokeGraph: async () => { calls.push('Graph'); throw new Error('Graph reached'); },

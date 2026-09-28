@@ -38,7 +38,7 @@ test('test enabled path forwards only durable attempt material and maps all term
         return { executionId: reservation.executionId, outcome,
           status: outcome === 'accepted_by_provider' ? 'succeeded' : 'failed' };
       }; },
-    }, true);
+    }, request.workspaceId);
     const result = await run(request);
     assert.equal(result.status, status);
     assert.equal(result.eventCreated, eventCreated);
@@ -53,7 +53,18 @@ test('test enabled path refuses mismatched durable snapshot before provider cons
     executeDisabled: async () => reservation,
     loadSnapshot: async () => ({ ...snapshot, workspaceId: 'other-workspace' }) as never,
     createProvider: () => { constructed = true; throw new Error('provider constructed'); },
-  }, true);
+  }, request.workspaceId);
   await assert.rejects(run(request), /snapshot mismatch/);
   assert.equal(constructed, false);
+});
+
+test('activation for another workspace stays disabled before snapshot and provider construction', async () => {
+  const calls: string[] = [];
+  const run = createMeetingProviderHttpService({
+    executeDisabled: async () => { calls.push('authorized reservation'); return reservation; },
+    loadSnapshot: async () => { calls.push('snapshot'); throw new Error('snapshot reached'); },
+    createProvider: () => { calls.push('provider'); throw new Error('provider constructed'); },
+  }, '55555555-5555-4555-8555-555555555555');
+  assert.deepEqual(await run(request), reservation);
+  assert.deepEqual(calls, ['authorized reservation']);
 });
