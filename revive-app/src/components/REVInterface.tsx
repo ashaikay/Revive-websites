@@ -972,7 +972,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const hasPendingActions = pendingActions.some((action) => action.status === 'awaiting_approval');
 
   const handleMeetingDryRun = async (action: LivePendingAction) => {
-    if (meetingExecutionBusyId || meetingExecutionResults[action.id]) return;
+    if (meetingExecutionBusyId || meetingExecutionResults[action.id] || action.meetingDryRun) return;
     setMeetingExecutionBusyId(action.id);
     setMeetingExecutionErrors((current) => ({ ...current, [action.id]: '' }));
     try {

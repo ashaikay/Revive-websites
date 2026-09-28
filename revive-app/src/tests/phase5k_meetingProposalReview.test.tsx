@@ -85,6 +85,11 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(completedMarkup).toContain('DRY RUN — NOTHING BOOKED');
     expect(completedMarkup).toContain('no invitation was sent');
     expect(completedMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
+
+    const refreshedMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={{ ...approved, meetingDryRun: disabledResult }} canReview busy={false} onDecision={vi.fn()} onRequestDryRun={vi.fn()} />);
+    expect(refreshedMarkup).toContain('DRY RUN — NOTHING BOOKED');
+    expect(refreshedMarkup).toContain('no invitation was sent');
+    expect(refreshedMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
   });
 
   it('sends only generated request, workspace and action IDs and accepts the disabled envelope', async () => {

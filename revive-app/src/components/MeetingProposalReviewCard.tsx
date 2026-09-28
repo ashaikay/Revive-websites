@@ -49,6 +49,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
 }) => {
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
   const proposal = action.meetingProposal;
+  const displayedExecution = executionResult ?? action.meetingDryRun;
 
   if (!proposal) {
     return (
@@ -104,14 +105,14 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         </div>
       )}
 
-      {canReview && action.status === 'approved' && onRequestDryRun && !executionResult && (
+      {canReview && action.status === 'approved' && onRequestDryRun && !displayedExecution && (
         <button type="button" className="btn-secondary text-sm mt-4" disabled={executionBusy} onClick={onRequestDryRun}>
           {executionBusy ? 'RECORDING...' : 'RECORD DRY-RUN RESERVATION'}
         </button>
       )}
 
       {executionError && <p className="text-sm text-red-700 mt-3" role="alert">{executionError}</p>}
-      {executionResult && (
+      {displayedExecution && (
         <div className="mt-4 rounded border border-green-200 bg-green-50 p-4" role="status">
           <p className="font-semibold text-green-900">DRY RUN — NOTHING BOOKED</p>
           <p className="text-sm text-green-800 mt-1">The reservation was recorded. No calendar event was created and no invitation was sent.</p>

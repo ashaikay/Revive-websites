@@ -18,6 +18,7 @@ import { buildPreparedFollowUpDraft } from '@/services/preparedFollowUpDraft';
 import { analyzeRecovery } from '@/services/recoveryService';
 import { deterministicUuid, fingerprintREVAction } from '@/services/revActionFingerprint';
 import type { PreparedMeetingProposal } from '@/services/meetingProposalService';
+import type { MeetingDryRunResult } from '@/services/meetingExecutionClient';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
 
@@ -39,6 +40,7 @@ export interface LivePendingAction extends LiveREVAction {
   approvalActionVersion: number;
   approvalActionFingerprint: string;
   meetingProposal?: PreparedMeetingProposal;
+  meetingDryRun?: MeetingDryRunResult;
 }
 
 export interface StoredPreparedFollowUp {
@@ -244,7 +246,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
 
   async loadPendingActions(workspaceId) {
     const client = requiredClient();
-    const [actions, approvals, meetingProposals] = await Promise.all([
+    const [actions, approvals, meetingProposals, meetingExecutions] = await Promise.all([
       client
         .from('rev_actions')
         .select('*')
@@ -260,11 +262,20 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .from('meeting_proposals')
         .select('rev_action_id,proposal_payload')
         .eq('workspace_id', workspaceId),
+      client
+        .from('rev_action_executions')
+        .select('id,action_id,correlation_id,status,mode,provider_outcome')
+        .eq('workspace_id', workspaceId)
+        .eq('capability', 'CREATE_APPROVED_MEETING_EVENT')
+        .eq('status', 'prepared')
+        .eq('mode', 'dry_run')
+        .eq('provider_outcome', 'provider_not_invoked'),
     ]);
 
     throwOnError(actions.error);
     throwOnError(approvals.error);
     throwOnError(meetingProposals.error);
+    throwOnError(meetingExecutions.error);
 
     const approvalByAction = new Map(
       (approvals.data ?? []).map((row) => [String(row.rev_action_id), row]),
@@ -274,6 +285,14 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         const proposal = mapMeetingProposalPayload(row.proposal_payload);
         return proposal ? [[String(row.rev_action_id), proposal] as const] : [];
       }),
+    );
+    const meetingDryRunByAction = new Map(
+      (meetingExecutions.data ?? []).map((row) => [String(row.action_id), {
+        status: 'provider_disabled', displayStatus: 'DRY RUN — NOTHING BOOKED',
+        executionEnabled: false, providerInvoked: false, eventCreated: false,
+        executionId: String(row.id), correlationId: String(row.correlation_id),
+        providerOutcome: 'provider_not_invoked',
+      } satisfies MeetingDryRunResult]),
     );
 
     return (actions.data ?? []).flatMap((row) => {
@@ -288,6 +307,9 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         approvalActionFingerprint: String(approval.action_fingerprint),
         meetingProposal: action.actionType === 'meeting_proposal'
           ? meetingProposalByAction.get(action.id)
+          : undefined,
+        meetingDryRun: action.actionType === 'meeting_proposal'
+          ? meetingDryRunByAction.get(action.id)
           : undefined,
       }];
     });
