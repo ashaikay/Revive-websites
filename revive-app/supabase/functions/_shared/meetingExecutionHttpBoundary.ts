@@ -16,7 +16,7 @@ export async function handleMeetingExecutionHttp(request: Request, deps: Meeting
   if (!deps.allowedOrigin || origin !== deps.allowedOrigin) return new Response(null, { status: 403 });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
     'Access-Control-Allow-Origin': deps.allowedOrigin, 'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, content-type, apikey',
+    'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info',
     'Access-Control-Max-Age': '600', Vary: 'Origin',
   } });
   if (request.method !== 'POST') return json(405, { error: 'Method not allowed.' }, deps.allowedOrigin);
