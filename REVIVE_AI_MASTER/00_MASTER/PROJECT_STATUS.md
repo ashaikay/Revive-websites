@@ -27,10 +27,44 @@
 - Phase 3E.3 deployment remains pending and must not be started automatically.
 
 ## Current Phase
-Phase 4G.1 — PROVIDER-INDEPENDENT EMAIL EXECUTION GATEWAY FOUNDATION COMPLETE (PASS). Contracts and server-side authority boundaries exist; REV cannot send email.
+Phase 5 — CALENDAR & MEETINGS CONTROLLED OUTLOOK PILOT VERIFIED; MVP PHASE REMAINS IN PROGRESS.
 
 ## Current Objective
-Hold at `DRY RUN — NOTHING SENT`. Phase 4G.2 requires separate authorization for a trusted server implementation, durable reservation integration, provider adapter/credentials, ambiguity handling, and security review before any email can be sent.
+Return the controlled meeting pilot to its disabled safety state, preserve its durable evidence, and continue the remaining Phase 5 MVP roadmap without treating one scoped Outlook test as completion of customer calendar integration.
+
+## Phase 5 Controlled Meeting Verification — 2026-09-29
+
+**Latest commit:** `ed40e10`
+
+### Verified functionality
+
+- Meeting-proposal submission was verified through the REV UI and retained the existing approval-required workflow.
+- One controlled Outlook calendar event was created for the authorised pilot workspace after approval, and the approved attendee received the invitation.
+- The durable terminal `accepted_by_provider` outcome survives browser refresh and continues to display `EVENT CREATED`; invitation delivery is not inferred from provider acceptance.
+- The workspace-scoped read model preserves terminal rejected and outcome-unknown states with truthful status handling.
+- Owner/admin review, trusted proposal snapshot binding, exact-workspace activation, durable provider claim, one-attempt protection and unknown-outcome no-retry handling remain part of the controlled path.
+
+### Current safety state
+
+- The database meeting-provider gate is OFF.
+- The live-workspace secret has been removed.
+- `VITE_REV_MEETING_LIVE_UI_ENABLED` defaults to hidden, so the live calendar-event control is not displayed unless explicitly enabled for a controlled test.
+- Dry-run reservation remains separate from live intent. No autonomous booking is enabled.
+
+### Remaining Phase 5 MVP work — not verified complete
+
+- Customer self-service calendar account integration for Outlook and Google, including per-tenant provider configuration, is not implemented.
+- Meeting reminders are not implemented.
+- RSVP tracking and response detection are not implemented.
+- Meeting outcome recording into the broader customer/opportunity workflow is not complete.
+- Goal-progress updates from booked or completed meetings are not complete.
+- The controlled single-workspace Outlook pilot does not establish general production booking readiness or complete Phase 5 acceptance criteria.
+
+### Next unfinished roadmap task
+
+Implement the Phase 5 calendar-account integration foundation: customer self-service Outlook/Google connection and tenant-scoped provider configuration.
+
+**Prerequisites:** Phase 4 durable execution controls remain in force; preserve the Phase 5 approval, trusted-snapshot, semantic-idempotency, tenant-isolation and unknown-outcome protections; define secure tenant-scoped credential/mailbox storage and revocation; review provider permissions and mailbox/calendar scope; and obtain a separate explicit authorization and controlled test plan before re-enabling any live gate or UI.
 
 ## Phase 4G.1 Closeout
 - Added provider-independent request/result/service/provider contracts and the disabled `SEND_APPROVED_EMAIL` capability. No Microsoft, Google, Titan, SMTP, or other provider assumption exists in core execution code.
@@ -207,14 +241,7 @@ The read-only report is in `REVIVE_AI_MASTER/SUPABASE_EXISTING_STATE.md`. Phase 
 - Multi-tenant isolation must be tested exhaustively before production
 
 ## Next Task
-Complete Phase 1 final documentation:
-1. Update DECISION_LOG.md with strategic pivot decisions
-2. Update SECURITY_REGISTER.md with REV security requirements
-3. Update RISKS_AND_BLOCKERS.md with Phase 1 identified risks
-4. Update CHANGELOG.md with Phase 1 completion
-5. Update CURRENT_HANDOVER.md for Phase 2 resume
-6. Update PHASE_TRACKER.md with all phase details
-7. Generate final Phase 1 architecture report
+Phase 5 remains in progress. The next unfinished roadmap task is the calendar-account integration foundation: customer self-service Outlook/Google connection and per-tenant provider configuration. Do not begin reminders, RSVP tracking, meeting-outcome automation, goal-progress integration or Phase 6 until that foundation and its prerequisites above are reviewed and authorized.
 
 ## Phase Gate
 Phase 1 is COMPLETE when:
