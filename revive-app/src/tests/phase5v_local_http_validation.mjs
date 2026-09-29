@@ -106,7 +106,7 @@ try {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   if (!ready) throw new Error('Local function did not become ready. ' + logs);
-  const input = { requestId: randomUUID(), workspaceId, actionId };
+  const input = { requestId: randomUUID(), workspaceId, actionId, intent: 'dry_run' };
   const ownerResponse = await http(owner.token, input);
   check('HTTP_OWNER_DURABLE_DISABLED', ownerResponse.status === 200 &&
     ownerResponse.data?.status === 'provider_disabled' &&

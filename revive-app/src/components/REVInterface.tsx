@@ -976,12 +976,31 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     setMeetingExecutionBusyId(action.id);
     setMeetingExecutionErrors((current) => ({ ...current, [action.id]: '' }));
     try {
-      const result = await requestMeetingExecution(workspaceId, action.id);
+      const result = await requestMeetingExecution(workspaceId, action.id, { intent: 'dry_run' });
       setMeetingExecutionResults((current) => ({ ...current, [action.id]: result }));
     } catch (executionError) {
       setMeetingExecutionErrors((current) => ({
         ...current,
         [action.id]: executionError instanceof Error ? executionError.message : 'Meeting dry-run reservation failed.',
+      }));
+    } finally {
+      setMeetingExecutionBusyId(null);
+    }
+  };
+
+  const handleMeetingLiveExecution = async (action: LivePendingAction) => {
+    const currentResult = meetingExecutionResults[action.id];
+    if (meetingExecutionBusyId || (currentResult && currentResult.status !== 'provider_disabled')) return;
+    setMeetingExecutionBusyId(action.id);
+    setMeetingExecutionErrors((current) => ({ ...current, [action.id]: '' }));
+    try {
+      const result = await requestMeetingExecution(workspaceId, action.id,
+        { intent: 'live', confirmLiveBooking: true });
+      setMeetingExecutionResults((current) => ({ ...current, [action.id]: result }));
+    } catch (executionError) {
+      setMeetingExecutionErrors((current) => ({
+        ...current,
+        [action.id]: executionError instanceof Error ? executionError.message : 'Live meeting execution failed.',
       }));
     } finally {
       setMeetingExecutionBusyId(null);
@@ -1079,6 +1098,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                 executionError={meetingExecutionErrors[action.id]}
                 executionResult={meetingExecutionResults[action.id]}
                 onRequestDryRun={() => handleMeetingDryRun(action)}
+                onRequestLive={() => handleMeetingLiveExecution(action)}
                 onDecision={async (decision) => {
                   const succeeded = await runChange(action.id, () => repository.decidePendingAction(action, decision));
                   if (succeeded) setMeetingDecisionNotice({ title: action.title, decision });

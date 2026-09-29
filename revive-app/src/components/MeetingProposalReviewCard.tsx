@@ -11,6 +11,7 @@ export interface MeetingProposalReviewCardProps {
   executionError?: string;
   executionResult?: MeetingExecutionResult;
   onRequestDryRun?: () => Promise<void>;
+  onRequestLive?: () => Promise<void>;
 }
 
 function formatMeetingDate(value: string, timezone: string): string {
@@ -77,8 +78,10 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   executionError,
   executionResult,
   onRequestDryRun,
+  onRequestLive,
 }) => {
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
+  const [confirmLiveBooking, setConfirmLiveBooking] = useState(false);
   const proposal = action.meetingProposal;
   const displayedExecution = executionResult ?? action.meetingDryRun;
   const presentation = displayedExecution ? executionPresentation(displayedExecution) : undefined;
@@ -137,10 +140,30 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         </div>
       )}
 
-      {canReview && action.status === 'approved' && onRequestDryRun && !displayedExecution && (
+      {canReview && action.status === 'approved' && onRequestDryRun && !displayedExecution && !confirmLiveBooking && (
         <button type="button" className="btn-secondary text-sm mt-4" disabled={executionBusy} onClick={onRequestDryRun}>
           {executionBusy ? 'RECORDING...' : 'RECORD DRY-RUN RESERVATION'}
         </button>
+      )}
+
+      {canReview && action.status === 'approved' && onRequestLive &&
+        (!displayedExecution || displayedExecution.status === 'provider_disabled') && !confirmLiveBooking && (
+        <button type="button" className="btn-primary text-sm mt-4 ml-3" disabled={executionBusy} onClick={() => setConfirmLiveBooking(true)}>
+          CREATE LIVE CALENDAR EVENT
+        </button>
+      )}
+
+      {canReview && action.status === 'approved' && onRequestLive &&
+        (!displayedExecution || displayedExecution.status === 'provider_disabled') && confirmLiveBooking && (
+        <div className="mt-4 rounded border border-amber-300 bg-amber-50 p-4 text-amber-950">
+          <p className="text-sm">This will create a Microsoft calendar event for support@fatherslegacy.net and may send an invitation to the approved attendee.</p>
+          <div className="flex flex-wrap gap-3 mt-3">
+            <button type="button" className="btn-primary text-sm" disabled={executionBusy} onClick={onRequestLive}>
+              {executionBusy ? 'CREATING EVENT...' : 'CONFIRM LIVE BOOKING'}
+            </button>
+            <button type="button" className="btn-ghost text-sm" disabled={executionBusy} onClick={() => setConfirmLiveBooking(false)}>CANCEL</button>
+          </div>
+        </div>
       )}
 
       {executionError && <p className="text-sm text-red-700 mt-3" role="alert">{executionError}</p>}

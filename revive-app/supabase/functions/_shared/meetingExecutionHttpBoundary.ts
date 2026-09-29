@@ -1,5 +1,5 @@
 import type { MeetingEventExecutionResult } from './meetingEventExecutionBoundary.ts';
-import type { MeetingProviderHttpResult } from './meetingProviderHttpService.ts';
+import { parseMeetingExecutionEnvelope, type MeetingProviderHttpResult } from './meetingProviderHttpService.ts';
 
 export interface MeetingExecutionHttpDependencies {
   execute: (input: unknown, authorization: string) => Promise<MeetingEventExecutionResult | MeetingProviderHttpResult>;
@@ -32,6 +32,7 @@ export async function handleMeetingExecutionHttp(request: Request, deps: Meeting
     body = JSON.parse(raw);
   } catch { return json(400, { error: 'Invalid request.' }, deps.allowedOrigin); }
   try {
+    const executionRequest = parseMeetingExecutionEnvelope(body);
     const result = await deps.execute(body, authorization);
     if (result.status === 'provider_disabled') {
       if (result.executionEnabled !== false || result.providerInvoked !== false ||
@@ -40,9 +41,8 @@ export async function handleMeetingExecutionHttp(request: Request, deps: Meeting
       }
       return json(200, result, deps.allowedOrigin);
     }
-    const requestedWorkspaceId = body && typeof body === 'object' && !Array.isArray(body)
-      ? String((body as Record<string, unknown>).workspaceId ?? '').toLowerCase() : '';
-    if (!liveWorkspaceId || requestedWorkspaceId !== liveWorkspaceId || !/^[0-9a-f-]{36}$/i.test(result.executionId) ||
+    if (executionRequest.intent !== 'live' || !liveWorkspaceId ||
+      executionRequest.workspaceId.toLowerCase() !== liveWorkspaceId || !/^[0-9a-f-]{36}$/i.test(result.executionId) ||
       result.providerInvoked !== true ||
       (result.status === 'event_created' && (result.providerOutcome !== 'accepted_by_provider' || result.eventCreated !== true || result.invitationSent !== null)) ||
       (result.status === 'provider_rejected' && (result.providerOutcome !== 'rejected_by_provider' || result.eventCreated !== false || result.invitationSent !== false)) ||

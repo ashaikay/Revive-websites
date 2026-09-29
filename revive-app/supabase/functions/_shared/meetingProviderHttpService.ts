@@ -13,19 +13,46 @@ type Dependencies = {
   createProvider: () => (attempt: ClaimedMeetingAttempt) => Promise<RecordedMeetingAttempt>;
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+type MeetingExecutionEnvelope = {
+  requestId: string;
+  workspaceId: string;
+  actionId: string;
+  intent: 'dry_run' | 'live';
+};
+
+export function parseMeetingExecutionEnvelope(input: unknown): MeetingExecutionEnvelope {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Meeting execution intent unavailable.');
+  }
+  const value = input as Record<string, unknown>;
+  const intent = value.intent;
+  const expectedKeys = intent === 'dry_run'
+    ? ['requestId', 'workspaceId', 'actionId', 'intent']
+    : intent === 'live' && value.confirmLiveBooking === true
+      ? ['requestId', 'workspaceId', 'actionId', 'intent', 'confirmLiveBooking']
+      : [];
+  if (Object.keys(value).length !== expectedKeys.length ||
+    !expectedKeys.every(key => Object.hasOwn(value, key)) ||
+    !['requestId', 'workspaceId', 'actionId'].every(key => typeof value[key] === 'string')) {
+    throw new Error('Meeting execution intent unavailable.');
+  }
+  return { requestId: value.requestId as string, workspaceId: value.workspaceId as string,
+    actionId: value.actionId as string, intent } as MeetingExecutionEnvelope;
+}
 
 /** First authenticates and reserves via the existing server boundary. When the
  * hard gate is off, no snapshot, credential, service-role claim or Graph is read. */
 export function createMeetingProviderHttpService(deps: Dependencies, liveWorkspaceId: string | null = null) {
   return async (input: unknown): Promise<MeetingEventExecutionResult | MeetingProviderHttpResult> => {
-    const reservation = await deps.executeDisabled(input);
+    const request = parseMeetingExecutionEnvelope(input);
+    const reservation = await deps.executeDisabled({ requestId: request.requestId,
+      workspaceId: request.workspaceId, actionId: request.actionId });
     if (reservation.status !== 'provider_disabled' || reservation.executionEnabled !== false ||
       reservation.providerInvoked !== false || reservation.providerOutcome !== 'provider_not_invoked' ||
       !uuid.test(reservation.executionId) || !uuid.test(reservation.correlationId)) {
       throw new Error('Trusted meeting reservation unavailable.');
     }
-    const request = input as { workspaceId: string; actionId: string };
-    if (!liveWorkspaceId || request.workspaceId.toLowerCase() !== liveWorkspaceId) return reservation;
+    if (request.intent === 'dry_run' || !liveWorkspaceId || request.workspaceId.toLowerCase() !== liveWorkspaceId) return reservation;
     const snapshot = await deps.loadSnapshot(reservation.executionId);
     if (snapshot.executionId !== reservation.executionId ||
       snapshot.workspaceId !== request.workspaceId || snapshot.actionId !== request.actionId ||

@@ -17,10 +17,13 @@ export type MeetingProviderResult =
   | { status: 'outcome_unknown'; executionId: string; providerOutcome: 'provider_outcome_unknown'; providerInvoked: true; eventCreated: null; invitationSent: null };
 
 export type MeetingExecutionResult = MeetingDryRunResult | MeetingProviderResult;
+export type MeetingExecutionIntent =
+  | { intent: 'dry_run' }
+  | { intent: 'live'; confirmLiveBooking: true };
 
 export type MeetingExecutionInvoker = (
   functionName: string,
-  options: { body: { requestId: string; workspaceId: string; actionId: string } },
+  options: { body: { requestId: string; workspaceId: string; actionId: string } & MeetingExecutionIntent },
 ) => Promise<{ data: unknown; error: { message?: string } | null }>;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28,6 +31,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export async function requestMeetingExecution(
   workspaceId: string,
   actionId: string,
+  executionIntent: MeetingExecutionIntent,
   invoke?: MeetingExecutionInvoker,
 ): Promise<MeetingExecutionResult> {
   if (!workspaceId || !actionId) throw new Error('Workspace and action identifiers are required.');
@@ -36,12 +40,13 @@ export async function requestMeetingExecution(
     if (!supabaseClient) throw new Error('Supabase is not configured.');
     return supabaseClient.functions.invoke(functionName, options);
   });
+  const operation = executionIntent.intent === 'live' ? 'Live meeting execution' : 'Meeting dry-run reservation';
   const { data, error } = await execute('rev-meeting-execute', {
-    body: { requestId, workspaceId, actionId },
+    body: { requestId, workspaceId, actionId, ...executionIntent },
   });
-  if (error) throw new Error(error.message || 'Meeting dry-run reservation failed.');
+  if (error) throw new Error(error.message || `${operation} failed.`);
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error('Meeting dry-run reservation returned an invalid response.');
+    throw new Error(`${operation} returned an invalid response.`);
   }
   const value = data as Record<string, unknown>;
   const validExecutionId = typeof value.executionId === 'string' && uuid.test(value.executionId);
@@ -59,7 +64,10 @@ export async function requestMeetingExecution(
   const validUnknown = value.status === 'outcome_unknown'
     && value.providerOutcome === 'provider_outcome_unknown' && value.providerInvoked === true
     && value.eventCreated === null && value.invitationSent === null;
-  if (!validExecutionId || (!validDisabled && !validCreated && !validRejected && !validUnknown)) {
+  const validForIntent = executionIntent.intent === 'dry_run'
+    ? validDisabled
+    : validDisabled || validCreated || validRejected || validUnknown;
+  if (!validExecutionId || !validForIntent) {
     throw new Error('Meeting execution returned an unsafe response.');
   }
   return value as unknown as MeetingExecutionResult;
