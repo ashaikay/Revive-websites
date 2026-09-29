@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MeetingProposalReviewCard } from '@/components/MeetingProposalReviewCard';
 import {
   SupabasePreparedWorkRepository,
+  mapMeetingExecutionRow,
   type LivePendingAction,
   type LivePreparedWorkGateway,
 } from '@/data/supabasePreparedWorkRepository';
@@ -155,6 +156,25 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(unknownMarkup).toContain('OUTCOME UNKNOWN — CHECK CALENDAR');
     expect(unknownMarkup).toContain('Event creation and invitation delivery could not be confirmed.');
     expect(unknownMarkup).toContain('Check the calendar before retrying.');
+  });
+
+  it('keeps a completed accepted meeting visible after refresh with no booking control', async () => {
+    const persistedResult = mapMeetingExecutionRow({ id: executionId, action_id: action.id,
+      status: 'succeeded', mode: 'live', provider_outcome: 'accepted_by_provider' });
+    const completed = { ...action, status: 'completed' as const, executionStatus: 'succeeded' as const,
+      meetingDryRun: persistedResult };
+    const repository = new SupabasePreparedWorkRepository({
+      loadPendingActions: async (workspaceId: string) => workspaceId === action.workspaceId ? [completed] : [],
+    } as unknown as LivePreparedWorkGateway);
+
+    const refreshed = await repository.listPendingActions(action.workspaceId);
+    const markup = renderToStaticMarkup(<MeetingProposalReviewCard action={refreshed[0]} canReview busy={false}
+      onDecision={vi.fn()} onRequestDryRun={vi.fn()} onRequestLive={vi.fn()} />);
+
+    expect(markup).toContain('EVENT CREATED');
+    expect(markup).toContain('Invitation delivery was not confirmed');
+    expect(markup).not.toContain('RECORD DRY-RUN RESERVATION');
+    expect(markup).not.toContain('CREATE LIVE CALENDAR EVENT');
   });
 
   it.each([

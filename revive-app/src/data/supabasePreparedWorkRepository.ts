@@ -18,7 +18,7 @@ import { buildPreparedFollowUpDraft } from '@/services/preparedFollowUpDraft';
 import { analyzeRecovery } from '@/services/recoveryService';
 import { deterministicUuid, fingerprintREVAction } from '@/services/revActionFingerprint';
 import type { PreparedMeetingProposal } from '@/services/meetingProposalService';
-import type { MeetingDryRunResult } from '@/services/meetingExecutionClient';
+import type { MeetingExecutionResult } from '@/services/meetingExecutionClient';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
 
@@ -40,7 +40,7 @@ export interface LivePendingAction extends LiveREVAction {
   approvalActionVersion: number;
   approvalActionFingerprint: string;
   meetingProposal?: PreparedMeetingProposal;
-  meetingDryRun?: MeetingDryRunResult;
+  meetingDryRun?: MeetingExecutionResult;
 }
 
 export interface StoredPreparedFollowUp {
@@ -223,6 +223,28 @@ function mapMeetingProposalPayload(value: unknown): PreparedMeetingProposal | un
   };
 }
 
+export function mapMeetingExecutionRow(row: Record<string, unknown>): MeetingExecutionResult | undefined {
+  const executionId = String(row.id ?? '');
+  if (row.status === 'prepared' && row.mode === 'dry_run' && row.provider_outcome === 'provider_not_invoked') {
+    return { status: 'provider_disabled', displayStatus: 'DRY RUN — NOTHING BOOKED',
+      executionEnabled: false, providerInvoked: false, eventCreated: false, executionId,
+      correlationId: String(row.correlation_id ?? ''), providerOutcome: 'provider_not_invoked' };
+  }
+  if (row.status === 'succeeded' && row.mode === 'live' && row.provider_outcome === 'accepted_by_provider') {
+    return { status: 'event_created', executionId, providerOutcome: 'accepted_by_provider',
+      providerInvoked: true, eventCreated: true, invitationSent: null };
+  }
+  if (row.status === 'failed' && row.mode === 'live' && row.provider_outcome === 'rejected_by_provider') {
+    return { status: 'provider_rejected', executionId, providerOutcome: 'rejected_by_provider',
+      providerInvoked: true, eventCreated: false, invitationSent: false };
+  }
+  if (row.status === 'failed' && row.mode === 'live' && row.provider_outcome === 'provider_outcome_unknown') {
+    return { status: 'outcome_unknown', executionId, providerOutcome: 'provider_outcome_unknown',
+      providerInvoked: true, eventCreated: null, invitationSent: null };
+  }
+  return undefined;
+}
+
 export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
   async loadContext(workspaceId, actorUserId) {
     const client = requiredClient();
@@ -251,7 +273,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .from('rev_actions')
         .select('*')
         .eq('workspace_id', workspaceId)
-        .in('status', ['awaiting_approval', 'approved'])
+        .in('status', ['awaiting_approval', 'approved', 'completed', 'failed'])
         .eq('requires_approval', true)
         .order('proposed_at', { ascending: false }),
       client
@@ -267,9 +289,8 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .select('id,action_id,correlation_id,status,mode,provider_outcome')
         .eq('workspace_id', workspaceId)
         .eq('capability', 'CREATE_APPROVED_MEETING_EVENT')
-        .eq('status', 'prepared')
-        .eq('mode', 'dry_run')
-        .eq('provider_outcome', 'provider_not_invoked'),
+        .in('status', ['prepared', 'succeeded', 'failed'])
+        .in('provider_outcome', ['provider_not_invoked', 'accepted_by_provider', 'rejected_by_provider', 'provider_outcome_unknown']),
     ]);
 
     throwOnError(actions.error);
@@ -287,18 +308,16 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
       }),
     );
     const meetingDryRunByAction = new Map(
-      (meetingExecutions.data ?? []).map((row) => [String(row.action_id), {
-        status: 'provider_disabled', displayStatus: 'DRY RUN — NOTHING BOOKED',
-        executionEnabled: false, providerInvoked: false, eventCreated: false,
-        executionId: String(row.id), correlationId: String(row.correlation_id),
-        providerOutcome: 'provider_not_invoked',
-      } satisfies MeetingDryRunResult]),
+      (meetingExecutions.data ?? []).flatMap((row) => {
+        const result = mapMeetingExecutionRow(row);
+        return result ? [[String(row.action_id), result] as const] : [];
+      }),
     );
 
     return (actions.data ?? []).flatMap((row) => {
       const action = mapAction(row);
       const approval = approvalByAction.get(action.id);
-      if (action.status === 'approved' && action.actionType !== 'meeting_proposal') return [];
+      if (action.status !== 'awaiting_approval' && action.actionType !== 'meeting_proposal') return [];
       if (!approval || !approval.action_version || !approval.action_fingerprint) return [];
       return [{
         ...action,

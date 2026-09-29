@@ -65,6 +65,7 @@ function executionPresentation(result: MeetingExecutionResult) {
 
 function proposalStatusLabel(result: MeetingExecutionResult | undefined): string {
   if (result?.status === 'event_created') return 'EVENT CREATED';
+  if (result?.status === 'provider_rejected') return 'EVENT NOT CREATED';
   if (result?.status === 'outcome_unknown') return 'OUTCOME UNKNOWN';
   return 'APPROVED — NOT BOOKED';
 }
@@ -102,8 +103,10 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
           <p id={`meeting-proposal-${action.id}`} className="font-semibold text-neutral-900">{proposal.title}</p>
           <p className="text-sm text-neutral-600 mt-1">Attendee: {proposal.attendeeEmail}</p>
         </div>
-        <span className={action.status === 'approved' ? 'badge-success whitespace-nowrap' : 'badge-warning whitespace-nowrap'}>
-          {action.status === 'approved' ? proposalStatusLabel(displayedExecution) : 'MEETING PROPOSAL — NOT BOOKED'}
+        <span className={displayedExecution?.status === 'event_created' ? 'badge-success whitespace-nowrap'
+          : displayedExecution?.status === 'provider_rejected' ? 'badge-danger whitespace-nowrap'
+          : action.status === 'approved' ? 'badge-success whitespace-nowrap' : 'badge-warning whitespace-nowrap'}>
+          {action.status === 'awaiting_approval' ? 'MEETING PROPOSAL — NOT BOOKED' : proposalStatusLabel(displayedExecution)}
         </span>
       </div>
 
