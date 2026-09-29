@@ -78,7 +78,8 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(unavailableMarkup).not.toContain('APPROVE PROPOSAL');
   });
 
-  it('offers an owner/admin one-shot reservation only after approval', () => {
+  it('keeps dry-run available but hides live booking by default after approval', () => {
+    vi.stubEnv('VITE_REV_MEETING_LIVE_UI_ENABLED', undefined);
     const approved = { ...action, status: 'approved' as const };
     const ownerMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} onRequestDryRun={vi.fn()} onRequestLive={vi.fn()} />);
     const busyMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionBusy onRequestDryRun={vi.fn()} />);
@@ -86,7 +87,7 @@ describe('Phase 5K supervised meeting proposal review', () => {
     const completedMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionResult={disabledResult} onRequestDryRun={vi.fn()} />);
 
     expect(ownerMarkup).toContain('RECORD DRY-RUN RESERVATION');
-    expect(ownerMarkup).toContain('CREATE LIVE CALENDAR EVENT');
+    expect(ownerMarkup).not.toContain('CREATE LIVE CALENDAR EVENT');
     expect(ownerMarkup).not.toContain('APPROVE PROPOSAL');
     expect(busyMarkup).toMatch(/<button[^>]*disabled=""[^>]*>RECORDING\.\.\.<\/button>/);
     expect(memberMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
@@ -99,6 +100,21 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(refreshedMarkup).toContain('DRY RUN — NOTHING BOOKED');
     expect(refreshedMarkup).toContain('no invitation was sent');
     expect(refreshedMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
+    vi.unstubAllEnvs();
+  });
+
+  it('shows live booking only when the display flag is explicitly true', () => {
+    vi.stubEnv('VITE_REV_MEETING_LIVE_UI_ENABLED', 'true');
+    const approved = { ...action, status: 'approved' as const };
+    const ownerMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false}
+      onDecision={vi.fn()} onRequestDryRun={vi.fn()} onRequestLive={vi.fn()} />);
+    const memberMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview={false} busy={false}
+      onDecision={vi.fn()} onRequestDryRun={vi.fn()} onRequestLive={vi.fn()} />);
+
+    expect(ownerMarkup).toContain('RECORD DRY-RUN RESERVATION');
+    expect(ownerMarkup).toContain('CREATE LIVE CALENDAR EVENT');
+    expect(memberMarkup).not.toContain('CREATE LIVE CALENDAR EVENT');
+    vi.unstubAllEnvs();
   });
 
   it('requires a separate confirmation before live booking and names the mailbox and invitation risk', () => {

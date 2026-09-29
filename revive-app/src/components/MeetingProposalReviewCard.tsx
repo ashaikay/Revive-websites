@@ -83,6 +83,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
 }) => {
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
   const [confirmLiveBooking, setConfirmLiveBooking] = useState(false);
+  const liveUiEnabled = import.meta.env.VITE_REV_MEETING_LIVE_UI_ENABLED === 'true';
   const proposal = action.meetingProposal;
   const displayedExecution = executionResult ?? action.meetingDryRun;
   const presentation = displayedExecution ? executionPresentation(displayedExecution) : undefined;
@@ -149,14 +150,14 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         </button>
       )}
 
-      {canReview && action.status === 'approved' && onRequestLive &&
+      {liveUiEnabled && canReview && action.status === 'approved' && onRequestLive &&
         (!displayedExecution || displayedExecution.status === 'provider_disabled') && !confirmLiveBooking && (
         <button type="button" className="btn-primary text-sm mt-4 ml-3" disabled={executionBusy} onClick={() => setConfirmLiveBooking(true)}>
           CREATE LIVE CALENDAR EVENT
         </button>
       )}
 
-      {canReview && action.status === 'approved' && onRequestLive &&
+      {liveUiEnabled && canReview && action.status === 'approved' && onRequestLive &&
         (!displayedExecution || displayedExecution.status === 'provider_disabled') && confirmLiveBooking && (
         <div className="mt-4 rounded border border-amber-300 bg-amber-50 p-4 text-amber-950">
           <p className="text-sm">This will create a Microsoft calendar event for support@fatherslegacy.net and may send an invitation to the approved attendee.</p>
