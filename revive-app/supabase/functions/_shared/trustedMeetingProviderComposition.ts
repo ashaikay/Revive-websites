@@ -37,7 +37,7 @@ export function createTrustedMeetingProviderComposition(deps: TrustedMeetingProv
       claim: providerAttempt.claim,
       record: providerAttempt.record,
       invokeGraph: deps.invokeGraph ?? createMicrosoftGraphCalendarEvent,
-    });
-    return workflow(attempt, deps.liveWorkspaceId === deps.trustedWorkspaceId);
+    }, deps.liveWorkspaceId === deps.trustedWorkspaceId);
+    return workflow(attempt);
   };
 }
