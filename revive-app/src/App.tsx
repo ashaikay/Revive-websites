@@ -10,6 +10,8 @@ import { authProvider, classifySignInError } from '@/services/authService';
 import { dataProviderMode } from '@/data/provider';
 import { loadLiveWorkspaceContext } from '@/services/supabaseContextService';
 import '@/styles/index.css';
+import { OutlookConnectionPanel } from '@/components/OutlookConnectionPanel';
+import { calendarOAuthReturn } from '@/services/calendarOAuthBrowser';
 
 type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business';
 type LoginError = 'invalid_credentials' | 'configuration' | 'network' | 'workspace';
@@ -118,12 +120,17 @@ function App() {
     );
   }
 
+  if (dataProviderMode === 'supabase' && calendarOAuthReturn && liveSession) {
+    return <OutlookConnectionPanel workspaceId={currentWorkspaceId} userId={liveSession.userId} callback />;
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50">
       <Navigation onSignOut={dataProviderMode === 'supabase' ? handleSignOut : undefined} />
 
       {/* Main Content */}
       <main>
+        {dataProviderMode === 'supabase' && currentPage === 'rev' && liveSession && <OutlookConnectionPanel key={currentWorkspaceId} workspaceId={currentWorkspaceId} userId={liveSession.userId} />}
         {currentPage === 'home' && <HomeDashboard workspaceId={currentWorkspaceId} />}
         {currentPage === 'rev' && <REVInterface workspaceId={currentWorkspaceId} />}
         {currentPage === 'customers' && (dataProviderMode === 'supabase' ? <LiveModeNotice /> : <CustomersModule workspaceId={currentWorkspaceId} />)}
@@ -135,10 +142,10 @@ function App() {
       <footer className="bg-neutral-900 text-white mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <p className="text-center text-amber-300 text-xs font-semibold uppercase tracking-wide mb-2">
-            Auth: {authMode} · Data Provider: {dataProviderMode}
+            Auth: {authMode} Â· Data Provider: {dataProviderMode}
           </p>
           <p className="text-center text-neutral-400 text-sm">
-            REV Phase 2B Foundation · Mocked AI & Data · No external actions executed
+            REV Phase 2B Foundation Â· Mocked AI & Data Â· No external actions executed
           </p>
         </div>
       </footer>
