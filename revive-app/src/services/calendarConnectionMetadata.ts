@@ -29,3 +29,10 @@ export async function requestCalendarDiscovery(workspaceId:string,connectionId:s
  if(Object.keys(result).sort().join(',')!=='calendarCount,connectionId,connectionStatus'||result.connectionId!==connectionId||result.connectionStatus!=='connected'||typeof result.calendarCount!=='number'||!Number.isSafeInteger(result.calendarCount)||result.calendarCount<1||result.calendarCount>1000)throw new Error('Discovery unavailable');
  return result.calendarCount;
 }
+export async function requestCalendarSelection(workspaceId:string,calendarId:string,expectedConnectionId:string,invoke:OAuthInvoke):Promise<void>{
+ if(!uuid.test(workspaceId)||!uuid.test(calendarId)||!uuid.test(expectedConnectionId))throw new Error('Calendar identifiers required');
+ const value=await invoke('rev-calendar-select',{workspaceId,calendarId});
+ if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Calendar selection unavailable');
+ const result=value as Record<string,unknown>;
+ if(Object.keys(result).sort().join(',')!=='calendarId,connectionId,selected'||result.calendarId!==calendarId||result.connectionId!==expectedConnectionId||result.selected!==true)throw new Error('Calendar selection unavailable');
+}

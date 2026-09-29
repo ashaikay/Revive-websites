@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
 import { calendarOAuthReturn, startCalendarOAuth, completeCalendarOAuth, type OAuthInvoke } from '@/services/calendarOAuthBrowser';
-import { loadCalendarConnectionMetadata, requestCalendarDiscovery } from '@/services/calendarConnectionMetadata';
+import { loadCalendarConnectionMetadata, requestCalendarDiscovery, requestCalendarSelection } from '@/services/calendarConnectionMetadata';
 const invoke: OAuthInvoke = async (name, body) => {
   if (!supabaseClient) throw new Error('Calendar service unavailable');
   const {data,error} = await supabaseClient.functions.invoke(name,{body});
@@ -55,6 +55,17 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       setMessage('Discovery could not be confirmed. Check the refreshed connection status before trying again. If it is disconnected, Outlook authorization may need to be restarted.');
     }finally{setBusy(false);locked.current=false;}
   };
+  const selectCalendar=async(calendarId:string,connectionId:string)=>{
+    if(locked.current)return;locked.current=true;setBusy(true);setMessage('');
+    try{
+      await requestCalendarSelection(workspaceId,calendarId,connectionId,invoke);
+      try{setMetadata(await loadMetadata(workspaceId));setMessage('Calendar selection saved. Booking remains disabled.');}
+      catch{setMessage('Calendar selection saved. Refresh to reload the selected calendar.');}
+    }catch{
+      try{setMetadata(await loadMetadata(workspaceId));}catch{/* Keep the last known list. */}
+      setMessage('Calendar selection could not be confirmed. Check the refreshed selection before trying again.');
+    }finally{setBusy(false);locked.current=false;}
+  };
   return <section className="max-w-4xl mx-auto card p-6 my-6">
     <h2 className="text-lg font-semibold">{callback?'Complete Outlook authorization':'Outlook calendar connection'}</h2>
     <p className="text-sm text-neutral-600 my-3">Connect calendar read access. This does not enable bookings or send invitations.</p>
@@ -66,7 +77,7 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       {metadata.connections.map(connection=><div key={connection.id} className="border rounded p-4 mt-4">
         <p className="font-medium">{connection.account||'Outlook connection'}</p><p className="text-sm">Status: {connection.status}</p>
         {connection.status==='disconnected'&&connection.authorizedBy===userId&&<><p className="text-sm my-2">After saving Outlook authorization, discover its calendars here.</p><button className="btn-secondary" disabled={busy} onClick={()=>void discover(connection.id)}>DISCOVER CALENDARS</button></>}
-        <ul className="mt-3 space-y-2">{metadata.calendars.filter(calendar=>calendar.connectionId===connection.id&&calendar.active).map(calendar=><li key={calendar.id}>{calendar.displayName} <span className="text-sm text-neutral-600">({calendar.timezone}) · {calendar.selected?'Selected':'Not selected'}</span></li>)}</ul>
+        <ul className="mt-3 space-y-2">{metadata.calendars.filter(calendar=>calendar.connectionId===connection.id&&calendar.active).map(calendar=><li key={calendar.id}>{calendar.displayName} <span className="text-sm text-neutral-600">({calendar.timezone}) · {calendar.selected?'Selected':'Not selected'}</span>{connection.status==='connected'&&!calendar.selected&&<button className="btn-secondary ml-3" disabled={busy} onClick={()=>void selectCalendar(calendar.id,connection.id)}>SELECT CALENDAR</button>}</li>)}</ul>
       </div>)}
     </>}
   </section>;
