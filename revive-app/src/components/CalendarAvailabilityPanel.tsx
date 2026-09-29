@@ -20,6 +20,8 @@ export interface CalendarAvailabilityPanelProps {
   requestAvailability?: typeof requestCalendarAvailability;
   submitProposal?: MeetingProposalSubmitter;
   initialTimezone?: string;
+  canSubmitProposal?: boolean;
+  onProposalSubmitted?: () => Promise<void>;
 }
 
 export interface SelectedCalendarSlot {
@@ -34,6 +36,17 @@ export function selectedSlotMatches(
   return selectedSlot?.startAt === slot.startAt && selectedSlot.endAt === slot.endAt;
 }
 
+export async function submitMeetingProposalAndReload(
+  proposal: PreparedMeetingProposal,
+  workspaceId: string,
+  submitProposal: MeetingProposalSubmitter,
+  onProposalSubmitted?: () => Promise<void>,
+): Promise<SubmittedMeetingProposalState> {
+  const submitted = await submitProposal(proposal, workspaceId);
+  await onProposalSubmitted?.();
+  return submitted;
+}
+
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -43,6 +56,8 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
   requestAvailability = requestCalendarAvailability,
   submitProposal = submitMeetingProposal,
   initialTimezone = DEFAULT_AVAILABILITY_TIMEZONE,
+  canSubmitProposal = false,
+  onProposalSubmitted,
 }) => {
   const [date, setDate] = useState(today);
   const [duration, setDuration] = useState<30 | 60>(30);
@@ -91,7 +106,9 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
     setSubmitting(true);
     setSubmissionError(null);
     try {
-      const submitted = await submitProposal(preparedProposal, workspaceId);
+      const submitted = await submitMeetingProposalAndReload(
+        preparedProposal, workspaceId, submitProposal, onProposalSubmitted,
+      );
       setSubmittedProposal(submitted);
       setSubmissionConfirmation(false);
     } catch (submissionFailure) {
@@ -164,9 +181,9 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
             <button className="btn-ghost mt-3 text-sm" type="button" onClick={clearSelection}>CLEAR SELECTION</button>
           </div>
         )}
-        {selectedSlot && !preparedProposal && (
+        {canSubmitProposal && selectedSlot && !preparedProposal && (
           <form className="mt-4 grid gap-3 border border-neutral-200 p-4" onSubmit={handlePrepareProposal} noValidate>
-            <h3 className="text-base font-semibold text-neutral-900">PREPARE MEETING PROPOSAL</h3>
+            <h3 className="text-base font-semibold text-neutral-900">NEW MEETING PROPOSAL</h3>
             <label className="grid gap-1 text-sm font-medium text-neutral-800" htmlFor="meeting-proposal-title">
               Meeting title
               <input id="meeting-proposal-title" className="input-field" value={proposalInput.title} onChange={(event) => updateProposalInput('title', event.target.value)} aria-invalid={Boolean(proposalErrors.title)} aria-describedby={proposalErrors.title ? 'meeting-proposal-title-error' : undefined} />
@@ -199,7 +216,7 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
             <button className="btn-primary text-sm" type="submit">PREPARE MEETING PROPOSAL</button>
           </form>
         )}
-        {preparedProposal && !submittedProposal && (
+        {canSubmitProposal && preparedProposal && !submittedProposal && (
           <div className="mt-4 border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900" role="status">
             <p className="font-semibold">PREPARED — NOT BOOKED</p>
             <p className="mt-1">{preparedProposal.title}</p>
@@ -219,7 +236,7 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
             {submissionError && <p className="mt-3 text-sm text-red-700" role="alert">{submissionError}</p>}
           </div>
         )}
-        {submittedProposal && <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status"><p className="font-semibold">{submittedProposal.actionStatus === 'awaiting_approval' ? 'AWAITING OWNER APPROVAL — NOT BOOKED' : 'MEETING PROPOSAL STATUS — NOT BOOKED'}</p><p className="mt-1">Action state: {submittedProposal.actionStatus.replace(/_/g, ' ')}.</p><p>Execution state: {submittedProposal.executionStatus.replace(/_/g, ' ')}.</p><p className="mt-1">No calendar event or invitation has been created.</p></div>}
+        {canSubmitProposal && submittedProposal && <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status"><p className="font-semibold">{submittedProposal.actionStatus === 'awaiting_approval' ? 'AWAITING OWNER APPROVAL — NOT BOOKED' : 'MEETING PROPOSAL STATUS — NOT BOOKED'}</p><p className="mt-1">Action state: {submittedProposal.actionStatus.replace(/_/g, ' ')}.</p><p>Execution state: {submittedProposal.executionStatus.replace(/_/g, ' ')}.</p><p className="mt-1">No calendar event or invitation has been created.</p></div>}
         {result?.slots.length ? (
           <ul className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Available times">
             {result.slots.map((slot) => {

@@ -1178,7 +1178,11 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             opportunities={context.opportunities}
           />
 
-          <CalendarAvailabilityPanel workspaceId={workspaceId} />
+          <CalendarAvailabilityPanel
+            workspaceId={workspaceId}
+            canSubmitProposal={canReview}
+            onProposalSubmitted={reload}
+          />
 
           <section aria-labelledby="live-recovery-heading" className="rev-motion-in">
             <h2 id="live-recovery-heading" className="text-xl font-bold text-neutral-900 mb-4">RECOVERY OPPORTUNITIES</h2>

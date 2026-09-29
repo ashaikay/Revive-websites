@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { CalendarAvailabilityPanel } from '@/components/CalendarAvailabilityPanel';
+import { CalendarAvailabilityPanel, submitMeetingProposalAndReload } from '@/components/CalendarAvailabilityPanel';
 import { submitMeetingProposal } from '@/services/meetingProposalSubmissionClient';
 import type { PreparedMeetingProposal } from '@/services/meetingProposalService';
 import {
@@ -99,6 +99,8 @@ describe('Phase 5J durable supervised meeting proposal submission', () => {
     const markup = renderToStaticMarkup(<CalendarAvailabilityPanel workspaceId="workspace-1" submitProposal={vi.fn()} />);
     expect(markup).not.toContain('SUBMIT FOR OWNER APPROVAL');
     expect(source).toContain('SUBMIT FOR OWNER APPROVAL');
+    expect(source).toContain('NEW MEETING PROPOSAL');
+    expect(source).toContain('canSubmitProposal && selectedSlot');
     expect(source).toContain('Submit this meeting proposal for owner approval? No calendar event or invitation will be created.');
     expect(source).toContain("if (!preparedProposal || submitting) return;");
     expect(source).toContain('AWAITING OWNER APPROVAL — NOT BOOKED');
@@ -106,6 +108,28 @@ describe('Phase 5J durable supervised meeting proposal submission', () => {
     expect(client).toContain("functions.invoke('rev-meeting-proposal-submit'");
     expect(client).not.toMatch(/\.from\(|\.rpc\(|localStorage|sessionStorage|mailto:|window\.location|Calendars\.ReadWrite/i);
     expect(source).not.toMatch(/<button[^>]*>\s*(Approve|Execute|Book|Send|Create Event)\s*<\/button>/i);
+  });
+
+  it('keeps the new proposal form owner/admin-scoped and reloads only after successful submission', async () => {
+    const workspace = readFileSync(new URL('../components/REVInterface.tsx', import.meta.url), 'utf8');
+    expect(workspace).toContain('canSubmitProposal={canReview}');
+    expect(workspace).toContain('onProposalSubmitted={reload}');
+
+    const calls: string[] = [];
+    const submit = vi.fn().mockImplementation(async () => {
+      calls.push('submit');
+      return { actionStatus: 'awaiting_approval', executionStatus: 'not_executed', created: true };
+    });
+    const reload = vi.fn().mockImplementation(async () => { calls.push('reload'); });
+    await expect(submitMeetingProposalAndReload(proposal, 'workspace-1', submit, reload)).resolves.toMatchObject({
+      actionStatus: 'awaiting_approval', executionStatus: 'not_executed',
+    });
+    expect(calls).toEqual(['submit', 'reload']);
+
+    const failedReload = vi.fn();
+    await expect(submitMeetingProposalAndReload(proposal, 'workspace-1',
+      vi.fn().mockRejectedValue(new Error('submission failed')), failedReload)).rejects.toThrow('submission failed');
+    expect(failedReload).not.toHaveBeenCalled();
   });
 
   it('maps a safe client failure without exposing proposal details', async () => {
