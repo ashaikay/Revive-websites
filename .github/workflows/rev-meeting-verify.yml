@@ -37,6 +37,7 @@ jobs:
             supabase/functions/rev-worker-pattern-save/*.test.ts \
             supabase/functions/rev-worker-unavailability-save/*.test.ts \
             supabase/functions/rev-scheduling-job-save/*.test.ts \
+            supabase/functions/rev-scheduling-assignment-save/*.test.ts \
             supabase/functions/rev-calendar-availability/workspaceBusinessHours.test.ts \
             supabase/functions/rev-calendar-availability/selectedCalendarAvailability*.test.ts \
             supabase/functions/_shared/microsoftGraphCalendarDiscovery.test.ts \
@@ -50,7 +51,8 @@ jobs:
             src/tests/worker_records_browser.test.mjs \
             src/tests/worker_patterns_browser.test.mjs \
             src/tests/worker_unavailability_browser.test.mjs \
-            src/tests/scheduling_jobs_browser.test.mjs
+            src/tests/scheduling_jobs_browser.test.mjs \
+            src/tests/scheduling_assignments_browser.test.mjs
 
   database:
     runs-on: ubuntu-latest
@@ -95,6 +97,7 @@ jobs:
           node src/tests/worker_patterns_local_validation.mjs
           node src/tests/worker_unavailability_local_validation.mjs
           node src/tests/scheduling_jobs_local_validation.mjs
+          node src/tests/scheduling_assignments_local_validation.mjs
       - name: Stop local Supabase
         if: always()
         run: npx --yes supabase@2.117.0 stop
