@@ -1,3 +1,4 @@
+import { CalendarBusinessHoursPanel } from './CalendarBusinessHoursPanel';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
 import { calendarOAuthReturn, startCalendarOAuth, reconnectCalendarOAuth, completeCalendarOAuth, type OAuthInvoke } from '@/services/calendarOAuthBrowser';
@@ -119,6 +120,7 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
         </div>:<button className="btn-secondary mt-3" disabled={busy} onClick={()=>setDisconnectConfirmation(connection.id)}>DISCONNECT OUTLOOK</button>)}
         <ul className="mt-3 space-y-2">{metadata.calendars.filter(calendar=>calendar.connectionId===connection.id&&calendar.active).map(calendar=><li key={calendar.id}>{calendar.displayName} <span className="text-sm text-neutral-600">({calendar.timezone}) · {calendar.selected?'Selected':'Not selected'}</span>{connection.status==='connected'&&!calendar.selected&&<button className="btn-secondary ml-3" disabled={busy||disconnectConfirmation!==null} onClick={()=>void selectCalendar(calendar.id,connection.id)}>SELECT CALENDAR</button>}</li>)}</ul>
       </div>)}
+      <CalendarBusinessHoursPanel key={workspaceId} workspaceId={workspaceId} disabled={busy||disconnectConfirmation!==null} />
     </>}
   </section>;
 }
