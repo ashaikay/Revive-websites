@@ -12,6 +12,7 @@ import { readMicrosoftGraphSelectedCalendarAvailability } from '../_shared/micro
 import { refreshCalendarDiscoveryToken } from '../rev-calendar-discover/calendarDiscoveryWorkflow.ts';
 import { validateOAuthTokenConfiguration } from '../rev-calendar-oauth-complete/calendarOAuthCompletion.ts';
 import { buildBusinessHoursAvailabilityWindows } from './businessHoursPolicy.ts';
+import { withWorkspaceBusinessHours } from './workspaceBusinessHours.ts';
 
 function callerClient(authorization: string) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -56,18 +57,27 @@ const dependencies: CalendarAvailabilityDependencies = {
       const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
       if (!url || !key) throw new Error('Selected calendar unavailable.');
       const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+      return withWorkspaceBusinessHours(workspaceId, timezone, async (workspace, columns) => {
+        const { data, error } = await client.from('workspace_calendar_business_hours').select(columns).eq('workspace_id', workspace);
+        if (error) throw new Error('Workspace business hours unavailable.');
+        return data;
+      }, async (policy) => {
       const service = createSelectedCalendarAvailabilityService({
         client,
         refresh: (refreshToken) => refreshCalendarDiscoveryToken(config, refreshToken),
         read: readMicrosoftGraphSelectedCalendarAvailability,
-        businessWindows: (selectedTimezone, startAt, endAt) => buildBusinessHoursAvailabilityWindows({
-          workingDays: Deno.env.get('REV_CALENDAR_AVAILABILITY_WORKING_DAYS'),
-          businessStartLocal: Deno.env.get('REV_CALENDAR_AVAILABILITY_BUSINESS_START_LOCAL'),
-          businessEndLocal: Deno.env.get('REV_CALENDAR_AVAILABILITY_BUSINESS_END_LOCAL'),
-          timezone: selectedTimezone,
-        }, startAt, endAt),
+        businessWindows: (selectedTimezone, startAt, endAt) => {
+          if (selectedTimezone !== policy.timezone) throw new Error('Workspace timezone mismatch.');
+          return buildBusinessHoursAvailabilityWindows({
+            workingDays: policy.workingDays.join(','),
+            businessStartLocal: policy.startLocal,
+            businessEndLocal: policy.endLocal,
+            timezone: policy.timezone,
+          }, startAt, endAt);
+        },
       });
       return service({ workspaceId, userId, searchStartAt, searchEndAt, timezone });
+      });
     }
     : undefined,
   readBusyIntervals: readMicrosoftGraphPrimaryCalendarAvailability,

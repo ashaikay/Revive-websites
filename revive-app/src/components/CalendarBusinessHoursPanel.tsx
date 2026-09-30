@@ -10,7 +10,7 @@ export function CalendarBusinessHoursPanel({workspaceId,disabled=false}:{workspa
  useEffect(()=>{let mounted=true;setReady(false);setPolicy(null);void read().then(saved=>{if(mounted){setPolicy(saved??blank());setReady(true);}}).catch(()=>{if(mounted)setMessage('Business hours could not be loaded. Refresh to try again.');});return()=>{mounted=false;};},[workspaceId]);
  const submit=async()=>{
   if(lock.current||!ready||!policy||disabled)return;lock.current=true;setBusy(true);setMessage('');
-  try{const saved=await saveBusinessHours(policy,async(name,body)=>{if(!supabaseClient)throw new Error('Unavailable');const {data,error}=await supabaseClient.functions.invoke(name,{body});if(error)throw new Error('Unavailable');return data;});setPolicy(saved);setMessage('Business hours saved. Availability wiring is not yet enabled for this policy.');}
+  try{const saved=await saveBusinessHours(policy,async(name,body)=>{if(!supabaseClient)throw new Error('Unavailable');const {data,error}=await supabaseClient.functions.invoke(name,{body});if(error)throw new Error('Unavailable');return data;});setPolicy(saved);setMessage('Business hours saved. Calendar checks use these hours when workspace-policy availability is deployed.');}
   catch{setReady(false);try{setPolicy(await read()??blank());setReady(true);setMessage('Save could not be confirmed. The latest saved settings have been loaded. Review them before saving again.');}catch{setMessage('Save could not be confirmed. Refresh to load the saved settings before trying again.');}}
   finally{setBusy(false);lock.current=false;}
  };
