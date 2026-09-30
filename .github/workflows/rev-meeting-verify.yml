@@ -31,13 +31,15 @@ jobs:
             supabase/functions/rev-calendar-discover/*.test.ts \
             supabase/functions/rev-calendar-select/*.test.ts \
             supabase/functions/rev-calendar-disconnect/*.test.ts \
+            supabase/functions/rev-calendar-reconnect/*.test.ts \
             supabase/functions/rev-calendar-availability/selectedCalendarAvailability*.test.ts \
             supabase/functions/_shared/microsoftGraphCalendarDiscovery.test.ts \
             supabase/functions/_shared/microsoftGraphSelectedCalendarAvailability.test.ts \
             src/tests/phase5_calendar_oauth_browser.test.mjs \
             src/tests/phase5_calendar_discovery_browser.test.mjs \
             src/tests/phase5_calendar_selection_browser.test.mjs \
-            src/tests/phase5_calendar_disconnect_browser.test.mjs
+            src/tests/phase5_calendar_disconnect_browser.test.mjs \
+            src/tests/phase5_calendar_reconnect_browser.test.mjs
 
   database:
     runs-on: ubuntu-latest
@@ -76,6 +78,7 @@ jobs:
           node src/tests/phase5_calendar_selection_local_validation.mjs
           node src/tests/phase5_selected_calendar_credential_local_validation.mjs
           node src/tests/phase5_calendar_disconnect_local_validation.mjs
+          node src/tests/phase5_calendar_reconnect_local_validation.mjs
       - name: Stop local Supabase
         if: always()
         run: npx --yes supabase@2.117.0 stop
