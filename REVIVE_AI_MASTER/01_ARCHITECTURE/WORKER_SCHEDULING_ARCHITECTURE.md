@@ -1,7 +1,7 @@
 # REV Worker Scheduling and Allocation
 
 Status: MVP priority authorised by Mike on 30 September 2026.
-Implementation not yet started. This document defines the first release.
+Worker records, working patterns and unavailable periods are implemented. Hosted save, edit, cancellation and refresh persistence have been verified. Jobs/shifts and assignment authority are next.
 
 ## Product workflow
 
@@ -92,3 +92,28 @@ Existing customer-calendar and meeting workflows must remain intact.
 Automatic allocation, worker self-service, outbound notifications, payroll, timesheets,
 travel-time calculation, dispatch, route optimisation and external calendar sync.
 These are not dependencies for the first supervised scheduling release.
+## Optional location planning and visual planner
+
+Authorised product requirements recorded on 30 September 2026.
+
+Provide a simple weekly planner with workers as rows and days as columns.
+Cards show job title, time, location and assignment status.
+Use colours plus text labels for proposed work, assigned work, leave and conflicts.
+Reflect saved changes throughout the week; show loading, stale and failed-refresh states.
+Initial access remains restricted to active owners/admins.
+
+Location-based recommendations are optional per business.
+Record worker location plans separately from working availability.
+Use scoped, verified job/customer locations and relevant Business Brain information.
+Recommendations must respect skills, hours, leave, existing assignments and capacity.
+Proximity alone does not establish feasibility; travel assumptions must be explicit.
+Missing location or travel information must not be presented as confirmed feasibility.
+
+Delivery progresses from manual allocation to recommendations and approved schedules.
+Automatic allocation requires explicit business opt-in and defined operating rules.
+Schedule changes must be visible and auditable; conflicts require manager attention.
+Notifications require separately enabled sending, verified recipients and approval rules.
+Worker self-service must not expose Business Brain, CRM or other restricted information.
+
+These requirements follow reliable manual assignment enforcement.
+Automatic allocation and notifications are not enabled by the current implementation.
