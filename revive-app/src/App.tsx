@@ -6,6 +6,7 @@ import { REVInterface } from '@/components/REVInterface';
 import { CustomersModule } from '@/components/CustomersModule';
 import { GrowthArea } from '@/components/GrowthArea';
 import { BusinessModule } from '@/components/BusinessModule';
+import { SchedulingModule } from '@/components/SchedulingModule';
 import { authProvider, classifySignInError } from '@/services/authService';
 import { dataProviderMode } from '@/data/provider';
 import { loadLiveWorkspaceContext } from '@/services/supabaseContextService';
@@ -13,7 +14,7 @@ import '@/styles/index.css';
 import { OutlookConnectionPanel } from '@/components/OutlookConnectionPanel';
 import { calendarOAuthReturn } from '@/services/calendarOAuthBrowser';
 
-type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business';
+type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business' | 'scheduling';
 type LoginError = 'invalid_credentials' | 'configuration' | 'network' | 'workspace';
 
 function App() {
@@ -86,7 +87,7 @@ function App() {
   React.useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1) || 'home';
-      if (['home', 'rev', 'customers', 'growth', 'business'].includes(hash)) {
+      if (['home', 'rev', 'customers', 'growth', 'business', 'scheduling'].includes(hash)) {
         setCurrentPage(hash as Page);
       }
     };
@@ -136,6 +137,9 @@ function App() {
         {currentPage === 'customers' && (dataProviderMode === 'supabase' ? <LiveModeNotice /> : <CustomersModule workspaceId={currentWorkspaceId} />)}
         {currentPage === 'growth' && <GrowthArea workspaceId={currentWorkspaceId} />}
         {currentPage === 'business' && <BusinessModule workspaceId={currentWorkspaceId} />}
+        {currentPage === 'scheduling' && (dataProviderMode === 'supabase' && liveSession
+          ? <SchedulingModule key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} />
+          : <div className="p-6">Scheduling requires a signed-in business workspace.</div>)}
       </main>
 
       {/* Footer */}

@@ -22,6 +22,7 @@ export const Navigation: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) 
     { label: 'HOME', href: '/', id: 'home' },
     { label: 'REV', href: '#rev', id: 'rev' },
     { label: 'CUSTOMERS', href: '#customers', id: 'customers' },
+    { label: 'SCHEDULING', href: '#scheduling', id: 'scheduling' },
     { label: 'GROWTH', href: '#growth', id: 'growth' },
     { label: 'BUSINESS', href: '#business', id: 'business' },
   ];
