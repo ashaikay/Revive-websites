@@ -26,6 +26,19 @@ export async function startCalendarOAuth(workspaceId: string, userId: string, st
   storage.setItem(key, JSON.stringify({ workspaceId, userId, connectionId: requestId, state: '', createdAt: now }));
   const created = row(await invoke('rev-calendar-connection-create', {workspaceId, requestId}));
   if (Object.keys(created).sort().join(',') !== 'connectionId,connectionStatus' || created.connectionId !== requestId || created.connectionStatus !== 'disconnected') throw new Error('Connection creation unavailable');
+  return authorizeCalendarOAuth(workspaceId,userId,requestId,storage,invoke,now);
+}
+
+export async function completeCalendarOAuth(returned: OAuthReturn, userId: string, storage: OAuthStorage, invoke: OAuthInvoke, now = Date.now()): Promise<void> {
+  let pending: PendingCalendarOAuth | null;
+  try { pending = JSON.parse(storage.getItem(key) ?? 'null'); } catch { storage.removeItem(key); throw new Error('Start a new Outlook connection'); }
+  if (!pending || returned.failed || !returned.code || returned.code.length > 8192 || pending.userId !== userId || !Number.isSafeInteger(pending.createdAt) || !uuid.test(pending.workspaceId) || !uuid.test(pending.connectionId) || !/^[A-Za-z0-9_-]{43,128}$/.test(pending.state) || pending.state !== returned.state || now-pending.createdAt < 0 || now-pending.createdAt >= 600000) { storage.removeItem(key); throw new Error('Start a new Outlook connection'); }
+  storage.removeItem(key); // Never retry a consumed code after an uncertain response.
+  const result = row(await invoke('rev-calendar-oauth-complete',{workspaceId:pending.workspaceId,connectionId:pending.connectionId,state:returned.state,code:returned.code}));
+  if (Object.keys(result).sort().join(',') !== 'connectionId,connectionStatus,status' || result.status !== 'authorization_saved' || result.connectionId !== pending.connectionId || result.connectionStatus !== 'disconnected') throw new Error('Calendar authorization unavailable');
+}
+
+async function authorizeCalendarOAuth(workspaceId:string,userId:string,requestId:string,storage:OAuthStorage,invoke:OAuthInvoke,now:number):Promise<string>{
   const started = row(await invoke('rev-calendar-oauth-start', {workspaceId,connectionId:requestId}));
   if (Object.keys(started).join(',') !== 'authorizationUrl' || typeof started.authorizationUrl !== 'string') throw new Error('Authorization unavailable');
   const url = new URL(started.authorizationUrl);
@@ -37,11 +50,11 @@ export async function startCalendarOAuth(workspaceId: string, userId: string, st
   storage.setItem(key,JSON.stringify({workspaceId,userId,connectionId:requestId,state,createdAt:now}));
   return url.href;
 }
-export async function completeCalendarOAuth(returned: OAuthReturn, userId: string, storage: OAuthStorage, invoke: OAuthInvoke, now = Date.now()): Promise<void> {
-  let pending: PendingCalendarOAuth | null;
-  try { pending = JSON.parse(storage.getItem(key) ?? 'null'); } catch { storage.removeItem(key); throw new Error('Start a new Outlook connection'); }
-  if (!pending || returned.failed || !returned.code || returned.code.length > 8192 || pending.userId !== userId || !Number.isSafeInteger(pending.createdAt) || !uuid.test(pending.workspaceId) || !uuid.test(pending.connectionId) || !/^[A-Za-z0-9_-]{43,128}$/.test(pending.state) || pending.state !== returned.state || now-pending.createdAt < 0 || now-pending.createdAt >= 600000) { storage.removeItem(key); throw new Error('Start a new Outlook connection'); }
-  storage.removeItem(key); // Never retry a consumed code after an uncertain response.
-  const result = row(await invoke('rev-calendar-oauth-complete',{workspaceId:pending.workspaceId,connectionId:pending.connectionId,state:returned.state,code:returned.code}));
-  if (Object.keys(result).sort().join(',') !== 'connectionId,connectionStatus,status' || result.status !== 'authorization_saved' || result.connectionId !== pending.connectionId || result.connectionStatus !== 'disconnected') throw new Error('Calendar authorization unavailable');
+export async function reconnectCalendarOAuth(workspaceId:string,userId:string,connectionId:string,storage:OAuthStorage,invoke:OAuthInvoke,now=Date.now()):Promise<string>{
+  if(!uuid.test(workspaceId)||!uuid.test(userId)||!uuid.test(connectionId))throw new Error('Invalid calendar identifiers');
+  storage.removeItem(key); // A fresh attempt replaces any abandoned browser callback state.
+  const prepared=row(await invoke('rev-calendar-reconnect',{workspaceId,connectionId}));
+  if(Object.keys(prepared).sort().join(',')!=='connectionId,connectionStatus'||prepared.connectionId!==connectionId||prepared.connectionStatus!=='disconnected')throw new Error('Calendar reconnect unavailable');
+  storage.setItem(key,JSON.stringify({workspaceId,userId,connectionId,state:'',createdAt:now}));
+  return authorizeCalendarOAuth(workspaceId,userId,connectionId,storage,invoke,now);
 }

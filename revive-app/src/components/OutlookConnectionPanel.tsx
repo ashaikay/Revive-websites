@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
-import { calendarOAuthReturn, startCalendarOAuth, completeCalendarOAuth, type OAuthInvoke } from '@/services/calendarOAuthBrowser';
+import { calendarOAuthReturn, startCalendarOAuth, reconnectCalendarOAuth, completeCalendarOAuth, type OAuthInvoke } from '@/services/calendarOAuthBrowser';
 import { loadCalendarConnectionMetadata, requestCalendarDiscovery, requestCalendarSelection, requestCalendarDisconnect } from '@/services/calendarConnectionMetadata';
 const invoke: OAuthInvoke = async (name, body) => {
   if (!supabaseClient) throw new Error('Calendar service unavailable');
@@ -67,6 +67,17 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       setMessage('Calendar selection could not be confirmed. Check the refreshed selection before trying again.');
     }finally{setBusy(false);locked.current=false;}
   };
+  const reconnect=async(connectionId:string)=>{
+    if(locked.current||disconnectConfirmation!==null)return;
+    locked.current=true;setBusy(true);setMessage('');
+    try{
+      const url=await reconnectCalendarOAuth(workspaceId,userId,connectionId,window.sessionStorage,invoke);
+      window.location.assign(url);
+    }catch{
+      try{setMetadata(await loadMetadata(workspaceId));}catch{/* No automatic retry. */}
+      setMessage('Outlook authorization could not be started. Check the connection status before trying again.');
+    }finally{setBusy(false);locked.current=false;}
+  };
   const disconnect=async(connectionId:string)=>{
     if(locked.current||disconnectConfirmation!==connectionId)return;
     locked.current=true;setBusy(true);setMessage('');
@@ -90,12 +101,16 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
     <h2 className="text-lg font-semibold">{callback?'Complete Outlook authorization':'Outlook calendar connection'}</h2>
     <p className="text-sm text-neutral-600 my-3">Connect calendar read access. This does not enable bookings or send invitations.</p>
     {message&&<p role="status" className="my-3">{message}</p>}
-    {!done&&<button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void execute()}>{busy?'Please wait...':callback?'SAVE OUTLOOK AUTHORIZATION':'CONNECT OUTLOOK'}</button>}
+    {!done&&(callback||metadata.connections.length===0)&&<button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void execute()}>{busy?'Please wait...':callback?'SAVE OUTLOOK AUTHORIZATION':'CONNECT OUTLOOK'}</button>}
     {callback?<a className="block mt-4" href="/#rev">Return to REV</a>:<>
       <label className="block text-sm mt-4">Calendar timezone<input className="block border rounded px-3 py-2 mt-1" value={timezone} disabled={busy} onChange={event=>setTimezone(event.target.value)} placeholder="Europe/London" /></label>
       {metadata.connections.length===0&&<p className="text-sm mt-4">No Outlook connections saved.</p>}
       {metadata.connections.map(connection=><div key={connection.id} className="border rounded p-4 mt-4">
         <p className="font-medium">{connection.account||'Outlook connection'}</p><p className="text-sm">Status: {connection.status}</p>
+        {['revoked','expired','error','disconnected'].includes(connection.status)&&<div className="my-3">
+          <p className="text-sm mb-2">Use this saved connection for fresh Outlook authorization. Previous incomplete attempts are cleared; discovery and calendar selection must be completed again.</p>
+          <button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void reconnect(connection.id)}>{connection.status==='disconnected'?'AUTHORIZE OUTLOOK':'RECONNECT OUTLOOK'}</button>
+        </div>}
         {connection.status==='disconnected'&&connection.authorizedBy===userId&&<><p className="text-sm my-2">After saving Outlook authorization, discover its calendars here.</p><button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void discover(connection.id)}>DISCOVER CALENDARS</button></>}
         {connection.status!=='revoked'&&(disconnectConfirmation===connection.id?<div className="my-3" role="group" aria-label="Confirm Outlook disconnect">
           <p className="text-sm mb-2">Disconnect this Outlook connection from REV? Its stored access will be removed and calendar selection cleared. Existing events are unchanged. Microsoft consent can be removed separately in your Microsoft account.</p>
