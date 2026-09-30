@@ -36,3 +36,11 @@ export async function requestCalendarSelection(workspaceId:string,calendarId:str
  const result=value as Record<string,unknown>;
  if(Object.keys(result).sort().join(',')!=='calendarId,connectionId,selected'||result.calendarId!==calendarId||result.connectionId!==expectedConnectionId||result.selected!==true)throw new Error('Calendar selection unavailable');
 }
+
+export async function requestCalendarDisconnect(workspaceId:string,connectionId:string,invoke:OAuthInvoke):Promise<void>{
+ if(!uuid.test(workspaceId)||!uuid.test(connectionId))throw new Error('Calendar identifiers required');
+ const value=await invoke('rev-calendar-disconnect',{workspaceId,connectionId});
+ if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Calendar disconnect unavailable');
+ const result=value as Record<string,unknown>;
+ if(Object.keys(result).sort().join(',')!=='connectionId,connectionStatus'||result.connectionId!==connectionId||result.connectionStatus!=='revoked')throw new Error('Calendar disconnect unavailable');
+}
