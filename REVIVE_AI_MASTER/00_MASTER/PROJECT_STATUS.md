@@ -1,3 +1,21 @@
+## Verified hosted Outlook disconnect and reconnect
+
+Verified on 30 September 2026:
+- Owner/admin disconnect removed REV's stored access and cleared calendar selection.
+- Hosted availability stopped returning slots after disconnect.
+- Reconnect reused the saved support@fatherslegacy.net connection.
+- Fresh browser authorization, discovery, and main Calendar selection succeeded.
+- Connection and selection persisted after refresh.
+- Availability for 8 October 2026 again excluded the existing 15:00–15:30 event.
+- Disconnect and reconnect boundary/database/browser checks passed locally and in GitHub CI.
+- Hosted disconnect and reconnect migrations/functions deployed successfully.
+- Existing Outlook events remained intact. Live booking remains disabled.
+- An additional unfinished connection record remains visible; it was not used for the verified reconnect.
+
+This checkpoint supersedes earlier entries listing disconnect/reconnect as unfinished.
+
+---
+
 ## Verified Outlook integration checkpoint — 30 September 2026
 
 This checkpoint supersedes the historical Phase 1 status and restrictions below where they describe work subsequently authorized and completed.
@@ -272,7 +290,7 @@ The read-only report is in `REVIVE_AI_MASTER/SUPABASE_EXISTING_STATE.md`. Phase 
 - Multi-tenant isolation must be tested exhaustively before production
 
 ## Next Task
-Add authenticated owner/admin Outlook disconnect controls using the existing credential-revocation authority. Verify stored credentials are removed, calendars become inactive/unselected, and subsequent availability reads fail closed. Then complete reconnect handling and per-workspace business-hours configuration. Google integration remains unfinished. Live booking remains disabled.
+Implement per-workspace business-hours configuration with owner/admin management, tenant isolation, and availability using the saved policy. Google calendar integration remains unfinished. Customer-calendar booking requires separate implementation and controlled verification; live booking remains disabled.
 ## Phase Gate
 Phase 1 is COMPLETE when:
 - All documentation is written
