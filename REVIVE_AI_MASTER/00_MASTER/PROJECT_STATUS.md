@@ -1,3 +1,27 @@
+## Workspace business hours verified; worker scheduling prioritised
+
+Checkpoint: 30 September 2026. Latest verified CI commit: `84bafe9`.
+
+Verified:
+- Workspace business-hours storage, authenticated owner/admin save endpoint and settings form implemented.
+- Tenant isolation, invalid-policy rejection, suspended-user denial and concurrent-save protection passed locally and in CI.
+- Hosted business-hours migration and save/availability functions deployed.
+- Saved settings persisted after browser refresh.
+- Changing hours from 09:00-17:00 to 10:00-16:00 changed the available slots accordingly.
+- The existing 8 October 2026 meeting at 15:00-15:30 remained excluded.
+- Live booking remains disabled.
+
+Product priority:
+- Worker scheduling and allocation is now an explicit production MVP priority, authorised by Mike.
+- Build it as a separate Scheduling domain and main-navigation area; do not reuse customer meeting proposals as worker assignments.
+- Initial scope: worker profiles, roles/skills, availability and leave, jobs/shifts, locations, staffing requirements, manual allocation, overlap prevention, weekly rota and unfilled work.
+- Include workspace permissions, tenant isolation and concurrent-assignment checks alongside implementation.
+- Google integration is deferred and is not a dependency for internal worker scheduling.
+- Customer-calendar booking, reminders, RSVP and meeting outcomes remain unfinished; this priority change does not mark Phase 5 complete.
+- Earlier historical status and next-task entries are superseded by this checkpoint where they conflict.
+
+---
+
 ## Verified hosted Outlook disconnect and reconnect
 
 Verified on 30 September 2026:
@@ -290,7 +314,7 @@ The read-only report is in `REVIVE_AI_MASTER/SUPABASE_EXISTING_STATE.md`. Phase 
 - Multi-tenant isolation must be tested exhaustively before production
 
 ## Next Task
-Implement per-workspace business-hours configuration with owner/admin management, tenant isolation, and availability using the saved policy. Google calendar integration remains unfinished. Customer-calendar booking requires separate implementation and controlled verification; live booking remains disabled.
+Document the separate worker-scheduling architecture and inspect existing workspace, role and audit conventions. Then implement the smallest tenant-scoped worker/availability/job/assignment foundation with local validation before frontend wiring or hosted deployment. Scheduling must support explicit manual allocation and prevent overlapping assignments. Google integration remains deferred; live customer-calendar booking remains disabled.
 ## Phase Gate
 Phase 1 is COMPLETE when:
 - All documentation is written
