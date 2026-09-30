@@ -36,6 +36,11 @@ export interface CalendarAvailabilityDependencies {
   hasActiveWorkspaceMembership: (authorization: string, workspaceId: string, userId: string) => Promise<boolean>;
   isCalendarAvailabilityEnabled: () => boolean;
   resolveTrustedCalendarAvailability: (workspaceId: string, searchStartAt: string, searchEndAt: string, timezone: string) => Promise<TrustedCalendarAvailabilityConfig>;
+  resolveSelectedCalendarAvailability?: (workspaceId: string, searchStartAt: string, searchEndAt: string, timezone: string, userId: string) => Promise<{
+    selectedCalendar: TrustedCalendarAvailabilityConfig['selectedCalendar'];
+    policy: AvailabilityPolicy;
+    busyIntervals: BusyInterval[];
+  }>;
   readBusyIntervals: typeof readMicrosoftGraphPrimaryCalendarAvailability;
   calculateAvailability?: typeof calculateAvailability;
   now: () => string;
@@ -134,12 +139,14 @@ export async function handleCalendarAvailability(
 
   let stage: CalendarAvailabilityStage = 'resolve_trusted_configuration';
   try {
-    const trusted = await dependencies.resolveTrustedCalendarAvailability(
-      payload.workspaceId,
-      payload.searchStartAt,
-      payload.searchEndAt,
-      payload.timezone,
-    );
+    const selected = dependencies.resolveSelectedCalendarAvailability
+      ? await dependencies.resolveSelectedCalendarAvailability(payload.workspaceId, payload.searchStartAt, payload.searchEndAt, payload.timezone, userId)
+      : null;
+    const trusted = selected
+      ? { ...selected, accessToken: '', primaryMailboxUserPrincipalName: '' }
+      : await dependencies.resolveTrustedCalendarAvailability(
+        payload.workspaceId, payload.searchStartAt, payload.searchEndAt, payload.timezone,
+      );
     if (trusted.selectedCalendar.workspaceId !== payload.workspaceId
       || trusted.selectedCalendar.timezone !== payload.timezone
       || trusted.selectedCalendar.provider !== 'microsoft_graph') {
@@ -154,7 +161,7 @@ export async function handleCalendarAvailability(
       });
     }
     stage = 'read_busy_intervals';
-    const busyIntervals: BusyInterval[] = await dependencies.readBusyIntervals({
+    const busyIntervals: BusyInterval[] = selected ? selected.busyIntervals : await dependencies.readBusyIntervals({
       accessToken: trusted.accessToken,
       workspaceId: payload.workspaceId,
       selectedCalendarId: trusted.selectedCalendar.id,
