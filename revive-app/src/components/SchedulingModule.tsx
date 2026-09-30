@@ -1,3 +1,4 @@
+import {SchedulingJobsPanel} from './SchedulingJobsPanel';
 import {WorkerUnavailabilityPanel} from './WorkerUnavailabilityPanel';
 import {WorkerWorkingPatternPanel} from './WorkerWorkingPatternPanel';
 import {useEffect,useRef,useState} from 'react';
@@ -50,5 +51,6 @@ export function SchedulingModule({workspaceId,userId}:{workspaceId:string;userId
  <button className="btn-primary" type="submit">SAVE WORKER</button><button className="btn-secondary ml-3" type="button" onClick={()=>setEditing(false)}>CANCEL</button></fieldset></form>}
  {ready&&workers.length===0&&<p>No workers recorded.</p>}
  <ul className="grid gap-4 mt-4 sm:grid-cols-2">{workers.map(worker=><li key={worker.workerId} className="card p-4"><h2 className="font-semibold">{worker.displayName}</h2><p>{worker.active?'Active':'Inactive'}</p><p>Roles: {worker.roleLabels.join(', ')||'None recorded'}</p><p>Skills: {worker.skillTags.join(', ')||'None recorded'}</p><WorkerWorkingPatternPanel key={`${workspaceId}:${userId}:${worker.workerId}`} workspaceId={workspaceId} userId={userId} workerId={worker.workerId} active={worker.active} disabled={busy||!!pending||storageBlocked||!ready} /><WorkerUnavailabilityPanel key={`${workspaceId}:${userId}:${worker.workerId}`} workspaceId={workspaceId} userId={userId} workerId={worker.workerId} active={worker.active} disabled={busy||!!pending||storageBlocked||!ready} /><button className="btn-secondary mt-3" disabled={busy||!!pending||!ready||storageBlocked} onClick={()=>{setDraft({workerId:worker.workerId,displayName:worker.displayName,roles:worker.roleLabels.join(', '),skills:worker.skillTags.join(', '),active:worker.active,version:worker.version});setEditing(true);setMessage(''); requestAnimationFrame(()=>document.getElementById("worker-edit-form")?.scrollIntoView({behavior:"smooth",block:"start"}));}}>EDIT WORKER</button></li>)}</ul>
+ <SchedulingJobsPanel key={`${workspaceId}:${userId}`} workspaceId={workspaceId} userId={userId} disabled={busy||!!pending||storageBlocked||!ready} />
  </section>;
 }
