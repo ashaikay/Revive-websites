@@ -22,6 +22,20 @@ jobs:
       - run: npm ci
       - run: node scripts/verify-rev-meeting.mjs
       - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx
+      - name: Test customer calendar integration
+        run: |
+          node --experimental-strip-types --test \
+            supabase/functions/rev-calendar-connection-create/*.test.ts \
+            supabase/functions/rev-calendar-oauth-start/*.test.ts \
+            supabase/functions/rev-calendar-oauth-complete/*.test.ts \
+            supabase/functions/rev-calendar-discover/*.test.ts \
+            supabase/functions/rev-calendar-select/*.test.ts \
+            supabase/functions/rev-calendar-availability/selectedCalendarAvailability*.test.ts \
+            supabase/functions/_shared/microsoftGraphCalendarDiscovery.test.ts \
+            supabase/functions/_shared/microsoftGraphSelectedCalendarAvailability.test.ts \
+            src/tests/phase5_calendar_oauth_browser.test.mjs \
+            src/tests/phase5_calendar_discovery_browser.test.mjs \
+            src/tests/phase5_calendar_selection_browser.test.mjs
 
   database:
     runs-on: ubuntu-latest
@@ -53,3 +67,12 @@ jobs:
           test -n "${REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY:-}"
           node src/tests/phase5w_local_claim_validation.mjs
           node --experimental-strip-types src/tests/phase6f_local_provider_lifecycle.mjs
+          node src/tests/phase5_calendar_connections_local_validation.mjs
+          node src/tests/phase5_calendar_oauth_storage_local_validation.mjs
+          node src/tests/phase5_calendar_connection_creation_local_validation.mjs
+          node src/tests/phase5_calendar_discovery_local_validation.mjs
+          node src/tests/phase5_calendar_selection_local_validation.mjs
+          node src/tests/phase5_selected_calendar_credential_local_validation.mjs
+      - name: Stop local Supabase
+        if: always()
+        run: npx --yes supabase@2.117.0 stop
