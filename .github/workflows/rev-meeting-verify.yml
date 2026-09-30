@@ -34,6 +34,7 @@ jobs:
             supabase/functions/rev-calendar-reconnect/*.test.ts \
             supabase/functions/rev-calendar-business-hours-save/*.test.ts \
             supabase/functions/rev-worker-save/*.test.ts \
+            supabase/functions/rev-worker-pattern-save/*.test.ts \
             supabase/functions/rev-calendar-availability/workspaceBusinessHours.test.ts \
             supabase/functions/rev-calendar-availability/selectedCalendarAvailability*.test.ts \
             supabase/functions/_shared/microsoftGraphCalendarDiscovery.test.ts \
@@ -44,7 +45,8 @@ jobs:
             src/tests/phase5_calendar_disconnect_browser.test.mjs \
             src/tests/phase5_calendar_reconnect_browser.test.mjs \
             src/tests/phase5_calendar_business_hours_browser.test.mjs \
-            src/tests/worker_records_browser.test.mjs
+            src/tests/worker_records_browser.test.mjs \
+            src/tests/worker_patterns_browser.test.mjs
 
   database:
     runs-on: ubuntu-latest
@@ -86,6 +88,7 @@ jobs:
           node src/tests/phase5_calendar_reconnect_local_validation.mjs
           node src/tests/phase5_calendar_business_hours_local_validation.mjs
           node src/tests/worker_records_local_validation.mjs
+          node src/tests/worker_patterns_local_validation.mjs
       - name: Stop local Supabase
         if: always()
         run: npx --yes supabase@2.117.0 stop
