@@ -1,3 +1,34 @@
+## Verified Outlook integration checkpoint — 30 September 2026
+
+This checkpoint supersedes the historical Phase 1 status and restrictions below where they describe work subsequently authorized and completed.
+
+Phase 5 remains in progress.
+
+Verified:
+- Calendar regression tests and local database validators passed in GitHub CI at commit bbf05e5.
+- Availability integration code committed at 123b2a8.
+- Deno entry-point checks passed.
+- Seven calendar migrations applied to the hosted Revive Websites project ntbowgutwyyhhnmkadlv.
+- Connection creation, OAuth start/completion, discovery, selection, and availability functions deployed.
+- Dedicated REV Calendar Connections app uses delegated Calendars.Read and offline_access.
+- support@fatherslegacy.net authorization saved through the browser flow.
+- Calendar discovery and selection persisted; the main Calendar is selected, Birthdays is not.
+- Hosted selected-calendar availability excluded the existing 8 October 2026 event at 15:00–15:30 Europe/London.
+- Browser verification used http://localhost:5180/#rev.
+
+Safety state:
+- Selected-calendar read-only availability is enabled.
+- Live booking remains disabled: meeting provider database gate off, live activation secret removed, and live UI hidden by default.
+- Calendar connection and availability testing created no new event or invitation.
+
+Remaining work:
+- Customer disconnect and reconnect controls.
+- Per-workspace business-hours configuration.
+- Google calendar integration.
+- Customer-calendar booking integration requires separate implementation and controlled verification; the earlier application-permission booking pilot does not prove delegated customer-calendar booking.
+
+---
+
 # Phase 2D.2 / 2D.2A — Read-only Supabase integration and live browser validation COMPLETE (PASS)
 
 - Added opt-in `mock`/`supabase` provider mode; mock remains the default.
@@ -241,8 +272,7 @@ The read-only report is in `REVIVE_AI_MASTER/SUPABASE_EXISTING_STATE.md`. Phase 
 - Multi-tenant isolation must be tested exhaustively before production
 
 ## Next Task
-Phase 5 remains in progress. The next unfinished roadmap task is the calendar-account integration foundation: customer self-service Outlook/Google connection and per-tenant provider configuration. Do not begin reminders, RSVP tracking, meeting-outcome automation, goal-progress integration or Phase 6 until that foundation and its prerequisites above are reviewed and authorized.
-
+Add authenticated owner/admin Outlook disconnect controls using the existing credential-revocation authority. Verify stored credentials are removed, calendars become inactive/unselected, and subsequent availability reads fail closed. Then complete reconnect handling and per-workspace business-hours configuration. Google integration remains unfinished. Live booking remains disabled.
 ## Phase Gate
 Phase 1 is COMPLETE when:
 - All documentation is written
