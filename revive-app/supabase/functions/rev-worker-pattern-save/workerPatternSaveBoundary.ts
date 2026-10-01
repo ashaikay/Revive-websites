@@ -9,6 +9,8 @@ export interface WorkerPatternDependencies {
  canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;
  save(input:WorkerPatternInput):Promise<unknown>;
 }
+export type WorkerPatternRefusalCode='assignment_conflict'|'stale_pattern'|'inactive_worker';
+export class WorkerPatternRefusal extends Error{readonly code:WorkerPatternRefusalCode;constructor(code:WorkerPatternRefusalCode){super(code);this.code=code;}}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const validId=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
 const time=/^([01]\d|2[0-3]):[0-5]\d$/;
@@ -34,7 +36,7 @@ export async function handleWorkerPatternSave(request:Request,deps:WorkerPattern
   const userId=await deps.getUserId(authorization);if(!validId(userId))return reply(401,{error:'Authentication required.'});
   if(!await deps.canManage(authorization,body.workspaceId,userId))return reply(403,{error:'Working pattern could not be saved.'});
   const workingDays=[...body.workingDays].sort((a:number,b:number)=>a-b);
-  const value=await deps.save({target_workspace_id:body.workspaceId,initiating_user_id:userId,target_request_id:body.requestId,target_worker_id:body.workerId,target_timezone:body.timezone,target_working_days:workingDays,target_start_local:body.startLocal,target_end_local:body.endLocal,target_effective_from:body.effectiveFrom,target_effective_until:body.effectiveUntil,expected_version:body.expectedVersion});
+    let value:unknown;try{value=await deps.save({target_workspace_id:body.workspaceId,initiating_user_id:userId,target_request_id:body.requestId,target_worker_id:body.workerId,target_timezone:body.timezone,target_working_days:workingDays,target_start_local:body.startLocal,target_end_local:body.endLocal,target_effective_from:body.effectiveFrom,target_effective_until:body.effectiveUntil,expected_version:body.expectedVersion});}catch(error){if(error instanceof WorkerPatternRefusal)return reply(409,{status:'refused',code:error.code,requestId:body.requestId});throw error;}
   if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Invalid result');const row=value as Record<string,unknown>;
   if(!validId(row.pattern_id)||row.workspace_id!==body.workspaceId||row.worker_id!==body.workerId||row.timezone!==body.timezone||row.start_local!==body.startLocal||row.end_local!==body.endLocal||row.effective_from!==body.effectiveFrom||row.effective_until!==body.effectiveUntil||row.version!==body.expectedVersion+1||!days(row.working_days)||JSON.stringify([...row.working_days].sort((a,b)=>a-b))!==JSON.stringify(workingDays))throw new Error('Invalid result');
   return reply(200,{patternId:row.pattern_id,workspaceId:row.workspace_id,workerId:row.worker_id,timezone:row.timezone,workingDays,startLocal:row.start_local,endLocal:row.end_local,effectiveFrom:row.effective_from,effectiveUntil:row.effective_until,version:row.version});

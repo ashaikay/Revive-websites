@@ -8,6 +8,8 @@ export interface UnavailabilityDependencies {
  canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;
  save(input:UnavailabilityInput):Promise<unknown>;
 }
+export type WorkerUnavailabilityRefusalCode='assignment_conflict'|'stale_period'|'already_cancelled'|'inactive_worker';
+export class WorkerUnavailabilityRefusal extends Error{readonly code:WorkerUnavailabilityRefusalCode;constructor(code:WorkerUnavailabilityRefusalCode){super(code);this.code=code;}}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
 function utc(v:unknown):v is string{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v))return false;const ms=Date.parse(v);return Number.isFinite(ms)&&new Date(ms).toISOString()===v;}
@@ -30,7 +32,7 @@ export async function handleWorkerUnavailabilitySave(request:Request,deps:Unavai
    ||(body.unavailabilityId===null?(body.expectedVersion!==0||body.status!=='active'):body.expectedVersion===0))return reply(400,{error:'Invalid unavailable period.'});
   const userId=await deps.getUserId(authorization);if(!id(userId))return reply(401,{error:'Authentication required.'});
   if(!await deps.canManage(authorization,body.workspaceId,userId))return reply(403,{error:'Unavailable period could not be saved.'});
-  const value=await deps.save({target_workspace_id:body.workspaceId,initiating_user_id:userId,target_request_id:body.requestId,target_worker_id:body.workerId,target_unavailability_id:body.unavailabilityId,target_start_at:body.startAt,target_end_at:body.endAt,target_category:body.category,target_status:body.status,expected_version:body.expectedVersion});
+    let value:unknown;try{value=await deps.save({target_workspace_id:body.workspaceId,initiating_user_id:userId,target_request_id:body.requestId,target_worker_id:body.workerId,target_unavailability_id:body.unavailabilityId,target_start_at:body.startAt,target_end_at:body.endAt,target_category:body.category,target_status:body.status,expected_version:body.expectedVersion});}catch(error){if(error instanceof WorkerUnavailabilityRefusal)return reply(409,{status:'refused',code:error.code,requestId:body.requestId});throw error;}
   if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Invalid result');const row=value as Record<string,unknown>;
   if(!id(row.unavailability_id)||(body.unavailabilityId!==null&&row.unavailability_id!==body.unavailabilityId)||row.workspace_id!==body.workspaceId||row.worker_id!==body.workerId||storedInstant(row.start_at)!==body.startAt||storedInstant(row.end_at)!==body.endAt||row.category!==body.category||row.status!==body.status||row.version!==body.expectedVersion+1)throw new Error('Invalid result');
   return reply(200,{unavailabilityId:row.unavailability_id,workspaceId:row.workspace_id,workerId:row.worker_id,startAt:body.startAt,endAt:body.endAt,category:row.category,status:row.status,version:row.version});

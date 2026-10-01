@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { handleWorkerPatternSave } from './workerPatternSaveBoundary.ts';
+import { handleWorkerPatternSave,WorkerPatternRefusal } from './workerPatternSaveBoundary.ts';
 const url = Deno.env.get('SUPABASE_URL')!;
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY')!;
 const caller = (authorization: string) => createClient(url,anonKey,{global:{headers:{Authorization:authorization}},auth:{persistSession:false,autoRefreshToken:false}});
@@ -10,6 +10,6 @@ Deno.serve((request) => handleWorkerPatternSave(request,{
   save:async(input)=>{
     const service=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
     const {data,error}=await service.rpc('save_rev_worker_working_pattern',input);const row=data;
-    if(error||!row)throw new Error('Working pattern unavailable');return row;
+    if(error){if(error.message==='Cancel affected assignments before changing availability')throw new WorkerPatternRefusal('assignment_conflict');if(error.message==='Working pattern changed')throw new WorkerPatternRefusal('stale_pattern');if(error.message==='Active worker required')throw new WorkerPatternRefusal('inactive_worker');throw new Error('Working pattern unavailable');}if(!row)throw new Error('Working pattern unavailable');return row;
   },
 }));
