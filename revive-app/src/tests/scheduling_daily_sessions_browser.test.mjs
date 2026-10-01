@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { clearDailySessionAttempt, previewDailySessions, rememberDailySessionAttempt, restoreDailySessionAttempt, submitDailySessionAttempt } from '../services/schedulingDailySessions.ts';
+import {formatSchedulingDate} from '../services/schedulingDisplay.ts';
+import {loadPlannerData,spansPlannerDay} from '../services/schedulingPlanner.ts';
 
 const workspaceId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -67,6 +69,18 @@ test('save sends one canonical request and validates three staffing requirements
   assert.equal(calls, 1);
   assert.equal(saved.jobs.length, 3);
   assert.ok(saved.jobs.every(job => job.staffingCount === 2));
+});
+
+test('saved daily sessions project onto separate planner dates with UK labels',async()=>{
+ const saved=await submitDailySessionAttempt(attempt,async()=>result());
+ const rows={
+  scheduling_workers:[],
+  scheduling_jobs:saved.jobs.map(job=>({id:job.jobId,workspace_id:job.workspaceId,title:job.title,start_at:job.startAt,end_at:job.endAt,timezone:job.timezone,location:job.location,required_skills:job.requiredSkills,staffing_count:job.staffingCount,status:job.status,version:job.version})),
+  scheduling_assignments:[],scheduling_worker_patterns:[],scheduling_worker_unavailability:[],
+ };
+ const planner=await loadPlannerData(workspaceId,async table=>rows[table]);
+ assert.deepEqual(planner.jobs.map(job=>['2026-10-15','2026-10-16','2026-10-17'].filter(day=>spansPlannerDay(job.startAt,job.endAt,day,'Europe/London'))),[['2026-10-15'],['2026-10-16'],['2026-10-17']]);
+ assert.deepEqual(['2026-10-15','2026-10-16','2026-10-17'].map(formatSchedulingDate),['15/10/2026','16/10/2026','17/10/2026']);
 });
 
 test('unknown save is not automatically retried and exact request survives refresh', async () => {

@@ -112,6 +112,9 @@ try {
  const leaveBody=(w,start,end)=>({target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),target_worker_id:w,target_unavailability_id:null,target_start_at:start,target_end_at:end,target_category:'leave',target_status:'active',expected_version:0});
  const leave=await rpc(serviceKey,'save_rev_worker_unavailability',leaveBody(second,'2026-10-08T09:00:00Z','2026-10-08T10:00:00Z'));check('LEAVE_FIXTURE_SAVED',leave.status===200);
  check('LEAVE_BLOCKS_ALLOCATION',(await save({target_worker_id:second,target_job_id:overlap,target_request_id:randomUUID()})).status>=400);
+ const cancelledLeave=await rpc(serviceKey,'save_rev_worker_unavailability',{...leaveBody(second,'2026-10-08T09:00:00Z','2026-10-08T10:00:00Z'),target_request_id:randomUUID(),target_unavailability_id:leave.payload?.unavailability_id,target_status:'cancelled',expected_version:1});
+ check('LEAVE_CANCELLATION_SAVED',cancelledLeave.status===200&&cancelledLeave.payload?.status==='cancelled');
+ check('CANCELLED_LEAVE_DOES_NOT_BLOCK_ALLOCATION',(await save({target_worker_id:second,target_job_id:overlap,target_request_id:randomUUID()})).status===200);
  check('NEW_LEAVE_CANNOT_INVALIDATE_ASSIGNMENT',(await rpc(serviceKey,'save_rev_worker_unavailability',leaveBody(worker,'2026-10-08T09:30:00Z','2026-10-08T09:45:00Z'))).status>=400);
  check('PATTERN_CHANGE_CANNOT_INVALIDATE_ASSIGNMENT',(await rpc(serviceKey,'save_rev_worker_working_pattern',{...patternBody(worker),target_start_local:'11:00',expected_version:1})).status>=400);
  check('SAFE_PATTERN_CHANGE_ALLOWED',(await rpc(serviceKey,'save_rev_worker_working_pattern',{...patternBody(worker),target_end_local:'18:00',expected_version:1})).status===200);
