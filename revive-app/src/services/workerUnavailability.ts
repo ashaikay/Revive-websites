@@ -20,7 +20,7 @@ export function clearLeaveAttempt(s:Storage,ws:string,user:string,worker:string)
 function localValue(ms:number,tz:string):string{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ms));const get=(type:string)=>parts.find(p=>p.type===type)?.value;return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;}
 export function localLeaveToUtc(local:string,timezone:string):string{
  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)||local<'1000-01-01T00:00')throw new Error('Valid local date required');const base=Date.parse(local+':00.000Z');if(!Number.isFinite(base)||new Date(base).toISOString().slice(0,16)!==local)throw new Error('Valid local date required');
- const offsets=new Set<number>();for(let hours=-48;hours<=48;hours+=6){const probe=base+hours*3600000;const formatted=localValue(probe,timezone);offsets.add(Date.parse(formatted+':00.000Z')-probe);}
+ const offsets=new Set<number>();for(let hours=-48;hours<=48;hours+=6){const probe=base+hours*3600000;const formatted=localValue(probe,timezone),parsed=Date.parse(formatted+':00.000Z');if(Number.isFinite(parsed))offsets.add(parsed-probe);}
  const matches=[...offsets].map(offset=>base-offset).filter(ms=>localValue(ms,timezone)===local);
  if(matches.length!==1)throw new Error('Local time is ambiguous or nonexistent; choose another time');return new Date(matches[0]).toISOString();
 }

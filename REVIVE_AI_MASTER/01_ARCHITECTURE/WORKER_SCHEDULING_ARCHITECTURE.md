@@ -3,6 +3,25 @@
 Status: MVP priority authorised by Mike on 30 September 2026.
 Worker records, working patterns and unavailable periods are implemented. Hosted save, edit, cancellation and refresh persistence have been verified. Jobs/shifts and assignment authority are next.
 
+## Multi-day daytime sessions — local implementation complete
+
+The existing `20261001000000_rev_daily_job_sessions.sql` migration is applied locally only. New jobs default to an explicit daily-working-hours batch: inclusive first/last dates, selected weekdays, local start/end, IANA timezone and staffing required per generated session. Each selected date creates a separate open job; no overnight interval is inferred. The range is limited to 31 calendar days.
+
+An authenticated owner/admin Edge Function validates the exact request, resolves the caller from the session and invokes the existing service-role-only `create_rev_daily_job_sessions` RPC. Responses contain sanitized job metadata only. Unknown outcomes are not retried automatically: the canonical request remains in workspace/user-scoped session storage and only an explicit identical retry is offered. A confirmed save emits the existing `rev-scheduling-changed` event so the single central planner refreshes.
+
+Existing job editing, cancellation and assignment remain on their existing paths. Saved intervals spanning local dates display an overnight warning and are never silently split or converted.
+
+Validation completed on 1 October 2026:
+
+- Scheduling endpoint/browser regressions: 61/61 passed.
+- Local daily-session validator: `SCHEDULING_DAILY_SESSIONS_LOCAL=PASS`.
+- Local assignment validator: `SCHEDULING_ASSIGNMENTS_LOCAL=PASS`.
+- Production build: passed with the existing chunk-size advisory.
+- Local migration check used `migration up --local`; no database reset and no new migration application occurred.
+- No provider requests, notifications, automatic allocation, location/travel calculations or hosted deployment occurred.
+
+Remaining limitations: overnight work is unsupported; DST gaps/folds reject the whole batch; each generated session is edited or cancelled individually after creation; worker allocation remains manual; notifications and travel/location feasibility remain deferred.
+
 ## Product workflow
 
 Scheduling is a main-navigation module.
