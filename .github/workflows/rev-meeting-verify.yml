@@ -21,7 +21,7 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: node scripts/verify-rev-meeting.mjs
-      - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx
+      - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx src/tests/schedulingRecoveryUI.test.tsx
       - name: Test customer calendar integration
         run: |
           node --experimental-strip-types --test \
@@ -55,7 +55,9 @@ jobs:
             src/tests/scheduling_jobs_browser.test.mjs \
             src/tests/scheduling_daily_sessions_browser.test.mjs \
             src/tests/scheduling_assignments_browser.test.mjs \
-            src/tests/scheduling_planner_browser.test.mjs
+            src/tests/scheduling_planner_browser.test.mjs \
+            src/tests/scheduling_recovery_browser.test.mjs \
+            src/tests/scheduling_display_browser.test.mjs
 
   database:
     runs-on: ubuntu-latest
