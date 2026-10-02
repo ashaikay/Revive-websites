@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
-import {loadPlannerData,plannerColumns,plannerMonday,addPlannerDays,spansPlannerDay,jobVacancies,workerSetupIssue,assignmentConflict} from '../services/schedulingPlanner.ts';
+import {loadPlannerData,plannerColumns,plannerMonday,addPlannerDays,spansPlannerDay,jobVacancies,workerSetupIssue,workerSuitability,assignmentConflict} from '../services/schedulingPlanner.ts';
 const ws='11111111-1111-4111-8111-111111111111',worker='22222222-2222-4222-8222-222222222222',job='33333333-3333-4333-8333-333333333333',assignment='44444444-4444-4444-8444-444444444444',pattern='55555555-5555-4555-8555-555555555555',leave='66666666-6666-4666-8666-666666666666';
 const start='2026-10-08T10:00:00.000Z',end='2026-10-08T14:30:00.000Z';
 function rows(){return {scheduling_workers:[{id:worker,workspace_id:ws,display_name:'Ricki',role_labels:[],skill_tags:['Fire'],active:true,version:1}],scheduling_jobs:[{id:job,workspace_id:ws,title:'Walsall inspection',start_at:start,end_at:end,timezone:'Europe/London',location:'Walsall',required_skills:['Fire'],staffing_count:2,status:'open',version:1}],scheduling_assignments:[{id:assignment,workspace_id:ws,worker_id:worker,job_id:job,start_at:start,end_at:end,status:'active',version:1}],scheduling_worker_patterns:[{id:pattern,workspace_id:ws,worker_id:worker,timezone:'Europe/London',working_days:[1,2,3,4,5],start_local:'09:00',end_local:'17:00',effective_from:'2026-10-01',effective_until:null,version:1}],scheduling_worker_unavailability:[]};}
@@ -12,6 +12,19 @@ test('week navigation uses Monday and remains stable across DST and year changes
 test('exclusive midnight endings do not occupy the following day; multi-day work spans days',()=>{assert.equal(spansPlannerDay('2026-10-08T22:00:00Z','2026-10-08T23:00:00Z','2026-10-09','Europe/London'),false);assert.equal(spansPlannerDay('2026-10-08T22:00:00Z','2026-10-09T01:00:00Z','2026-10-09','Europe/London'),true);});
 test('unfilled counts use active saved assignments and exclude cancelled jobs',async()=>{const d=await load(rows());assert.equal(jobVacancies(d,d.jobs[0]),1);d.assignments[0].status='cancelled';assert.equal(jobVacancies(d,d.jobs[0]),2);d.jobs[0].status='cancelled';assert.equal(jobVacancies(d,d.jobs[0]),0);});
 test('missing and expired hours provide setup guidance without inferring availability',async()=>{const d=await load(rows());assert.equal(workerSetupIssue(d,worker,'2026-10-05'),null);d.patterns[0].until='2026-10-01';assert.ok(workerSetupIssue(d,worker,'2026-10-05'));d.patterns=[];assert.equal(workerSetupIssue(d,worker,'2026-10-05'),'Working hours missing');});
+test('worker suitability explains every advisory allocation outcome',async()=>{const suitable=await load(rows());suitable.assignments=[];assert.deepEqual(workerSuitability(suitable,suitable.jobs[0],suitable.workers[0]),{workerId:worker,suitable:true,reason:null,message:'Appears suitable. Final checks run when saving.'});
+ const cases=[
+  ['worker_inactive',d=>{d.workers[0].active=false;}],
+  ['missing_skills',d=>{d.workers[0].skills=[];}],
+  ['no_working_pattern',d=>{d.patterns=[];}],
+  ['outside_working_availability',d=>{d.patterns[0].endLocal='11:00';}],
+  ['worker_unavailable',d=>{d.leave=[{id:leave,workerId:worker,startAt:start,endAt:end,category:'leave',status:'active'}];}],
+  ['overlap',d=>{d.assignments=[{id:assignment,workerId:worker,jobId:job,startAt:start,endAt:end,status:'active'}];d.jobs[0].count=2;}],
+    ['capacity_full',d=>{d.jobs[0].count=1;d.assignments=[{id:assignment,workerId:worker,jobId:job,startAt:start,endAt:end,status:'active'}];}],
+  ['availability_unchecked',d=>{d.patterns[0].timezone='Invalid/Zone';}],
+ ];
+ for(const [reason,change] of cases){const d=await load(rows());d.assignments=[];change(d);assert.equal(workerSuitability(d,d.jobs[0],d.workers[0]).reason,reason);}
+});
 test('saved leave and inconsistent overlapping work produce review flags',async()=>{const r=rows();r.scheduling_worker_unavailability=[{id:leave,workspace_id:ws,worker_id:worker,start_at:start,end_at:end,category:'leave',status:'active',version:1}];const d=await load(r);assert.equal(assignmentConflict(d,d.assignments[0]),true);d.leave[0].status='cancelled';assert.equal(assignmentConflict(d,d.assignments[0]),false);d.assignments.push({...d.assignments[0],id:leave});assert.equal(assignmentConflict(d,d.assignments[0]),true);});
 test('planner renders only active unavailable periods',()=>{const source=readFileSync(new URL('../components/SchedulingWeeklyPlanner.tsx',import.meta.url),'utf8');assert.ok(source.includes("l.status==='active'&&spansPlannerDay"));});
 test('failed read never produces partial schedule',async()=>{await assert.rejects(loadPlannerData(ws,async t=>{if(t==='scheduling_worker_unavailability')throw Error('Unavailable');return rows()[t];}));});

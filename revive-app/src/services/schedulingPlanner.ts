@@ -1,3 +1,5 @@
+import {localLeaveToUtc} from './workerUnavailability.ts';
+
 export const plannerColumns={
  scheduling_workers:'id,workspace_id,display_name,role_labels,skill_tags,active,version',
  scheduling_jobs:'id,workspace_id,title,start_at,end_at,timezone,location,required_skills,staffing_count,status,version',
@@ -13,6 +15,9 @@ export interface PlannerAssignment{id:string;workerId:string;jobId:string;startA
 export interface PlannerPattern{workerId:string;timezone:string;days:number[];startLocal:string;endLocal:string;from:string;until:string|null;}
 export interface PlannerLeave{id:string;workerId:string;startAt:string;endAt:string;category:'leave'|'unavailable';status:'active'|'cancelled';}
 export interface PlannerData{workers:PlannerWorker[];jobs:PlannerJob[];assignments:PlannerAssignment[];patterns:PlannerPattern[];leave:PlannerLeave[];}
+export type WorkerSuitabilityReason='worker_inactive'|'missing_skills'|'no_working_pattern'|'outside_working_availability'|'worker_unavailable'|'overlap'|'capacity_full'|'availability_unchecked';
+export interface WorkerSuitability{workerId:string;suitable:boolean;reason:WorkerSuitabilityReason|null;message:string;}
+export const workerSuitabilityMessages:Record<WorkerSuitabilityReason,string>={worker_inactive:'Archived or inactive worker.',missing_skills:'Missing required skills.',no_working_pattern:'No working pattern. Set working hours before assigning.',outside_working_availability:'Outside recorded working hours.',worker_unavailable:'Active leave or unavailability overlaps this session.',overlap:'Another assignment overlaps this session.',capacity_full:'Session already full.',availability_unchecked:'Availability could not be checked. Refresh the allocation and review working hours before assigning.'};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw Error('Planner data unavailable');return v as Record<string,unknown>;}
@@ -49,4 +54,17 @@ export function plannerMonday(value:string):string{date(value);const day=new Dat
 export function spansPlannerDay(startAt:string,endAt:string,day:string,timezone:string):boolean{return localPlannerDate(startAt,timezone)<=day&&localPlannerDate(new Date(Date.parse(endAt)-1).toISOString(),timezone)>=day;}
 export function jobVacancies(data:PlannerData,job:PlannerJob):number{return job.status==='open'?Math.max(0,job.count-data.assignments.filter(a=>a.status==='active'&&a.jobId===job.id).length):0;}
 export function workerSetupIssue(data:PlannerData,workerId:string,week:string):string|null{const p=data.patterns.find(p=>p.workerId===workerId);if(!p)return 'Working hours missing';if(p.from>addPlannerDays(week,6)||(p.until!==null&&p.until<week))return 'Working hours do not cover this week';return null;}
+function suitability(workerId:string,reason:WorkerSuitabilityReason|null):WorkerSuitability{return {workerId,suitable:reason===null,reason,message:reason===null?'Appears suitable. Final checks run when saving.':workerSuitabilityMessages[reason]};}
+export function workerSuitability(data:PlannerData,job:PlannerJob,worker:PlannerWorker):WorkerSuitability{
+ if(!worker.active)return suitability(worker.id,'worker_inactive');
+ if(!job.skills.every(skill=>worker.skills.includes(skill)))return suitability(worker.id,'missing_skills');
+ if(job.status!=='open'||jobVacancies(data,job)===0)return suitability(worker.id,'capacity_full');
+ const pattern=data.patterns.find(value=>value.workerId===worker.id);if(!pattern)return suitability(worker.id,'no_working_pattern');
+ try{const day=localPlannerDate(job.startAt,pattern.timezone),endDay=localPlannerDate(new Date(Date.parse(job.endAt)-1).toISOString(),pattern.timezone),weekday=((new Date(day+'T12:00:00Z').getUTCDay()+6)%7)+1;
+  if(day!==endDay||day<pattern.from||(pattern.until!==null&&day>pattern.until)||!pattern.days.includes(weekday)||job.startAt<localLeaveToUtc(`${day}T${pattern.startLocal}`,pattern.timezone)||job.endAt>localLeaveToUtc(`${day}T${pattern.endLocal}`,pattern.timezone))return suitability(worker.id,'outside_working_availability');
+ }catch{return suitability(worker.id,'availability_unchecked');}
+ if(data.leave.some(period=>period.status==='active'&&period.workerId===worker.id&&period.startAt<job.endAt&&job.startAt<period.endAt))return suitability(worker.id,'worker_unavailable');
+ if(data.assignments.some(assignment=>assignment.status==='active'&&assignment.workerId===worker.id&&assignment.startAt<job.endAt&&job.startAt<assignment.endAt))return suitability(worker.id,'overlap');
+ return suitability(worker.id,null);
+}
 export function assignmentConflict(data:PlannerData,a:PlannerAssignment):boolean{const j=data.jobs.find(j=>j.id===a.jobId),w=data.workers.find(w=>w.id===a.workerId);return !j||!w||!w.active||j.status!=='open'||j.startAt!==a.startAt||j.endAt!==a.endAt||!j.skills.every(s=>w.skills.includes(s))||data.leave.some(l=>l.status==='active'&&l.workerId===a.workerId&&l.startAt<a.endAt&&a.startAt<l.endAt)||data.assignments.some(b=>b.id!==a.id&&b.status==='active'&&b.workerId===a.workerId&&b.startAt<a.endAt&&a.startAt<b.endAt)||data.assignments.filter(b=>b.status==='active'&&b.jobId===a.jobId).length>j.count;}

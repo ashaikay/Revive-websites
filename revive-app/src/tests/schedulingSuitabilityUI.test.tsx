@@ -1,0 +1,28 @@
+import {renderToStaticMarkup} from 'react-dom/server';
+import {beforeEach,describe,expect,it,vi} from 'vitest';
+import type {SchedulingJob} from '@/services/schedulingJobs';
+import type {PlannerData} from '@/services/schedulingPlanner';
+import type {Worker} from '@/services/schedulingWorkers';
+
+const mocks=vi.hoisted(()=>({states:[] as unknown[]}));
+vi.mock('react',async importOriginal=>{const actual=await importOriginal<typeof import('react')>();return{...actual,useEffect:vi.fn(),useRef:<T,>(value:T)=>({current:value}),useState:<T,>(initial:T)=>[mocks.states.length?mocks.states.shift() as T:initial,vi.fn()] as const};});
+vi.mock('@/data/supabaseClient',()=>({supabaseClient:{}}));
+
+import {JobAssignmentsPanel} from '@/components/JobAssignmentsPanel';
+
+const workspaceId='11111111-1111-4111-8111-111111111111',userId='22222222-2222-4222-8222-222222222222',jobId='33333333-3333-4333-8333-333333333333';
+const ids=['44444444-4444-4444-8444-444444444441','44444444-4444-4444-8444-444444444442','44444444-4444-4444-8444-444444444443','44444444-4444-4444-8444-444444444444','44444444-4444-4444-8444-444444444445','44444444-4444-4444-8444-444444444446','44444444-4444-4444-8444-444444444447'];
+const names=['Suitable Sam','Archived Alex','Missing Skill Mo','No Pattern Pat','Outside Hours Ollie','Leave Lee','Overlap Owen'];
+const workers:Worker[]=ids.map((workerId,index)=>({workerId,workspaceId,displayName:names[index],roleLabels:[],skillTags:index===2?[]:['Admin'],active:index!==1,version:1}));
+const job:SchedulingJob={jobId,workspaceId,title:'Day session',startAt:'2026-10-08T09:00:00.000Z',endAt:'2026-10-08T10:00:00.000Z',timezone:'Europe/London',location:'Cardiff',requiredSkills:['Admin'],staffingCount:2,status:'open',version:1};
+const planner:PlannerData={workers:workers.map(worker=>({id:worker.workerId,name:worker.displayName,active:worker.active,skills:worker.skillTags})),jobs:[{id:jobId,title:job.title,startAt:job.startAt,endAt:job.endAt,timezone:job.timezone,location:job.location,skills:job.requiredSkills,count:job.staffingCount,status:'open'}],assignments:[{id:'55555555-5555-4555-8555-555555555555',workerId:ids[6],jobId:'66666666-6666-4666-8666-666666666666',startAt:job.startAt,endAt:job.endAt,status:'active'}],patterns:ids.filter(id=>id!==ids[3]).map((workerId,index)=>({workerId,timezone:'Europe/London',days:[4],startLocal:index===3?'12:00':'09:00',endLocal:'17:00',from:'2026-10-01',until:null})),leave:[{id:'77777777-7777-4777-8777-777777777777',workerId:ids[5],startAt:job.startAt,endAt:job.endAt,category:'leave',status:'active'}]};
+function states(selected='',schedule:PlannerData|null=planner){return[workers,[],schedule,true,false,false,null,selected,null,'',false,''];}
+function render(selected='',schedule:PlannerData|null=planner){mocks.states=states(selected,schedule);return renderToStaticMarkup(<JobAssignmentsPanel workspaceId={workspaceId} userId={userId} job={job}/>);}
+
+describe('Scheduling worker suitability guidance',()=>{
+ beforeEach(()=>{mocks.states=[];vi.stubGlobal('window',{sessionStorage:{getItem:()=>null,setItem:vi.fn(),removeItem:vi.fn()},dispatchEvent:vi.fn()});});
+ it('shows suitable workers and the requested advisory reasons while keeping unsuitable workers out of the manual selector',()=>{const markup=render();for(const value of ['Appears suitable','Suitable Sam','Archived Alex:','Archived or inactive worker.','Missing Skill Mo:','Missing required skills.','No Pattern Pat:','No working pattern. Set working hours before assigning.','Outside Hours Ollie:','Outside recorded working hours.','Leave Lee:','Active leave or unavailability overlaps this session.','Overlap Owen:','Another assignment overlaps this session.','Guidance only. Every assignment is checked again by the server when saved.'])expect(markup).toContain(value);expect(markup).toContain('<option value="44444444-4444-4444-8444-444444444441">Suitable Sam</option>');expect(markup).not.toContain('<option value="44444444-4444-4444-8444-444444444442">');});
+ it('preserves manual allocation controls and enables assignment only after a suitable worker is selected',()=>{expect(render()).toMatch(/<button[^>]*disabled=""[^>]*>ASSIGN WORKER/);expect(render(ids[0])).not.toMatch(/<button[^>]*disabled=""[^>]*>ASSIGN WORKER/);expect(render(ids[0])).toContain('REFRESH ALLOCATION');});
+ it('shows full and uncheckable outcomes and disables stale unsuitable selections',()=>{const full=structuredClone(planner);full.jobs[0].count=1;full.assignments.push({id:'88888888-8888-4888-8888-888888888888',workerId:ids[5],jobId,startAt:job.startAt,endAt:job.endAt,status:'active'});expect(render(ids[0],full)).toContain('Session already full.');expect(render(ids[0],full)).toMatch(/<button[^>]*disabled=""[^>]*>ASSIGN WORKER/);const unchecked=structuredClone(planner);const pattern=unchecked.patterns.find(value=>value.workerId===ids[0]);if(!pattern)throw new Error('Pattern fixture missing');pattern.timezone='Invalid/Zone';expect(render('',unchecked)).toContain('Availability could not be checked. Refresh the allocation and review working hours before assigning.');});
+ it('gives a clear instruction when suitability data cannot be checked',()=>{const markup=render('',null);expect(markup).toContain('Availability could not be checked. Refresh the allocation and review each worker&#x27;s working hours before assigning.');expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>ASSIGN WORKER/);});
+});
