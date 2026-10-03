@@ -136,3 +136,40 @@ Worker self-service must not expose Business Brain, CRM or other restricted info
 
 These requirements follow reliable manual assignment enforcement.
 Automatic allocation and notifications are not enabled by the current implementation.
+
+## Annual leave policy foundation
+
+Authorised on 2 October 2026. Stage 1 is limited to manager-recorded policy, frozen worker/leave-year accounts and audited allowance adjustments. It does not calculate absence deductions or a complete remaining balance.
+
+Workspace defaults and full per-worker overrides are versioned, append-only policy revisions. Each revision records its first applicable leave-year label, allowance input unit/value, canonical integer minutes, explicit minutes per day, leave-year start month/day and whether bank holidays are included in or additional to the allowance. Configuration records contractual terms only; it is not a statutory-entitlement calculation or legal-validity decision.
+
+Opening a worker/year account resolves the latest applicable full worker override, otherwise the latest applicable workspace default, and freezes that complete policy snapshot. Later policy changes do not rewrite an opened account. Allowance changes for an opened year use append-only signed-minute adjustments with a required reason and expected account version; they never erase the configured baseline or earlier adjustments. Every Stage 1 account is labelled `policy_only` because absence accounting and historical review are not yet implemented.
+
+Worker leave-year account ranges cannot overlap, including when a later policy changes the leave-year start date; this is enforced transactionally without rewriting existing frozen snapshots. Known stale-version, duplicate-account, overlap and policy/date mismatch refusals may return request-bound refusal codes. All other failed or malformed outcomes remain `outcome_unknown` and must not be inferred from arbitrary database text.
+
+Canonical accounting uses integer minutes. Examples:
+
+- `28 days` with an explicit `7.5 hours per day` conversion freezes `12,600 minutes` (`210 hours`). The displayed day figure must always explain that conversion.
+- `210 hours` freezes `12,600 minutes`; hours-per-day remains recorded for explanatory day equivalents but does not alter the entered hours.
+- A `+450 minute` adjustment with a reason adds `7.5 hours`; a later `-225 minute` adjustment subtracts `3.75 hours`. Both entries and the original baseline remain auditable.
+- No Stage 1 account may display or imply leave taken, future leave booked or remaining to book. Those values remain unavailable until classified absences, historical review and immutable deduction postings exist.
+
+Existing `leave` and `unavailable` records are unchanged. No record is classified, deducted or backfilled by Stage 1. Generic unavailability must never become annual leave implicitly, and bank holidays must never be deducted without a later explicit policy-aware recorded absence.
+
+### Leave presentation architecture
+
+Keep Scheduling visually simple. The weekly planner remains the main view. A compact `Leave` button will later open a separate leave-management panel containing balances, record-leave controls and approval requests. Worker-level leave sections link to the same worker-specific records rather than creating a second leave system. The planner shows compact absence blocks; selecting one opens its details. Allowance settings, approval history and email status remain inside the leave panel.
+
+This presentation architecture is recorded only. Stage 1 adds no leave UI, planner interaction, approval workflow, worker access or email delivery.
+
+### Deferred approval and email requirements
+
+Managers may directly record and confirm leave using their workspace-scoped authority. Future worker-submitted requests require explicit manager approval before becoming confirmed leave; submitting a request alone must not reserve leave or deduct allowance.
+
+Future leave requests require explicit manager approval or rejection with workspace-scoped authority, current-version checks, durable request identity, identical retries and append-only audit evidence. Worker access requires a separate least-privilege design and must not expose manager-only Scheduling, CRM or Business Brain data. Approval must never be inferred from an email action or delivery result.
+
+Committed confirmed or approved leave must update the worker's balance and weekly planner together and enforce assignment-conflict checks before saving. Conflicting assignments require explicit manager resolution; confirmation must not silently overwrite or bypass them. Cancellation must retain the original evidence, append reversal postings for the original deductions exactly once, and refresh the balance and planner from the committed cancellation.
+
+Confirmation emails may be queued only after a successful committed leave save, never before or after a rolled-back save. Durable semantic idempotency must prevent duplicate confirmations across retries and concurrent requests for the same committed leave transition. Email failure must not undo the leave save, approval, deductions or planner state.
+
+Any future email must be separately enabled, use a verified recipient, preserve approval and content snapshots, and record durable provider states without treating provider acceptance as delivery confirmation. Approval history and email status belong in the leave panel. Failed or unknown delivery must not change leave approval, allocation or accounting state automatically. Stage 1 sends no email and creates no approval/request records.

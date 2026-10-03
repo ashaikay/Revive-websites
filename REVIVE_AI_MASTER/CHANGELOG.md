@@ -1,4 +1,11 @@
-﻿## 2026-09-17 - Phase 4G.2A-S Email Semantic Idempotency Hardening (PRODUCTION APPLIED + VERIFIED)
+﻿## 2026-10-02 - Annual Leave Stage 1 Foundation (LOCAL IMPLEMENTATION IN PROGRESS)
+
+- Recorded the manager-only annual leave policy foundation: versioned workspace defaults, full worker overrides, frozen worker/year policy snapshots, integer-minute accounting and reasoned append-only adjustments.
+- Accounts are explicitly `policy_only`; absence deduction, historical classification, complete balances, UI, approvals, worker access and email delivery remain deferred.
+- Hardened frozen-account response validation, added request-bound allowlisted refusals while preserving unknown outcomes, and transactionally prevented overlapping worker/year accounts after leave-year policy changes.
+- Recorded the future compact Leave-panel navigation and approval/email safety boundaries while preserving the weekly planner as Scheduling's main view.
+
+## 2026-09-17 - Phase 4G.2A-S Email Semantic Idempotency Hardening (PRODUCTION APPLIED + VERIFIED)
 
 - Hardened `SEND_APPROVED_EMAIL` so one workspace/action/action-version can reserve only one semantic email execution, independent of caller-supplied retry/idempotency IDs.
 - Added deterministic semantic idempotency, transaction/advisory locking, a partial unique index, explicit provider-outcome states, atomic provider-attempt claiming, and dedicated email-result recording.
@@ -581,5 +588,4 @@ Phase 1 documentation is now complete and can be handed to development team for 
 | 2026-09-12 | 1 | Architecture design and documentation |
 | TBD | 2 | App foundation development |
 | TBD | 3+ | Feature development and expansion |
-
 
