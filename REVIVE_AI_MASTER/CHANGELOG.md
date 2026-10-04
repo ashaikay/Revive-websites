@@ -1,4 +1,14 @@
-﻿## 2026-10-04 - Annual Leave Stage 2 Review Corrections (LOCAL IMPLEMENTATION)
+﻿## 2026-10-04 - Annual Leave Stage 3 Manager UI (LOCAL IMPLEMENTATION)
+
+- Added a dedicated manager-facing Annual Leave view within Scheduling while retaining the weekly planner as the default and keeping setup forms out of worker cards.
+- Added reconciled authoritative balance reads for frozen allowance, append-only adjustments, net deduction/reversal postings and remaining integer minutes. Hours/minutes are primary; day equivalents use each account's explicit frozen conversion.
+- Added policy, account, adjustment, calendar, worker assignment, holiday and calendar-year confirmation controls over the deployed Stage 1 and Stage 2 authorities.
+- Added full-day and partial-day confirmed manager recording in the authoritative worker timezone, accounted exact-reversal cancellation and clearly separated historical no-balance-change cancellation.
+- Added workspace/user-scoped durable pending requests, explicit identical retries, request-bound refusal handling, unknown-outcome recovery, duplicate-submit protection and Scheduling planner refresh events.
+- Hardened history timezone presentation, deterministic bounded pagination, workspace/user transition guards and explicit read-only refresh recovery following Stage 3 review.
+- Added focused service and rendered UI regressions and registered them in CI. Employee requests, approvals, email and automatic allocation remain deferred.
+
+## 2026-10-04 - Annual Leave Stage 2 Review Corrections (LOCAL IMPLEMENTATION)
 
 - Added explicit workspace annual-leave calendars with manager-recorded identity/region, explicit worker assignment and revision-bound manager confirmation for each calendar year. Holiday mutations invalidate the affected year's confirmation; recording refuses missing/unconfirmed calendar authority and snapshots the confirmed calendar revision on every date.
 - Added a dedicated owner/admin historical-leave cancellation-only transaction and Edge boundary. It preserves the saved interval/category, changes no account or posting, retains durable retries and audit evidence, rejects Stage 2 accounted leave, and refreshes the planner through a clearly labelled no-balance-change UI control.

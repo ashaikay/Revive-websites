@@ -174,13 +174,29 @@ Stage 2 leave cannot use the historical path and remains cancellable only throug
 
 The recording and cancellation Edge boundaries validate authority results before presenting success. Returned account collections must contain exactly the requested account IDs once each, and every returned version must equal the caller's expected account revision plus one. Recording also requires the per-account deduction total to equal the returned total deduction. Missing, duplicate, foreign, stale or internally inconsistent account results remain `outcome_unknown`.
 
-Remaining leave stages include the dedicated Leave panel, balance presentation, worker-submitted requests, manager approval/rejection, conflict-resolution workflow, calendar configuration UI, email delivery and worker self-service.
+Remaining leave stages include worker-submitted requests, manager approval/rejection, conflict-resolution workflow, email delivery and worker self-service.
+
+## Annual Leave Stage 3 manager UI
+
+Stage 3 adds a dedicated `Annual Leave` view inside Scheduling while keeping the weekly planner as the default view. It is restricted by the existing Scheduling owner/admin gate and does not add forms to worker cards. Policy, account, adjustment and calendar setup remain behind clearly labelled expandable sections.
+
+The selected worker and leave year drive all reads. The UI reads the protected Stage 1 and Stage 2 tables through their manager-only RLS policies and fails closed if account, adjustment and posting evidence does not reconcile. Allowance, signed adjustment total, net recorded leave and remaining balance are displayed in integer hours/minutes. Day equivalents use only the frozen account's explicit minutes-per-day conversion.
+
+Policy setup supports workspace defaults or worker overrides, exact allowance units and conversion, leave-year boundaries and included/additional bank-holiday treatment. Account opening and signed, reasoned adjustments use the deployed Stage 1 authorities. Calendar setup uses explicit calendar identity and region, worker assignment, manager-recorded holiday dates and revision-bound year completeness confirmation through the deployed Stage 2 authorities.
+
+Managers can record full-day or partial-day confirmed leave in the worker's authoritative working-pattern timezone. The browser selects the required existing account revisions but does not estimate or present a deduction; only the trusted authority result and refreshed posting evidence establish the deduction. Accounted cancellation supplies the current absence and exact affected account revisions to the exact-reversal authority. Historical leave remains clearly labelled outside balance accounting and uses only the dedicated no-balance-change cancellation authority.
+
+Each mutation is single-flight and stores its complete workspace/user-scoped request ID and payload in session storage before invocation. Known request-bound refusals clear the pending request and refresh authoritative reads. Any transport failure, malformed response or unrecognised outcome retains the request for an explicit identical retry and blocks new annual-leave mutations. Confirmed recording and both cancellation paths emit the existing `rev-scheduling-changed` event so balances and the weekly planner refresh through their established contracts.
+
+Manager reads use stable unique ordering and bounded pagination for every table. The UI probes beyond the 1,000-row safety limit and fails closed rather than presenting an incomplete view. An explicit refresh action performs reads only, preserves pending mutations and never retries a write automatically. Failed refreshes clear the authoritative model and block new submissions while still allowing a retained exact retry. Workspace/user scope changes invalidate in-flight reads and writes before restoring only that scope's pending request.
+
+Accounted history is formatted explicitly with `en-GB` fields in each absence's stored timezone. Historical generic leave has no stored calculation timezone, so it is displayed in a clearly labelled current worker-pattern timezone, or UTC when no authoritative current timezone is available; it is never paired with an implicit browser-local time.
+
+Stage 3 does not add employee self-service, leave requests, approvals, email, automatic allocation or automatic holiday inference. Manager-recorded leave is confirmed immediately.
 
 ### Leave presentation architecture
 
-Keep Scheduling visually simple. The weekly planner remains the main view. A compact `Leave` button will later open a separate leave-management panel containing balances, record-leave controls and approval requests. Worker-level leave sections link to the same worker-specific records rather than creating a second leave system. The planner shows compact absence blocks; selecting one opens its details. Allowance settings, approval history and email status remain inside the leave panel.
-
-This presentation architecture is recorded only. Stage 1 adds no leave UI, planner interaction, approval workflow, worker access or email delivery.
+Keep Scheduling visually simple. The weekly planner remains the main and default view. The dedicated Annual Leave view contains balances, setup, calendar configuration, confirmed manager recording and protected cancellation. Worker-level cards do not duplicate these forms. The planner continues to show compact absence blocks through the existing projection. Future approval history and email status remain inside the dedicated leave view rather than expanding every worker card.
 
 ### Deferred approval and email requirements
 
