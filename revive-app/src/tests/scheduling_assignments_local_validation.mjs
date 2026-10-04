@@ -109,7 +109,7 @@ try {
  check('NON_WORKING_DAY_DENIED',(await save({target_job_id:weekend,target_worker_id:second,target_request_id:randomUUID()})).status>=400);
  const expired=await makeJob('After effective end','2027-01-07T10:00:00Z','2027-01-07T11:00:00Z');
  check('OUTSIDE_EFFECTIVE_DATES_DENIED',(await save({target_job_id:expired,target_worker_id:second,target_request_id:randomUUID()})).status>=400);
- const leaveBody=(w,start,end)=>({target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),target_worker_id:w,target_unavailability_id:null,target_start_at:start,target_end_at:end,target_category:'leave',target_status:'active',expected_version:0});
+ const leaveBody=(w,start,end)=>({target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),target_worker_id:w,target_unavailability_id:null,target_start_at:start,target_end_at:end,target_category:'unavailable',target_status:'active',expected_version:0});
  const leave=await rpc(serviceKey,'save_rev_worker_unavailability',leaveBody(second,'2026-10-08T09:00:00Z','2026-10-08T10:00:00Z'));check('LEAVE_FIXTURE_SAVED',leave.status===200);
  check('LEAVE_BLOCKS_ALLOCATION',(await save({target_worker_id:second,target_job_id:overlap,target_request_id:randomUUID()})).status>=400);
  const cancelledLeave=await rpc(serviceKey,'save_rev_worker_unavailability',{...leaveBody(second,'2026-10-08T09:00:00Z','2026-10-08T10:00:00Z'),target_request_id:randomUUID(),target_unavailability_id:leave.payload?.unavailability_id,target_status:'cancelled',expected_version:1});

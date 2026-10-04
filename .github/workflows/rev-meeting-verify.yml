@@ -39,6 +39,11 @@ jobs:
             supabase/functions/rev-annual-leave-policy-save/*.test.ts \
             supabase/functions/rev-annual-leave-account-open/*.test.ts \
             supabase/functions/rev-annual-leave-adjustment-save/*.test.ts \
+            supabase/functions/rev-annual-leave-calendar-configure/*.test.ts \
+            supabase/functions/rev-workspace-bank-holiday-save/*.test.ts \
+            supabase/functions/rev-annual-leave-record/*.test.ts \
+            supabase/functions/rev-annual-leave-cancel/*.test.ts \
+            supabase/functions/rev-legacy-annual-leave-cancel/*.test.ts \
             supabase/functions/rev-scheduling-job-save/*.test.ts \
             supabase/functions/rev-scheduling-daily-sessions-save/*.test.ts \
             supabase/functions/rev-scheduling-assignment-save/*.test.ts \
@@ -105,6 +110,7 @@ jobs:
           node src/tests/worker_patterns_local_validation.mjs
           node src/tests/worker_unavailability_local_validation.mjs
           node src/tests/annual_leave_stage1_local_validation.mjs
+          node src/tests/annual_leave_stage2_local_validation.mjs
           node src/tests/scheduling_jobs_local_validation.mjs
           node src/tests/scheduling_daily_sessions_local_validation.mjs
           node src/tests/scheduling_assignments_local_validation.mjs

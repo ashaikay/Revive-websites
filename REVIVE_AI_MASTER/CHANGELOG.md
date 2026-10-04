@@ -1,4 +1,19 @@
-﻿## 2026-10-02 - Annual Leave Stage 1 Foundation (LOCAL IMPLEMENTATION IN PROGRESS)
+﻿## 2026-10-04 - Annual Leave Stage 2 Review Corrections (LOCAL IMPLEMENTATION)
+
+- Added explicit workspace annual-leave calendars with manager-recorded identity/region, explicit worker assignment and revision-bound manager confirmation for each calendar year. Holiday mutations invalidate the affected year's confirmation; recording refuses missing/unconfirmed calendar authority and snapshots the confirmed calendar revision on every date.
+- Added a dedicated owner/admin historical-leave cancellation-only transaction and Edge boundary. It preserves the saved interval/category, changes no account or posting, retains durable retries and audit evidence, rejects Stage 2 accounted leave, and refreshes the planner through a clearly labelled no-balance-change UI control.
+- Hardened recording and cancellation success validation to require each expected account exactly once at the next revision and to require recording deduction totals to reconcile. Malformed authority results remain `outcome_unknown`.
+- Added focused Edge, browser, UI and isolated local database regressions and registered the new Edge suites in CI. The correction is additive and remains local only.
+
+## 2026-10-03 - Annual Leave Stage 2 Recording and Exact Cancellation (LOCAL IMPLEMENTATION)
+
+- Added owner/admin-only authoritative annual-leave recording with server-side working-pattern/timezone calculation, immutable per-date snapshots, cross-account splitting, insufficient-balance refusal and assignment-conflict preservation.
+- Added manager-maintained authoritative workspace bank holidays; no locale inference is used. Included-policy holidays deduct scheduled minutes and additional-policy holidays record zero-minute segments.
+- Added atomic deduction postings, account revisions, durable retries, exact append-only cancellation reversals, planner blocking/unblocking, tenant isolation and concurrency controls.
+- Closed generic `leave` creation/edit/cancellation through the unavailable-period path. Existing historical leave remains unclassified and receives no automatic deduction.
+- Worker requests, approvals, email, balance UI, holiday-calendar UI and the dedicated Leave panel remain deferred.
+
+## 2026-10-02 - Annual Leave Stage 1 Foundation (LOCAL IMPLEMENTATION IN PROGRESS)
 
 - Recorded the manager-only annual leave policy foundation: versioned workspace defaults, full worker overrides, frozen worker/year policy snapshots, integer-minute accounting and reasoned append-only adjustments.
 - Accounts are explicitly `policy_only`; absence deduction, historical classification, complete balances, UI, approvals, worker access and email delivery remain deferred.
@@ -588,4 +603,3 @@ Phase 1 documentation is now complete and can be handed to development team for 
 | 2026-09-12 | 1 | Architecture design and documentation |
 | TBD | 2 | App foundation development |
 | TBD | 3+ | Feature development and expansion |
-

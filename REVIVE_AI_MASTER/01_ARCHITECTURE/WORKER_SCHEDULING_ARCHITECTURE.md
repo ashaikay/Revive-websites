@@ -156,6 +156,26 @@ Canonical accounting uses integer minutes. Examples:
 
 Existing `leave` and `unavailable` records are unchanged. No record is classified, deducted or backfilled by Stage 1. Generic unavailability must never become annual leave implicitly, and bank holidays must never be deducted without a later explicit policy-aware recorded absence.
 
+## Annual leave recording and cancellation
+
+Stage 2 implements manager-recorded confirmed annual leave without worker requests, approvals, email or a Leave panel. A trusted owner/admin boundary records a UTC interval, while the database resolves the worker's authoritative working-pattern timezone and calculates an integer-minute intersection for every local date. Non-working dates remain immutable zero-minute segments. Ambiguous or nonexistent working-pattern times are refused rather than assigned an offset.
+
+Every recorded date stores the account reference, working-pattern identity and revision, timezone and local-hours snapshot, policy identity and revision, frozen bank-holiday treatment, and any authoritative workspace holiday identity and revision. Later pattern, policy or holiday-calendar changes do not rewrite the calculation. Leave crossing account boundaries is split across the existing frozen accounts; missing accounts, stale account revisions, insufficient balance, assignment conflicts and overlapping leave are refused transactionally.
+
+Workspace bank holidays are held in explicit workspace-scoped annual-leave calendars. Each calendar has a manager-recorded identity and region code; the worker is assigned to a calendar explicitly and no calendar is inferred from the working-pattern timezone. Each calendar year has its own revision and is usable only after an owner/admin explicitly confirms that exact revision as complete. Adding, changing or cancelling a holiday increments and unconfirms the affected calendar year, requiring a new confirmation before further leave can be recorded for that year. Empty years also require explicit confirmation.
+
+No locale or provider holiday inference is used. A holiday under an `included` account policy deducts the intersected scheduled minutes; a holiday under an `additional` policy records a zero-minute holiday segment. Every newly recorded date snapshots the calendar identity, region, calendar year and confirmed year revision, including dates with no holiday. Those snapshots and previous calculation segments remain immutable after calendar edits or reconfirmation.
+
+Recording atomically creates the confirmed absence, planner unavailability, daily calculation segments, deduction postings, account revisions, request result and audit evidence. Cancellation is terminal: it appends one exact reversal for every original deduction posting, restores each affected account by the exact recorded amount, cancels the planner unavailability and stores the cancellation request and audit in the same transaction. Identical requests replay their durable result; changed request-ID reuse is refused.
+
+The generic unavailability path now accepts only `unavailable`. Historical generic `leave` rows remain visible and continue blocking allocation while active, but are never classified, deducted or credited. A dedicated owner/admin cancellation-only boundary may terminally cancel an active historical leave row when no Stage 2 absence/accounting record references it. That transaction preserves its interval and category, requires the current revision, records a durable identical-retry result and audit entry, and changes no account or posting. The worker panel labels this operation `CANCEL HISTORICAL LEAVE (NO BALANCE CHANGE)` and requests the normal planner refresh after confirmation.
+
+Stage 2 leave cannot use the historical path and remains cancellable only through its exact accounting reversal. Confirmed Stage 2 leave blocks assignment through the existing planner unavailability guard; cancellation stops it blocking without cancelling or reallocating any assignment.
+
+The recording and cancellation Edge boundaries validate authority results before presenting success. Returned account collections must contain exactly the requested account IDs once each, and every returned version must equal the caller's expected account revision plus one. Recording also requires the per-account deduction total to equal the returned total deduction. Missing, duplicate, foreign, stale or internally inconsistent account results remain `outcome_unknown`.
+
+Remaining leave stages include the dedicated Leave panel, balance presentation, worker-submitted requests, manager approval/rejection, conflict-resolution workflow, calendar configuration UI, email delivery and worker self-service.
+
 ### Leave presentation architecture
 
 Keep Scheduling visually simple. The weekly planner remains the main view. A compact `Leave` button will later open a separate leave-management panel containing balances, record-leave controls and approval requests. Worker-level leave sections link to the same worker-specific records rather than creating a second leave system. The planner shows compact absence blocks; selecting one opens its details. Allowance settings, approval history and email status remain inside the leave panel.

@@ -27,7 +27,7 @@ export async function handleWorkerUnavailabilitySave(request:Request,deps:Unavai
   const raw=await request.text();if(raw.length>4096)return reply(400,{error:'Invalid unavailable period.'});const body=JSON.parse(raw);
   if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='category,endAt,expectedVersion,requestId,startAt,status,unavailabilityId,workerId,workspaceId'
    ||!id(body.workspaceId)||!id(body.workerId)||!id(body.requestId)||(body.unavailabilityId!==null&&!id(body.unavailabilityId))
-   ||!utc(body.startAt)||!utc(body.endAt)||Date.parse(body.startAt)>=Date.parse(body.endAt)||!['leave','unavailable'].includes(body.category)||!['active','cancelled'].includes(body.status)
+   ||!utc(body.startAt)||!utc(body.endAt)||Date.parse(body.startAt)>=Date.parse(body.endAt)||body.category!=='unavailable'||!['active','cancelled'].includes(body.status)
    ||!Number.isSafeInteger(body.expectedVersion)||body.expectedVersion<0||body.expectedVersion>=Number.MAX_SAFE_INTEGER
    ||(body.unavailabilityId===null?(body.expectedVersion!==0||body.status!=='active'):body.expectedVersion===0))return reply(400,{error:'Invalid unavailable period.'});
   const userId=await deps.getUserId(authorization);if(!id(userId))return reply(401,{error:'Authentication required.'});
