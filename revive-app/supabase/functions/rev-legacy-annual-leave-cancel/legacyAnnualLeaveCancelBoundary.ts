@@ -1,3 +1,5 @@
+import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+
 export interface LegacyAnnualLeaveCancelInput {
  target_workspace_id:string;
  initiating_user_id:string;
@@ -31,8 +33,9 @@ function storedInstant(value:unknown):string|null {
  return Number.isFinite(milliseconds)?new Date(milliseconds).toISOString():null;
 }
 export async function handleLegacyAnnualLeaveCancel(request:Request,deps:LegacyAnnualLeaveCancelDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+ const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);
+ if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});

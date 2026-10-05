@@ -1,3 +1,5 @@
+import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+
 export interface WorkspaceBankHolidayInput {
  target_workspace_id:string;
  initiating_user_id:string;
@@ -31,8 +33,9 @@ function date(value:unknown):value is string {
  return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
 }
 export async function handleWorkspaceBankHolidaySave(request:Request,deps:WorkspaceBankHolidayDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+ const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);
+ if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});

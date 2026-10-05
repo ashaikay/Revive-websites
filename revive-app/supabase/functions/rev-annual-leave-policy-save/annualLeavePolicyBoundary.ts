@@ -1,3 +1,5 @@
+import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+
 export interface AnnualLeavePolicyInput{target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_worker_id:string|null;target_effective_from_leave_year:number;target_allowance_input_unit:'hours'|'days';target_allowance_input_value:number;target_allowance_minutes:number;target_hours_per_day_minutes:number;target_leave_year_start_month:number;target_leave_year_start_day:number;target_bank_holiday_treatment:'included'|'additional';expected_version:number;}
 export interface AnnualLeavePolicyDependencies{allowedOrigin?:string;getUserId(authorization:string):Promise<string|null>;canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;save(input:AnnualLeavePolicyInput):Promise<unknown>;}
 export const annualLeavePolicyRefusalReasons={'Annual leave policy changed':'stale_policy'} as const;
@@ -9,8 +11,9 @@ const integer=(value:unknown,min:number,max:number)=>Number.isSafeInteger(value)
 const decimal=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=10000&&Math.round(value*10000)===value*10000;
 function validDatePart(month:number,day:number){const value=new Date(Date.UTC(2001,month-1,day));return value.getUTCMonth()===month-1&&value.getUTCDate()===day;}
 export async function handleAnnualLeavePolicySave(request:Request,deps:AnnualLeavePolicyDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'},reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
+ const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);
+ if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'},reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});const authorization=request.headers.get('Authorization')??'';if(!/^Bearer\s+\S+$/i.test(authorization))return reply(401,{error:'Authentication required.'});if(request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase()!=='application/json')return reply(415,{error:'JSON required.'});
  try{const raw=await request.text();if(raw.length>4096)return reply(400,{error:'Invalid annual leave policy.'});const body=JSON.parse(raw);

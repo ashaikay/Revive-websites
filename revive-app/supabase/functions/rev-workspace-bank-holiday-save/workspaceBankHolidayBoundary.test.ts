@@ -23,6 +23,18 @@ function fixture(){
  };
  return{calls,deps};
 }
+test('holiday preflight allows both exact development origins and rejects missing or unrelated origins',async()=>{
+ for(const requestOrigin of['http://localhost:5180','http://127.0.0.1:5180']){
+  const value=fixture();let auth=0;value.deps.getUserId=async()=>{auth++;return actorId;};
+  const response=await handleWorkspaceBankHolidaySave(new Request('https://example.test',{method:'OPTIONS',headers:{Origin:requestOrigin}}),value.deps);
+  assert.equal(response.status,204);assert.equal(response.headers.get('Access-Control-Allow-Origin'),requestOrigin);assert.equal(response.headers.get('Vary'),'Origin');assert.equal(auth,0);assert.equal(value.calls.length,0);
+ }
+ for(const requestOrigin of[undefined,'https://unrelated.example']){
+  const value=fixture();let auth=0;value.deps.getUserId=async()=>{auth++;return actorId;};
+  const response=await handleWorkspaceBankHolidaySave(new Request('https://example.test',{method:'OPTIONS',headers:requestOrigin?{Origin:requestOrigin}:undefined}),value.deps);
+  assert.equal(response.status,403);assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);assert.equal(auth,0);assert.equal(value.calls.length,0);
+ }
+});
 test('manager saves an authoritative workspace holiday',async()=>{
  const fixtureValue=fixture();
  const response=await handleWorkspaceBankHolidaySave(request(),fixtureValue.deps);

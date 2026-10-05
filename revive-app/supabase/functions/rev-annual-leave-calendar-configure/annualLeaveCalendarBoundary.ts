@@ -1,3 +1,5 @@
+import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+
 export interface AnnualLeaveCalendarInput {
  target_workspace_id:string;
  initiating_user_id:string;
@@ -35,8 +37,9 @@ const id=(value:unknown):value is string=>typeof value==='string'&&uuid.test(val
 const revision=(value:unknown)=>Number.isSafeInteger(value)&&(value as number)>=0&&(value as number)<Number.MAX_SAFE_INTEGER;
 const region=(value:unknown):value is string=>typeof value==='string'&&/^[A-Z0-9][A-Z0-9-]{1,19}$/.test(value);
 export async function handleAnnualLeaveCalendarConfigure(request:Request,deps:AnnualLeaveCalendarDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+ const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);
+ if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});
