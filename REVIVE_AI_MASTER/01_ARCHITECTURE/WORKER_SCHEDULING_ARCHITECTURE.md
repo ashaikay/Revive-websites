@@ -198,6 +198,12 @@ Stage 3 does not add employee self-service, leave requests, approvals, email, au
 
 Keep Scheduling visually simple. The weekly planner remains the main and default view. The dedicated Annual Leave view contains balances, setup, calendar configuration, confirmed manager recording and protected cancellation. Worker-level cards do not duplicate these forms. The planner continues to show compact absence blocks through the existing projection. Future approval history and email status remain inside the dedicated leave view rather than expanding every worker card.
 
+The everyday manager view uses business language only: worker and leave-year selection, day-first `Allowance`, `Used` and `Remaining` balances, `Add leave`, simple history, `Cancel leave` and `Refresh`. Day values are shown only with the frozen worker/year minutes-per-day conversion, with hours/minutes alongside; no eight-hour assumption or browser deduction estimate is permitted. Full days and custom local hours are supported. Half days remain deferred until the worker's actual saved intervals can map them without ambiguity.
+
+Configuration is separated behind one `Leave settings` action. It is a resumable worker-specific flow: save allowance and working-day conversion, confirm the leave-year start and bank-holiday treatment, create that worker's leave year, then explicitly assign and review a holiday calendar before confirming a calendar year complete. Familiar day/hour inputs convert to exact integer minutes before invoking the existing authorities. Each confirmed response is reloaded before the next dependent step becomes available; unknown outcomes retain the exact scoped request for explicit retry and block new changes.
+
+The settings flow never silently creates a workspace-wide policy or assigns a calendar to other workers. Holiday calendars may be shared, so the UI explains that calendar edits affect assigned workers. REV never invents holiday dates and never marks a calendar year complete automatically; managers must review the explicit date list and confirm it, and later holiday changes invalidate that confirmation through the existing authority.
+
 ### Deferred approval and email requirements
 
 Managers may directly record and confirm leave using their workspace-scoped authority. Future worker-submitted requests require explicit manager approval before becoming confirmed leave; submitting a request alone must not reserve leave or deduct allowance.

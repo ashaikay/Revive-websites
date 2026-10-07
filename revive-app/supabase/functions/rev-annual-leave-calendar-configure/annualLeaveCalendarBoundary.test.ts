@@ -62,6 +62,14 @@ test('invalid calendar configuration and injected fields stop before authority',
   assert.deepEqual(value.calls,[]);
  }
 });
+test('blank calendar names are rejected before authentication or authority',async()=>{
+ const value=fixture();let auth=0;
+ value.deps.getUserId=async()=>{auth++;return actorId;};
+ const response=await handleAnnualLeaveCalendarConfigure(request({action:'save_calendar',workspaceId,requestId,calendarId:null,name:'',regionCode:'GB-ENG',status:'active',expectedVersion:0}),value.deps);
+ assert.equal(response.status,400);
+ assert.equal(auth,0);
+ assert.deepEqual(value.calls,[]);
+});
 test('known calendar refusals are request-bound and unknown failures remain unknown',async()=>{
  const body={action:'confirm_year',workspaceId,requestId,calendarId,calendarYear:2027,expectedVersion:0};
  for(const code of['stale_calendar','calendar_exists','stale_assignment','stale_year','missing_calendar','request_conflict']as const){

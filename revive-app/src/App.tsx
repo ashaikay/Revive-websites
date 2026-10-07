@@ -146,10 +146,10 @@ function App() {
       <footer className="bg-neutral-900 text-white mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <p className="text-center text-amber-300 text-xs font-semibold uppercase tracking-wide mb-2">
-            Auth: {authMode} Â· Data Provider: {dataProviderMode}
+            Auth: {authMode} {'\u00b7'} Data Provider: {dataProviderMode}
           </p>
           <p className="text-center text-neutral-400 text-sm">
-            REV Phase 2B Foundation Â· Mocked AI & Data Â· No external actions executed
+            REV Phase 2B Foundation {'\u00b7'} Mocked AI & Data {'\u00b7'} No external actions executed
           </p>
         </div>
       </footer>

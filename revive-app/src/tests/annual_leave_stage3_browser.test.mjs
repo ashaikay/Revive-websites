@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {annualLeaveColumns,annualLeaveOrderColumns,createAnnualLeaveScopeGuard,expectedAccountsForDates,formatLeaveDays,formatLeaveMinutes,loadAnnualLeavePages,loadAnnualLeaveWorkspace,rememberAnnualLeaveAttempt,restoreAnnualLeaveAttempt,submitAnnualLeaveAttempt,AnnualLeaveRefused} from '../services/annualLeave.ts';
+import {annualLeaveColumns,annualLeaveOrderColumns,createAnnualLeaveScopeGuard,expectedAccountsForDates,formatLeaveDays,formatLeaveMinutes,invalidAnnualLeaveAttemptMessage,loadAnnualLeavePages,loadAnnualLeaveWorkspace,rememberAnnualLeaveAttempt,restoreAnnualLeaveAttempt,submitAnnualLeaveAttempt,AnnualLeaveRefused} from '../services/annualLeave.ts';
 
 const ws='11111111-1111-4111-8111-111111111111',worker='22222222-2222-4222-8222-222222222222',user='33333333-3333-4333-8333-333333333333',account='44444444-4444-4444-8444-444444444444',absence='55555555-5555-4555-8555-555555555555',unavailability='66666666-6666-4666-8666-666666666666',calendar='77777777-7777-4777-8777-777777777777',request='88888888-8888-4888-8888-888888888888';
 function fixture(){
@@ -45,6 +45,15 @@ test('retains exact request identity for explicit retries and scopes recovery by
  rememberAnnualLeaveAttempt(storage,user,attempt);assert.deepEqual(restoreAnnualLeaveAttempt(storage,ws,user),attempt);assert.equal(restoreAnnualLeaveAttempt(storage,'10101010-1010-4010-8010-101010101010',user),null);
  let invoked;const result=await submitAnnualLeaveAttempt(attempt,async(name,payload)=>{invoked={name,payload};return{status:200,data:{absenceId:absence,unavailabilityId:unavailability,workspaceId:ws,workerId:worker,startAt:body.startAt,endAt:body.endAt,timezone:'Europe/London',status:'confirmed',version:1,totalDeductionMinutes:450,accounts:[{accountId:account,version:5,deductedMinutes:450,remainingMinutes:120}]}};});
  assert.equal(result.absenceId,absence);assert.deepEqual(invoked,{name:'rev-annual-leave-record',payload:body});
+});
+
+test('only retained blank calendar creation is locally dismissible',()=>{
+ const blank={operation:'calendar',workspaceId:ws,workerId:worker,requestId:request,body:{workspaceId:ws,requestId:request,action:'save_calendar',calendarId:null,name:'',regionCode:'GB-ENG',status:'active',expectedVersion:0}};
+ const valid={...blank,body:{...blank.body,name:'England holidays'}};
+ const uncertain={operation:'record',workspaceId:ws,workerId:worker,requestId:request,body:{workspaceId:ws,workerId:worker,requestId:request,startAt:'2026-05-01T00:00:00.000Z',endAt:'2026-05-02T00:00:00.000Z',expectedAccounts:[{accountId:account,version:4}]}};
+ assert.equal(invalidAnnualLeaveAttemptMessage(blank),'Enter a calendar name.');
+ assert.equal(invalidAnnualLeaveAttemptMessage(valid),null);
+ assert.equal(invalidAnnualLeaveAttemptMessage(uncertain),null);
 });
 
 test('accepts only request-bound known refusals and leaves unknown outcomes uncertain',async()=>{

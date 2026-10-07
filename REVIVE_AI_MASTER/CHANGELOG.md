@@ -6,6 +6,9 @@
 - Added full-day and partial-day confirmed manager recording in the authoritative worker timezone, accounted exact-reversal cancellation and clearly separated historical no-balance-change cancellation.
 - Added workspace/user-scoped durable pending requests, explicit identical retries, request-bound refusal handling, unknown-outcome recovery, duplicate-submit protection and Scheduling planner refresh events.
 - Hardened history timezone presentation, deterministic bounded pagination, workspace/user transition guards and explicit read-only refresh recovery following Stage 3 review.
+- Simplified the business-facing view to worker/year selection, day-first Allowance/Used/Remaining balances, Add leave, plain-language history/cancellation and Refresh. Technical accounting terminology is no longer presented.
+- Moved configuration behind one Leave settings action with a resumable worker-specific allowance, working-day conversion, leave-year and explicit holiday-review flow. Familiar day/hour inputs convert to integer minutes while existing authority, revision and exact-retry contracts remain unchanged.
+- Replaced the malformed footer separators with correctly rendered middle dots. Half-day shortcuts remain deferred because no general mapping to a worker's actual daily intervals is yet proven.
 - Added focused service and rendered UI regressions and registered them in CI. Employee requests, approvals, email and automatic allocation remain deferred.
 
 ## 2026-10-04 - Annual Leave Stage 2 Review Corrections (LOCAL IMPLEMENTATION)
