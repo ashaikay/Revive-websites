@@ -44,7 +44,7 @@ export async function loadAnnualLeavePages(table:AnnualLeaveTable,fetchPage:(fro
 export interface AnnualLeavePolicy {policyId:string;workerId:string|null;version:number;effectiveFromLeaveYear:number;allowanceInputUnit:'hours'|'days';allowanceInputValue:number;allowanceMinutes:number;hoursPerDayMinutes:number;leaveYearStartMonth:number;leaveYearStartDay:number;bankHolidayTreatment:'included'|'additional';}
 export interface AnnualLeaveAccount {accountId:string;workerId:string;leaveYearStart:string;leaveYearEndExclusive:string;configuredAllowanceMinutes:number;adjustmentTotalMinutes:number;recordedLeaveMinutes:number;remainingMinutes:number;hoursPerDayMinutes:number;bankHolidayTreatment:'included'|'additional';version:number;}
 export interface AnnualLeaveAdjustment {adjustmentId:string;accountId:string;minutes:number;reason:string;accountVersion:number;createdAt:string;}
-export interface AnnualLeaveAbsence {absenceId:string;unavailabilityId:string;workerId:string;startAt:string;endAt:string;timezone:string;totalDeductionMinutes:number;status:'confirmed'|'cancelled';version:number;accountIds:string[];createdAt:string;cancelledAt:string|null;}
+export interface AnnualLeaveAbsence {absenceId:string;unavailabilityId:string;workerId:string;startAt:string;endAt:string;timezone:string;totalDeductionMinutes:number;status:'confirmed'|'cancelled';version:number;accountIds:string[];deductionMinutesByAccount?:Record<string,number>;createdAt:string;cancelledAt:string|null;}
 export interface LegacyAnnualLeave {unavailabilityId:string;workerId:string;startAt:string;endAt:string;status:'active'|'cancelled';version:number;}
 export interface AnnualLeaveCalendar {calendarId:string;name:string;regionCode:string;status:'active'|'inactive';version:number;}
 export interface AnnualLeaveCalendarYear {calendarId:string;calendarYear:number;revision:number;confirmedRevision:number|null;confirmedAt:string|null;}
@@ -87,7 +87,7 @@ export async function loadAnnualLeaveWorkspace(workspaceId:string,workerId:strin
  const segmentsByAbsence=new Map<string,Set<string>>();
  for(const row of byTable.annual_leave_calculation_segments){if(!id(row.id)||row.worker_id!==workerId||!id(row.absence_id)||!id(row.account_id)||!accountIds.has(row.account_id)||!date(row.local_date)||!integer(row.deduction_minutes))throw Error('Annual leave calculation evidence unavailable');const current=segmentsByAbsence.get(row.absence_id)??new Set<string>();current.add(row.account_id);segmentsByAbsence.set(row.absence_id,current);}
  const accountedUnavailability=new Set<string>();
- const absences=byTable.annual_leave_absences.map(row=>{if(!id(row.id)||row.worker_id!==workerId||!id(row.unavailability_id)||accountedUnavailability.has(row.unavailability_id)||!['confirmed','cancelled'].includes(row.status as string)||!integer(row.total_deduction_minutes)||!integer(row.version,1))throw Error('Annual leave history unavailable');accountedUnavailability.add(row.unavailability_id);const accountList=[...(segmentsByAbsence.get(row.id)??[])].sort();if(accountList.length<1)throw Error('Annual leave calculation evidence unavailable');return{absenceId:row.id,unavailabilityId:row.unavailability_id,workerId,startAt:instant(row.start_at),endAt:instant(row.end_at),timezone:typeof row.timezone==='string'?row.timezone:'',totalDeductionMinutes:row.total_deduction_minutes,status:row.status,version:row.version,accountIds:accountList,createdAt:instant(row.created_at),cancelledAt:row.cancelled_at===null?null:instant(row.cancelled_at)} as AnnualLeaveAbsence;}).sort((a,b)=>b.startAt.localeCompare(a.startAt));
+ const absences=byTable.annual_leave_absences.map(row=>{if(!id(row.id)||row.worker_id!==workerId||!id(row.unavailability_id)||accountedUnavailability.has(row.unavailability_id)||!['confirmed','cancelled'].includes(row.status as string)||!integer(row.total_deduction_minutes)||!integer(row.version,1))throw Error('Annual leave history unavailable');accountedUnavailability.add(row.unavailability_id);const accountList=[...(segmentsByAbsence.get(row.id)??[])].sort();if(accountList.length<1)throw Error('Annual leave calculation evidence unavailable');return{absenceId:row.id,unavailabilityId:row.unavailability_id,workerId,startAt:instant(row.start_at),endAt:instant(row.end_at),timezone:typeof row.timezone==='string'?row.timezone:'',totalDeductionMinutes:row.total_deduction_minutes,status:row.status,version:row.version,accountIds:accountList,deductionMinutesByAccount:leaveDeductionMinutesByAccount(byTable.annual_leave_calculation_segments,row.id as string),createdAt:instant(row.created_at),cancelledAt:row.cancelled_at===null?null:instant(row.cancelled_at)} as AnnualLeaveAbsence;}).sort((a,b)=>b.startAt.localeCompare(a.startAt));
  const legacyLeave=byTable.scheduling_worker_unavailability.filter(row=>row.category==='leave'&&!accountedUnavailability.has(row.id as string)).map(row=>{if(!id(row.id)||row.worker_id!==workerId||!['active','cancelled'].includes(row.status as string)||!integer(row.version,1))throw Error('Historical leave unavailable');return{unavailabilityId:row.id,workerId,startAt:instant(row.start_at),endAt:instant(row.end_at),status:row.status,version:row.version} as LegacyAnnualLeave;}).sort((a,b)=>b.startAt.localeCompare(a.startAt));
  const calendars=byTable.annual_leave_calendars.map(row=>{if(!id(row.id)||typeof row.name!=='string'||!row.name.trim()||typeof row.region_code!=='string'||!['active','inactive'].includes(row.status as string)||!integer(row.version,1))throw Error('Annual leave calendars unavailable');return{calendarId:row.id,name:row.name,regionCode:row.region_code,status:row.status,version:row.version} as AnnualLeaveCalendar;});
  const assignments=byTable.annual_leave_worker_calendars;
@@ -143,3 +143,51 @@ function storageKey(workspaceId:string,userId:string){if(!id(workspaceId)||!id(u
 export function rememberAnnualLeaveAttempt(storage:Storage,userId:string,value:AnnualLeaveAttempt){const attempt=validateAnnualLeaveAttempt(value);storage.setItem(storageKey(attempt.workspaceId,userId),JSON.stringify(attempt));}
 export function restoreAnnualLeaveAttempt(storage:Storage,workspaceId:string,userId:string){const raw=storage.getItem(storageKey(workspaceId,userId));if(raw===null)return null;const attempt=validateAnnualLeaveAttempt(JSON.parse(raw));if(attempt.workspaceId!==workspaceId)throw Error('Pending annual leave request unavailable');return attempt;}
 export function clearAnnualLeaveAttempt(storage:Storage,workspaceId:string,userId:string){storage.removeItem(storageKey(workspaceId,userId));}
+
+
+// Display helpers only; stored balances, requests and account conversions stay in minutes.
+function leaveDeductionMinutesByAccount(segments:Record<string,unknown>[],absenceId:string):Record<string,number>{
+ const totals:Record<string,number>={};
+ for(const segment of segments){
+  if(segment.absence_id===absenceId){
+   const accountId=segment.account_id as string;
+   totals[accountId]=(totals[accountId]??0)+(segment.deduction_minutes as number);
+  }
+ }
+ return totals;
+}
+function displayDays(days:number):string{
+ if(!Number.isFinite(days))throw Error('Day conversion unavailable');
+ const value=Number.isInteger(days)?String(days):days.toFixed(2);
+ return `${value} ${days===1?'day':'days'}`;
+}
+export function formatLeaveDayTotal(minutes:number,minutesPerDay:number):string{
+ if(!Number.isSafeInteger(minutes)||!integer(minutesPerDay,1))throw Error('Day conversion unavailable');
+ return displayDays(minutes/minutesPerDay);
+}
+export function formatAnnualLeaveAbsenceDays(absence:AnnualLeaveAbsence,accounts:AnnualLeaveAccount[]):string{
+ const related=absence.accountIds.map(accountId=>accounts.find(account=>account.accountId===accountId));
+ if(related.length===0||related.some(account=>!account||!integer(account.hoursPerDayMinutes,1)))return 'Day conversion unavailable';
+ const deductions=absence.deductionMinutesByAccount;
+ if(deductions){
+  const keys=Object.keys(deductions);
+  if(keys.length!==absence.accountIds.length||keys.some(key=>!absence.accountIds.includes(key))||
+   keys.some(key=>!Number.isSafeInteger(deductions[key])||deductions[key]<0)||
+   keys.reduce((sum,key)=>sum+deductions[key],0)!==absence.totalDeductionMinutes)return 'Day conversion unavailable';
+  return displayDays(related.reduce((sum,account)=>sum+deductions[account!.accountId]/account!.hoursPerDayMinutes,0));
+ }
+ // Older in-memory fixtures can be converted only when every account has the same saved day length.
+ const conversions=new Set(related.map(account=>account!.hoursPerDayMinutes));
+ if(conversions.size!==1)return 'Day conversion unavailable';
+ return formatLeaveDayTotal(absence.totalDeductionMinutes,related[0]!.hoursPerDayMinutes);
+}
+export function formatAnnualLeaveRange(startAt:string,endAt:string,timezone:string):string{
+ const start=Date.parse(startAt),end=Date.parse(endAt);
+ if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)throw Error('Leave history time unavailable');
+ const first=formatAnnualLeaveInstant(startAt,timezone),last=formatAnnualLeaveInstant(endAt,timezone);
+ if(first.endsWith(', 00:00')&&last.endsWith(', 00:00')&&start%60000===0&&end%60000===0){
+  const inclusiveEnd=formatAnnualLeaveInstant(new Date(end-1).toISOString(),timezone).slice(0,10);
+  return `${first.slice(0,10)} to ${inclusiveEnd}`;
+ }
+ return `${first} to ${last}`;
+}

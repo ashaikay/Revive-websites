@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {annualLeaveColumns,annualLeaveOrderColumns,createAnnualLeaveScopeGuard,expectedAccountsForDates,formatLeaveDays,formatLeaveMinutes,invalidAnnualLeaveAttemptMessage,loadAnnualLeavePages,loadAnnualLeaveWorkspace,rememberAnnualLeaveAttempt,restoreAnnualLeaveAttempt,submitAnnualLeaveAttempt,AnnualLeaveRefused} from '../services/annualLeave.ts';
+import {annualLeaveColumns,annualLeaveOrderColumns,createAnnualLeaveScopeGuard,expectedAccountsForDates,formatLeaveDays,formatLeaveMinutes,formatLeaveDayTotal,formatAnnualLeaveRange,formatAnnualLeaveAbsenceDays,invalidAnnualLeaveAttemptMessage,loadAnnualLeavePages,loadAnnualLeaveWorkspace,rememberAnnualLeaveAttempt,restoreAnnualLeaveAttempt,submitAnnualLeaveAttempt,AnnualLeaveRefused} from '../services/annualLeave.ts';
 
 const ws='11111111-1111-4111-8111-111111111111',worker='22222222-2222-4222-8222-222222222222',user='33333333-3333-4333-8333-333333333333',account='44444444-4444-4444-8444-444444444444',absence='55555555-5555-4555-8555-555555555555',unavailability='66666666-6666-4666-8666-666666666666',calendar='77777777-7777-4777-8777-777777777777',request='88888888-8888-4888-8888-888888888888';
 function fixture(){
@@ -73,4 +73,26 @@ test('paginates with stable unique ordering and probes beyond the exact 1,000-ro
 test('scope changes invalidate in-flight completion and retain recovery under its original workspace and user',()=>{
  const otherUser='90909090-9090-4090-8090-909090909090',guard=createAnnualLeaveScopeGuard(`${ws}:${user}`),token=guard.capture(),body={workspaceId:ws,workerId:worker,requestId:request,startAt:'2026-05-01T00:00:00.000Z',endAt:'2026-05-02T00:00:00.000Z',expectedAccounts:[{accountId:account,version:4}]},attempt={operation:'record',workspaceId:ws,workerId:worker,requestId:request,body},values=new Map(),storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
  rememberAnnualLeaveAttempt(storage,user,attempt);guard.update(`${ws}:${otherUser}`);assert.equal(guard.isCurrent(token),false);const beforeCleanup=guard.capture();guard.deactivate();assert.equal(guard.isCurrent(beforeCleanup),false);guard.activate();assert.equal(guard.isCurrent(beforeCleanup),false);assert.equal(guard.isCurrent(guard.capture()),true);assert.deepEqual(restoreAnnualLeaveAttempt(storage,ws,user),attempt);assert.equal(restoreAnnualLeaveAttempt(storage,ws,otherUser),null);
+});
+
+test('displays simple days and inclusive local dates across daylight-saving changes',()=>{
+ assert.equal(formatLeaveDayTotal(2520,450),'5.60 days');
+ assert.equal(formatLeaveDayTotal(450,450),'1 day');
+ assert.equal(formatLeaveDayTotal(-225,450),'-0.50 days');
+ assert.equal(formatAnnualLeaveRange('2026-10-06T23:00:00.000Z','2026-10-16T23:00:00.000Z','Europe/London'),'07/10/2026 to 16/10/2026');
+ assert.equal(formatAnnualLeaveRange('2026-03-28T00:00:00.000Z','2026-03-29T23:00:00.000Z','Europe/London'),'28/03/2026 to 29/03/2026');
+ assert.equal(formatAnnualLeaveRange('2026-10-23T23:00:00.000Z','2026-10-26T00:00:00.000Z','Europe/London'),'24/10/2026 to 25/10/2026');
+ assert.equal(formatAnnualLeaveRange('2026-10-05T08:00:00.000Z','2026-10-05T12:00:00.000Z','Europe/London'),'05/10/2026, 09:00 to 05/10/2026, 13:00');
+});
+test('converts history using each leave account snapshot, never the current working pattern',async()=>{
+ const model=await loadAnnualLeaveWorkspace(ws,worker,reader(fixture()));
+ assert.deepEqual(model.absences[0].deductionMinutesByAccount,{[account]:120});
+ assert.equal(formatAnnualLeaveAbsenceDays(model.absences[0],model.accounts),'0.27 days');
+ const second='abababab-abab-4bab-8bab-abababababab';
+ const conversions=[{...model.accounts[0],hoursPerDayMinutes:450},{...model.accounts[0],accountId:second,hoursPerDayMinutes:480}];
+ const acrossYears={...model.absences[0],accountIds:[account,second],totalDeductionMinutes:930,deductionMinutesByAccount:{[account]:450,[second]:480}};
+ assert.equal(formatAnnualLeaveAbsenceDays(acrossYears,conversions),'2 days');
+ assert.equal(formatAnnualLeaveAbsenceDays({...acrossYears,deductionMinutesByAccount:undefined},conversions),'Day conversion unavailable');
+ assert.equal(formatAnnualLeaveAbsenceDays({...acrossYears,deductionMinutesByAccount:{[account]:450,[second]:479}},conversions),'Day conversion unavailable');
+ assert.equal(formatAnnualLeaveAbsenceDays(acrossYears,[]),'Day conversion unavailable');
 });

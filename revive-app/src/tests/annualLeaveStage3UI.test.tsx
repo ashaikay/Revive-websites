@@ -8,12 +8,19 @@ const absence:AnnualLeaveAbsence={absenceId:'33333333-3333-4333-8333-33333333333
 const legacy:LegacyAnnualLeave={unavailabilityId:'55555555-5555-4555-8555-555555555555',workerId:account.workerId,startAt:'2025-06-01T08:00:00.000Z',endAt:'2025-06-01T16:00:00.000Z',status:'active',version:2};
 
 describe('Annual Leave Stage 3 presentation',()=>{
+ it('shows inclusive UK full-day dates and fractional leave days',()=>{
+  const full={...absence,startAt:'2026-10-06T23:00:00.000Z',endAt:'2026-10-16T23:00:00.000Z',totalDeductionMinutes:2520};
+  const markup=renderToStaticMarkup(<AnnualLeaveHistory absences={[full]} accounts={[account]} legacy={[]} legacyDisplayTimezone="UTC" disabled={false} onCancel={()=>{}} onCancelLegacy={()=>{}}/>);
+  expect(markup).toContain('07/10/2026 to 16/10/2026 (Europe/London)');
+  expect(markup).toContain('Leave used: 5.60 days');
+  expect(markup).not.toContain('17/10/2026');expect(markup).not.toContain('00:00');
+ });
  it('shows simple day-first balances using the saved working-day conversion',()=>{
   const markup=renderToStaticMarkup(<AnnualLeaveBalance account={account}/>);
-  expect(markup).toContain('Allowance');expect(markup).toContain('29 days at 7h 30m per day');expect(markup).toContain('217h 30m');expect(markup).toContain('Used');expect(markup).toContain('2 days at 7h 30m per day');expect(markup).toContain('15h 00m');expect(markup).toContain('Remaining');expect(markup).toContain('27 days at 7h 30m per day');expect(markup).toContain('202h 30m');expect(markup.indexOf('29 days')).toBeLessThan(markup.indexOf('217h 30m'));expect(markup).not.toContain('Adjustments');expect(markup).not.toContain('Net leave recorded');
+  expect(markup).toContain('Allowance');expect(markup).toContain('29 days');expect(markup).toContain('217h 30m');expect(markup).toContain('Used');expect(markup).toContain('2 days');expect(markup).toContain('15h 00m');expect(markup).toContain('Remaining');expect(markup).toContain('27 days');expect(markup).toContain('202h 30m');expect(markup.indexOf('29 days')).toBeLessThan(markup.indexOf('217h 30m'));expect(markup).not.toContain('Adjustments');expect(markup).not.toContain('Net leave recorded');expect(markup.match(/<details/g)).toHaveLength(3);expect(markup).toContain('View calculation');
  });
  it('uses plain cancellation labels and explicit stored or fallback timezones',()=>{
-  const browserLocal=vi.spyOn(Date.prototype,'toLocaleString').mockReturnValue('BROWSER LOCAL TIME'),onCancel=vi.fn(),onCancelLegacy=vi.fn(),markup=renderToStaticMarkup(<AnnualLeaveHistory absences={[absence]} legacy={[legacy]} legacyDisplayTimezone="America/New_York" disabled={false} onCancel={onCancel} onCancelLegacy={onCancelLegacy}/>);
-  expect(markup).toContain('Annual leave');expect(markup).toContain('05/10/2026, 09:00 to 05/10/2026, 13:00 (Europe/London)');expect(markup).toContain('Leave used: 4h 00m');expect(markup).toContain('Cancel leave');expect(markup).toContain('Older leave (not included in the balance)');expect(markup).toContain('01/06/2025, 04:00 to 01/06/2025, 12:00 (shown in America/New_York; the original timezone was not saved)');expect(markup).toContain('Cancel older leave');expect(markup).not.toContain('BROWSER LOCAL TIME');expect(markup).not.toMatch(/employee request|approval required|authoritative|exact accounting|posting|revision/i);browserLocal.mockRestore();
+  const browserLocal=vi.spyOn(Date.prototype,'toLocaleString').mockReturnValue('BROWSER LOCAL TIME'),onCancel=vi.fn(),onCancelLegacy=vi.fn(),markup=renderToStaticMarkup(<AnnualLeaveHistory absences={[absence]} accounts={[account]} legacy={[legacy]} legacyDisplayTimezone="America/New_York" disabled={false} onCancel={onCancel} onCancelLegacy={onCancelLegacy}/>);
+  expect(markup).toContain('Annual leave');expect(markup).toContain('05/10/2026, 09:00 to 05/10/2026, 13:00 (Europe/London)');expect(markup).toContain('Leave used: 0.53 days');expect(markup).toContain('Cancel leave');expect(markup).toContain('Older leave (not included in the balance)');expect(markup).toContain('01/06/2025, 04:00 to 01/06/2025, 12:00 (shown in America/New_York; the original timezone was not saved)');expect(markup).toContain('Cancel older leave');expect(markup).not.toContain('BROWSER LOCAL TIME');expect(markup).not.toMatch(/employee request|approval required|authoritative|exact accounting|posting|revision/i);browserLocal.mockRestore();
  });
 });

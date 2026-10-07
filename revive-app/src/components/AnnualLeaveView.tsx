@@ -1,12 +1,15 @@
 import {useEffect, useRef, useState} from 'react';
 import {supabaseClient} from '@/data/supabaseClient';
 import {localLeaveToUtc} from '@/services/workerUnavailability';
+import {formatSchedulingDate} from '@/services/schedulingDisplay';
 import {
   clearAnnualLeaveAttempt,
   createAnnualLeaveScopeGuard,
   expectedAccountsForDates,
   formatAnnualLeaveInstant,
-  formatLeaveDays,
+  formatLeaveDayTotal,
+  formatAnnualLeaveRange,
+  formatAnnualLeaveAbsenceDays,
   formatLeaveMinutes,
   invalidAnnualLeaveAttemptMessage,
   loadAnnualLeavePages,
@@ -97,7 +100,7 @@ const invoke = async (name: string, body: Record<string, unknown>) => {
 };
 
 function accountLabel(account: AnnualLeaveAccount) {
-  return `${account.leaveYearStart} to ${subtractDay(account.leaveYearEndExclusive)}`;
+  return `${formatSchedulingDate(account.leaveYearStart)} to ${formatSchedulingDate(subtractDay(account.leaveYearEndExclusive))}`;
 }
 
 function exactMinutes(value: string, unit: 'hours' | 'days', minutesPerDay: number) {
@@ -112,8 +115,11 @@ function exactMinutes(value: string, unit: 'hours' | 'days', minutesPerDay: numb
 function LeaveAmount({minutes, minutesPerDay}: {minutes: number; minutesPerDay: number}) {
   return (
     <>
-      <p className="text-lg font-semibold">{formatLeaveDays(minutes, minutesPerDay)}</p>
-      <small>{formatLeaveMinutes(minutes)}</small>
+      <p className="text-lg font-semibold">{formatLeaveDayTotal(minutes, minutesPerDay)}</p>
+      <details className="mt-2 text-sm">
+        <summary className="cursor-pointer">View calculation</summary>
+        <p>{formatLeaveMinutes(minutes)} at {formatLeaveMinutes(minutesPerDay)} per day.</p>
+      </details>
     </>
   );
 }
@@ -141,6 +147,7 @@ export function AnnualLeaveBalance({account}: {account: AnnualLeaveAccount}) {
 
 export function AnnualLeaveHistory({
   absences,
+  accounts = [],
   legacy,
   legacyDisplayTimezone,
   onCancel,
@@ -148,6 +155,7 @@ export function AnnualLeaveHistory({
   disabled,
 }: {
   absences: AnnualLeaveAbsence[];
+  accounts?: AnnualLeaveAccount[];
   legacy: LegacyAnnualLeave[];
   legacyDisplayTimezone: string;
   onCancel: (absence: AnnualLeaveAbsence) => void;
@@ -161,10 +169,13 @@ export function AnnualLeaveHistory({
         <li className="card p-3" key={absence.absenceId}>
           <strong>{absence.status === 'confirmed' ? 'Annual leave' : 'Cancelled annual leave'}</strong>
           <p>
-            {formatAnnualLeaveInstant(absence.startAt, absence.timezone)} to{' '}
-            {formatAnnualLeaveInstant(absence.endAt, absence.timezone)} ({absence.timezone})
+            {formatAnnualLeaveRange(absence.startAt, absence.endAt, absence.timezone)} ({absence.timezone})
           </p>
-          <p>Leave used: {formatLeaveMinutes(absence.totalDeductionMinutes)}</p>
+          <p>{absence.status === 'confirmed' ? 'Leave used' : 'Original leave amount'}: {formatAnnualLeaveAbsenceDays(absence, accounts)}</p>
+          <details className="mt-2 text-sm">
+            <summary className="cursor-pointer">View calculation</summary>
+            <p>{formatLeaveMinutes(absence.totalDeductionMinutes)} in the original leave record.</p>
+          </details>
           {absence.status === 'confirmed' && (
             <button className="btn-secondary mt-2" disabled={disabled} onClick={() => onCancel(absence)}>
               Cancel leave
@@ -793,7 +804,7 @@ export function AnnualLeaveView({
                   <div>
                     <h4 className="font-medium">Allowance and leave year</h4>
                     <p className="text-sm text-neutral-600">
-                      {drafts.allowanceValue} {drafts.allowanceUnit}; leave year starts {drafts.leaveYearStart}.
+                      {drafts.allowanceValue} {drafts.allowanceUnit}; leave year starts {formatSchedulingDate(drafts.leaveYearStart)}.
                     </p>
                   </div>
                   <button type="button" className="btn-secondary" onClick={() => setSetupEditing(true)}>
@@ -968,7 +979,7 @@ export function AnnualLeaveView({
                     .filter(value => value.accountId === account.accountId)
                     .map(value => (
                       <li key={value.adjustmentId}>
-                        {formatLeaveMinutes(value.minutes)} — {value.reason}
+                        {formatLeaveDayTotal(value.minutes, account.hoursPerDayMinutes)} — {value.reason}
                       </li>
                     ))}
                 </ul>
@@ -1122,7 +1133,7 @@ export function AnnualLeaveView({
                       .map(holiday => (
                         <li className="flex flex-wrap items-center gap-2 py-1" key={holiday.holidayId}>
                           <span>
-                            {holiday.holidayDate}: {holiday.name} ({holiday.status === 'active' ? 'Included' : 'Removed'})
+                            {formatSchedulingDate(holiday.holidayDate)}: {holiday.name} ({holiday.status === 'active' ? 'Included' : 'Removed'})
                           </span>
                           {holiday.status === 'active' && (
                             <button
@@ -1252,6 +1263,7 @@ export function AnnualLeaveView({
         <h3 className="font-semibold">Leave history</h3>
         <AnnualLeaveHistory
           absences={model?.absences ?? []}
+          accounts={model?.accounts ?? []}
           legacy={model?.legacyLeave ?? []}
           legacyDisplayTimezone={model?.timezone ?? 'UTC'}
           disabled={changesDisabled}

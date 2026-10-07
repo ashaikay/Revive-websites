@@ -21,8 +21,8 @@ describe('mounted official holiday review',()=>{
   expect(f.invoke).toHaveBeenCalledTimes(1);
   expect(f.onLoading).toHaveBeenCalledWith(true);
   fireEvent.click(await screen.findByRole('button',{name:'Confirm reviewed holidays'}));
-  expect(screen.getByText(/2026-01-01: New Year's Day/)).toBeInTheDocument();
-  expect(screen.getByText('2026-06-01: Company holiday')).toBeInTheDocument();
+  expect(screen.getByText(/01\/01\/2026: New Year's Day/)).toBeInTheDocument();
+  expect(screen.getByText('01/06/2026: Company holiday')).toBeInTheDocument();
   expect(screen.getByRole('link',{name:'GOV.UK'})).toHaveAttribute('href',preview.source);
   expect(f.onConfirm).toHaveBeenCalledWith(previewId);
   expect(f.invoke.mock.calls[0][1]).toEqual({action:'preview',workspaceId,workerId,calendarId:null,calendarYear:2026,region:'england-and-wales'});

@@ -1,5 +1,10 @@
 import {useEffect, useRef, useState} from 'react';
 import type {AnnualLeaveInvoke} from '@/services/annualLeave';
+import {formatSchedulingDate,formatSchedulingInstant} from '@/services/schedulingDisplay';
+
+function formatHolidayNote(value:string):string{
+ return value.replace(/\b\d{4}-\d{2}-\d{2}\b/g,date=>{try{return formatSchedulingDate(date);}catch{return date;}});
+}
 
 const source = 'https://www.gov.uk/bank-holidays.json';
 const regions = [
@@ -99,11 +104,11 @@ export function OfficialBankHolidayImport({workspaceId, workerId, calendarId, re
   {preview && <div className="mt-4">
    <h5 className="font-medium">Review {preview.calendarYear} holidays</h5>
    <p>Calendar: {preview.calendarName}. Confirming assigns this calendar to this worker. Shared calendar changes affect all assigned workers.</p>
-   <p className="text-sm">Source: <a href={preview.source} target="_blank" rel="noreferrer">GOV.UK</a>. Fetched: {new Date(preview.fetchedAt).toLocaleString('en-GB')}.</p>
-   <ul>{preview.holidays.map(holiday => <li key={holiday.date}>{holiday.date}: {holiday.title}</li>)}</ul>
+   <p className="text-sm">Source: <a href={preview.source} target="_blank" rel="noreferrer">GOV.UK</a>. Fetched: {formatSchedulingInstant(preview.fetchedAt, 'Europe/London')} (Europe/London).</p>
+   <ul>{preview.holidays.map(holiday => <li key={holiday.date}>{formatSchedulingDate(holiday.date)}: {holiday.title}</li>)}</ul>
    <p>{preview.additions} dates to add; {preview.existing} already imported. Review the entire list before confirming completeness.</p>
-   {preview.preserved.length > 0 && <><p>Manual dates kept in this year:</p><ul>{preview.preserved.map(item => <li key={item}>{item}</li>)}</ul></>}
-   {preview.conflicts.length > 0 && <div role="alert"><p>Conflicts: nothing will be overwritten or imported. Resolve these entries in manual calendar controls, then load again.</p><ul>{preview.conflicts.map(item => <li key={item}>{item}</li>)}</ul></div>}
+   {preview.preserved.length > 0 && <><p>Manual dates kept in this year:</p><ul>{preview.preserved.map(item => <li key={item}>{formatHolidayNote(item)}</li>)}</ul></>}
+   {preview.conflicts.length > 0 && <div role="alert"><p>Conflicts: nothing will be overwritten or imported. Resolve these entries in manual calendar controls, then load again.</p><ul>{preview.conflicts.map(item => <li key={item}>{formatHolidayNote(item)}</li>)}</ul></div>}
    <button type="button" className="btn-primary mt-3" disabled={disabled || loading || preview.conflicts.length > 0} onClick={() => onConfirm(preview.previewId)}>Confirm reviewed holidays</button>
   </div>}
  </section>;
