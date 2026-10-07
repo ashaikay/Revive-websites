@@ -152,3 +152,50 @@ test('preflight permits Supabase headers without authentication or save', async 
   assert.deepEqual(context.counts(), { authenticationCalls: 0, roleCalls: 0 });
   assert.equal(context.calls.length, 0);
 });
+
+test('paired local development origins preflight with the exact accepted origin and no authority calls', async () => {
+  for (const candidate of ['http://localhost:5180', 'http://127.0.0.1:5180']) {
+    const context = fixture();
+    const response = await handleSchedulingDailySessionsSave(request(undefined, { Origin: candidate }, 'OPTIONS'), context.dependencies);
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), candidate);
+    assert.equal(response.headers.get('Vary'), 'Origin');
+    assert.deepEqual(context.counts(), { authenticationCalls: 0, roleCalls: 0 });
+    assert.equal(context.calls.length, 0);
+  }
+});
+
+test('missing and unrelated origins are refused before authority or save', async () => {
+  const missing = new Request('https://example.test', { method: 'OPTIONS' });
+  for (const candidate of [missing, request(undefined, { Origin: 'https://foreign.test' }, 'OPTIONS'), request(undefined, { Origin: 'http://127.0.0.1:5181' }, 'OPTIONS'), request(body, { Origin: 'http://localhost:3000' })]) {
+    const context = fixture();
+    const response = await handleSchedulingDailySessionsSave(candidate, context.dependencies);
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
+    assert.deepEqual(context.counts(), { authenticationCalls: 0, roleCalls: 0 });
+    assert.equal(context.calls.length, 0);
+  }
+  const unconfigured = fixture();
+  unconfigured.dependencies.allowedOrigin = undefined;
+  assert.equal((await handleSchedulingDailySessionsSave(request(undefined, {}, 'OPTIONS'), unconfigured.dependencies)).status, 403);
+});
+
+test('production origin stays exact and never accepts local development origins', async () => {
+  const production = 'https://app.revive.test';
+  for (const candidate of ['http://localhost:5180', 'http://127.0.0.1:5180', 'https://foreign.test']) {
+    const context = fixture();
+    context.dependencies.allowedOrigin = production;
+    assert.equal((await handleSchedulingDailySessionsSave(request(undefined, { Origin: candidate }, 'OPTIONS'), context.dependencies)).status, 403);
+    assert.equal((await handleSchedulingDailySessionsSave(request(body, { Origin: candidate }), context.dependencies)).status, 403);
+    assert.equal(context.calls.length, 0);
+  }
+  const context = fixture();
+  context.dependencies.allowedOrigin = production;
+  const preflight = await handleSchedulingDailySessionsSave(request(undefined, { Origin: production }, 'OPTIONS'), context.dependencies);
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), production);
+  const saved = await handleSchedulingDailySessionsSave(request(body, { Origin: production }), context.dependencies);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.headers.get('Access-Control-Allow-Origin'), production);
+  assert.equal(context.calls.length, 1);
+});

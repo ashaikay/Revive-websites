@@ -1,3 +1,5 @@
+import { resolveAnnualLeaveOrigin } from '../_shared/annualLeaveOrigins.ts';
+
 export interface DailySessionsInput {
   target_workspace_id: string;
   initiating_user_id: string;
@@ -120,9 +122,10 @@ export async function handleSchedulingDailySessionsSave(
   request: Request,
   dependencies: DailySessionsDependencies,
 ): Promise<Response> {
-  if (!dependencies.allowedOrigin || request.headers.get('Origin') !== dependencies.allowedOrigin) return new Response(null, { status: 403 });
+  const origin = resolveAnnualLeaveOrigin(request.headers.get('Origin'), dependencies.allowedOrigin);
+  if (!origin) return new Response(null, { status: 403 });
   const headers = {
-    'Access-Control-Allow-Origin': dependencies.allowedOrigin,
+    'Access-Control-Allow-Origin': origin,
     Vary: 'Origin',
     'Cache-Control': 'no-store',
     'Content-Type': 'application/json',
