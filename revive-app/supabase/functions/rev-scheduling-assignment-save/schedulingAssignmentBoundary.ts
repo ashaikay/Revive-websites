@@ -1,3 +1,4 @@
+import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
 export interface AssignmentInput{target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_assignment_id:string|null;target_worker_id:string;target_job_id:string;target_status:string;expected_version:number;expected_worker_version:number|null;expected_job_version:number|null;expected_pattern_version:number|null;}
 export interface AssignmentDependencies{allowedOrigin?:string;getUserId(authorization:string):Promise<string|null>;canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;save(input:AssignmentInput):Promise<unknown>;}
 export const refusalReasons={
@@ -10,8 +11,9 @@ const id=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
 const revision=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=1&&v<Number.MAX_SAFE_INTEGER;
 function instant(v:unknown):string|null{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(v))return null;const ms=Date.parse(v);return Number.isFinite(ms)?new Date(ms).toISOString():null;}
 export async function handleSchedulingAssignmentSave(request:Request,deps:AssignmentDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+ const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);
+ if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});
