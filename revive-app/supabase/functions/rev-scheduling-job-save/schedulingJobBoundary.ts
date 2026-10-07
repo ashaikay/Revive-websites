@@ -1,3 +1,5 @@
+import { resolveAnnualLeaveOrigin } from '../_shared/annualLeaveOrigins.ts';
+
 export interface JobInput {
  target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_job_id:string|null;
  target_title:string;target_start_at:string;target_end_at:string;target_timezone:string;target_location:string;target_required_skills:string[];target_staffing_count:number;target_status:string;expected_version:number;
@@ -15,8 +17,9 @@ function storedInstant(v:unknown):string|null{if(typeof v!=='string'||!/^\d{4}-\
 function validTimezone(v:unknown):v is string{if(typeof v!=='string'||!v||v!==v.trim()||v.length>100)return false;try{new Intl.DateTimeFormat('en-GB',{timeZone:v});return true;}catch{return false;}}
 function validSkills(v:unknown):v is string[]{return Array.isArray(v)&&v.length<=30&&v.every(t=>typeof t==='string'&&t.length>0&&t.length<=80&&t===t.trim())&&new Set(v).size===v.length;}
 export async function handleSchedulingJobSave(request:Request,deps:JobDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+ const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);
+ if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});

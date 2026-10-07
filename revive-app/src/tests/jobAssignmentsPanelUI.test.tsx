@@ -147,4 +147,22 @@ describe('mounted job allocation panel',()=>{
   const failure=await screen.findByText('The allocation could not be refreshed. Check your connection, then select “Refresh allocation” again.');
   await waitFor(()=>expect(failure).toHaveFocus());
  });
+
+ it('collapses worker allocation when asked, keeps the summary visible and never hides pending recovery',async()=>{
+  mount({collapsible:true,disabled:true,disabledReason:'Job changes are paused until the earlier daily-jobs save is confirmed.'});
+  expect(await screen.findByText('1 of 1 assigned')).toBeInTheDocument();
+  const toggle=screen.getByRole('button',{name:'Show worker allocation'});
+  expect(toggle).toHaveAttribute('aria-expanded','false');
+  expect(screen.queryByRole('button',{name:'Refresh allocation'})).toBeNull();
+  expect(screen.queryByText('Job changes are paused until the earlier daily-jobs save is confirmed.')).toBeNull();
+  fireEvent.click(toggle);
+  expect(screen.getByRole('button',{name:'Hide worker allocation'})).toHaveAttribute('aria-expanded','true');
+  expect(screen.getAllByText('Job changes are paused until the earlier daily-jobs save is confirmed.')).toHaveLength(1);
+  expect(screen.queryByText(/being edited or saved/)).toBeNull();
+  cleanup();
+  rememberAssignment(window.sessionStorage,userId,{workspaceId,workerId:harrison,jobId,requestId:'77777777-7777-4777-8777-777777777777',assignmentId,status:'cancelled',expectedVersion:1,expectedWorkerVersion:null,expectedJobVersion:null,expectedPatternVersion:null,expectedStartAt:startAt,expectedEndAt:endAt});
+  mount({collapsible:true});
+  expect(await screen.findByRole('button',{name:'Retry cancellation'})).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Show worker allocation'})).toBeNull();
+ });
 });

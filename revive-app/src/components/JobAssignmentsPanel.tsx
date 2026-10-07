@@ -29,9 +29,10 @@ function revealIfNeeded(element:HTMLElement){
  if(box.top<0||box.bottom>window.innerHeight)element.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 
-export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,when,note,jobActions}:{workspaceId:string;userId:string;job:SchedulingJob;disabled?:boolean;when?:string;note?:ReactNode;jobActions?:ReactNode}){
+export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,disabledReason,collapsible=false,when,note,jobActions}:{workspaceId:string;userId:string;job:SchedulingJob;disabled?:boolean;disabledReason?:string;collapsible?:boolean;when?:string;note?:ReactNode;jobActions?:ReactNode}){
  const [workers,setWorkers]=useState<Worker[]>([]),[assignments,setAssignments]=useState<Assignment[]>([]),[planner,setPlanner]=useState<PlannerData|null>(null),[ready,setReady]=useState(false),[loadFailed,setLoadFailed]=useState(false),[working,setWorking]=useState<Action|null>(null),[blocked,setBlocked]=useState(false),[pending,setPending]=useState<AssignmentAttempt|null>(null),[recovery,setRecovery]=useState<Recovery>(null),[selected,setSelected]=useState(''),[cancel,setCancel]=useState<Assignment|null>(null),[feedback,setFeedback]=useState<Feedback>(null),[needsHours,setNeedsHours]=useState<string|null>(null);
  const mounted=useRef(true),lock=useRef(false),focusNext=useRef<FocusTarget>(null),confirmRef=useRef<HTMLButtonElement|null>(null),recoveryRef=useRef<HTMLDivElement|null>(null),feedbackRef=useRef<HTMLParagraphElement|null>(null);
+ const [expanded,setExpanded]=useState(false);
  const ids=`job-${job.jobId}`;
  const readWorkers=()=>loadSchedulingWorkers(workspaceId,async(columns,ws)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from('scheduling_workers').select(columns).eq('workspace_id',ws);if(error)throw Error('Unavailable');return data;});
  const reload=async()=>{const [people,rows,schedule]=await Promise.all([readWorkers(),loadAssignments(workspaceId,job.jobId,async(columns,ws,id)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from('scheduling_assignments').select(columns).eq('workspace_id',ws).eq('job_id',id);if(error)throw Error('Unavailable');return data;}),loadPlannerData(workspaceId,async(table,columns,ws,from,to)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from(table).select(columns).eq('workspace_id',ws).order('id',{ascending:true}).range(from,to);if(error)throw Error('Unavailable');return data;})]);if(mounted.current){setWorkers(people);setAssignments(rows);setPlanner(schedule);setReady(true);setLoadFailed(false);}return rows;};
@@ -98,7 +99,7 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,when,
  const candidates=workers.filter(worker=>suitable.some(value=>value.workerId===worker.workerId));
  const selectedCandidate=candidates.some(worker=>worker.workerId===selected);
  const open=job.status==='open';
- const hint=blocked?null:disabled?'Worker changes are paused while this job is being edited or saved. Finish or discard that change first.':!ready?(loadFailed?'Workers could not be loaded. Select “Refresh allocation”.':'Loading workers…'):pending?null:!open?null:full?`${job.staffingCount===1?'The one place is':`All ${job.staffingCount} places are`} filled. Cancel an assignment to free a place.`:plannerJob&&!candidates.length?'No one can be assigned right now. Open “Why can’t I assign someone?” to see the reasons.':null;
+ const hint=blocked?null:disabled?(disabledReason??'Worker changes are paused while this job is being edited or saved. Finish or discard that change first.'):!ready?(loadFailed?'Workers could not be loaded. Select “Refresh allocation”.':'Loading workers…'):pending?null:!open?null:full?`${job.staffingCount===1?'The one place is':`All ${job.staffingCount} places are`} filled. Cancel an assignment to free a place.`:plannerJob&&!candidates.length?'No one can be assigned right now. Open “Why can’t I assign someone?” to see the reasons.':null;
 
  const retryLabel=pending?.status==='cancelled'?'Retry cancellation':'Retry assignment';
  const pendingChange=pending?(pending.status==='cancelled'?`Cancelling ${nameOf(pending.workerId)}’s assignment`:`Assigning ${nameOf(pending.workerId)}`):'This change';
@@ -108,12 +109,15 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,when,
   :recovery==='server'?`Revive could not confirm ${pendingChange.charAt(0).toLowerCase()+pendingChange.slice(1)}. Select “${retryLabel}” to send the same change again.`
   :recovery==='restored'?`${pendingChange} was not confirmed. Select “${retryLabel}” to send the same change again.`:null;
  const feedbackFor=(action:Action)=>feedback?.action===action?<p ref={feedbackRef} tabIndex={-1} role={feedback.tone==='error'?'alert':'status'} className={`mt-2 text-sm ${feedback.tone==='error'?'text-red-700':'text-green-800'}`}>{feedback.text}</p>:null;
+ // Pending recovery, results, confirmations and missing-hours prompts are never hidden by collapsing.
+ const mustShow=!!recoveryText||!!feedback||!!cancel||!!pending||blocked||!!needsHours||working!==null,showWorkers=!collapsible||expanded||mustShow;
 
  return <article aria-label={`${job.title} job`}>
   <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-semibold text-lg">{job.title}</h3><span className="text-sm font-medium rounded-full border border-neutral-300 px-3 py-0.5">{open?`${ready?activeRows.length:'–'} of ${job.staffingCount} assigned`:'Job cancelled'}</span></div>
   {when&&<p className="text-sm text-neutral-700 mt-1">{when}</p>}<p className="text-sm text-neutral-700">{job.location}</p>{note}
   <section aria-labelledby={`${ids}-workers`} className="mt-4 border-t border-neutral-200 pt-4">
-   <h4 id={`${ids}-workers`} className="font-medium">Workers</h4>
+   <div className="flex flex-wrap items-center justify-between gap-2"><h4 id={`${ids}-workers`} className="font-medium">Workers</h4>{collapsible&&!mustShow&&<button type="button" className="btn-secondary" aria-expanded={showWorkers} aria-controls={`${ids}-allocation`} onClick={()=>setExpanded(value=>!value)}>{showWorkers?'Hide worker allocation':'Show worker allocation'}</button>}</div>
+   {showWorkers&&<div id={`${ids}-allocation`}>
    {recoveryText&&<div ref={recoveryRef} tabIndex={-1} role="alert" className="my-3 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm"><p className="font-medium">Change not confirmed</p><p className="mt-1">{recoveryText}</p>{pending&&!blocked&&<button className="btn-primary mt-2" aria-busy={working==='retry'} disabled={busy||disabled||blocked||!ready} onClick={()=>void save('retry')}>{working==='retry'?workingLabels.retry:retryLabel}</button>}</div>}
    {feedbackFor('retry')}
    {ready?activeRows.length?<ul className="my-2 divide-y divide-neutral-200 rounded-lg border border-neutral-200">{activeRows.map(a=><li key={a.assignmentId} className="p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span>{nameOf(a.workerId)}</span>{open&&<button className="btn-secondary" aria-describedby={hint?`${ids}-hint`:undefined} disabled={controlsDisabled||!!cancel} onClick={()=>{setFeedback(null);setCancel(a);focusNext.current='confirm';}}>Cancel assignment</button>}</div>
@@ -127,7 +131,8 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,when,
    <div className="mt-3"><button className="btn-secondary" aria-busy={working==='refresh'} disabled={busy||disabled} onClick={refresh}>{working==='refresh'?workingLabels.refresh:'Refresh allocation'}</button>{feedbackFor('refresh')}</div>
    {open&&ready&&plannerJob&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">Why can’t I assign someone?</summary><div aria-label="Worker suitability guidance" className="mt-2"><p>Required skills: {job.requiredSkills.join(', ')||'None'}</p><p className="font-medium mt-2">Appears suitable</p>{suitable.length?<ul className="list-disc pl-5">{suitable.map(value=><li key={value.workerId}>{value.worker.name}</li>)}</ul>:<p>None currently.</p>}<p className="font-medium mt-2">Cannot currently be assigned</p>{unavailable.length?<ul className="list-disc pl-5">{unavailable.map(value=><li key={value.workerId}><span className="font-medium">{value.worker.name}:</span> {value.message}</li>)}</ul>:<p>None.</p>}<p className="text-xs mt-2">Guidance only. Revive checks again when you assign.</p></div></details>}
    {cancelledRows.length>0&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">View assignment history</summary><ul className="mt-2 list-disc pl-5">{cancelledRows.map(a=><li key={a.assignmentId}>{nameOf(a.workerId)} – cancelled</li>)}</ul></details>}
-  </section>
-  {jobActions&&<section aria-label="Job actions" className="mt-4 border-t border-neutral-200 pt-4"><div className="flex flex-wrap gap-2">{jobActions}</div></section>}
+      </div>}
+     </section>
+     {jobActions&&<section aria-label="Job actions" className="mt-4 border-t border-neutral-200 pt-4">{jobActions}</section>}
  </article>;
 }
