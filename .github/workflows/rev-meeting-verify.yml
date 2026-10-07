@@ -21,7 +21,7 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: node scripts/verify-rev-meeting.mjs
-      - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx src/tests/schedulingRecoveryUI.test.tsx src/tests/schedulingWorkerArchiveUI.test.tsx src/tests/schedulingSuitabilityUI.test.tsx src/tests/annualLeaveStage3UI.test.tsx src/tests/annualLeaveStage3InteractionUI.test.tsx src/tests/annualLeaveStage3LifecycleUI.test.tsx
+      - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx src/tests/schedulingRecoveryUI.test.tsx src/tests/schedulingWorkerArchiveUI.test.tsx src/tests/schedulingSuitabilityUI.test.tsx src/tests/annualLeaveStage3UI.test.tsx src/tests/annualLeaveStage3InteractionUI.test.tsx src/tests/annualLeaveStage3LifecycleUI.test.tsx src/tests/officialBankHolidayImportUI.test.tsx
       - name: Test customer calendar integration
         run: |
           node --experimental-strip-types --test \
@@ -40,6 +40,7 @@ jobs:
             supabase/functions/rev-annual-leave-account-open/*.test.ts \
             supabase/functions/rev-annual-leave-adjustment-save/*.test.ts \
             supabase/functions/rev-annual-leave-calendar-configure/*.test.ts \
+            supabase/functions/rev-annual-leave-bank-holiday-import/*.test.ts \
             supabase/functions/rev-workspace-bank-holiday-save/*.test.ts \
             supabase/functions/rev-annual-leave-record/*.test.ts \
             supabase/functions/rev-annual-leave-cancel/*.test.ts \
@@ -115,6 +116,12 @@ jobs:
           node src/tests/scheduling_jobs_local_validation.mjs
           node src/tests/scheduling_daily_sessions_local_validation.mjs
           node src/tests/scheduling_assignments_local_validation.mjs
+      - name: Test official bank holiday import authority
+        shell: bash
+        run: |
+          docker exec -i supabase_db_revive-app \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < src/tests/official_bank_holiday_import_local.sql
       - name: Stop local Supabase
         if: always()
         run: npx --yes supabase@2.117.0 stop

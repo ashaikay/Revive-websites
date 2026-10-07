@@ -24,6 +24,7 @@ import {
   type LegacyAnnualLeave,
 } from '@/services/annualLeave';
 import type {Worker} from '@/services/schedulingWorkers';
+import {OfficialBankHolidayImport} from './OfficialBankHolidayImport';
 
 interface Drafts {
   allowanceUnit: 'hours' | 'days';
@@ -221,6 +222,7 @@ export function AnnualLeaveView({
   const [setupEditing, setSetupEditing] = useState(false);
   const [adjustmentsOpen, setAdjustmentsOpen] = useState(false);
   const [holidaysEditing, setHolidaysEditing] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
   const loadSequence = useRef(0);
   const locked = useRef(false);
   const scopeGuard = useRef(createAnnualLeaveScopeGuard(scope));
@@ -349,6 +351,7 @@ export function AnnualLeaveView({
     setSetupEditing(false);
     setAdjustmentsOpen(false);
     setHolidaysEditing(false);
+    setImportLoading(false);
     setMessage('');
     let nextWorker = defaultWorkerId;
     try {
@@ -369,12 +372,14 @@ export function AnnualLeaveView({
 
   useEffect(() => {
     setModel(null);
+    setImportLoading(false);
     if (workerId) void load(workerId);
   }, [workspaceId, userId, workerId]);
 
   const run = async (operation: AnnualLeaveOperation, body: Record<string, unknown>, retry = false) => {
     if (
       locked.current ||
+      importLoading ||
       refreshing ||
       storageBlocked ||
       !workerId ||
@@ -417,6 +422,8 @@ export function AnnualLeaveView({
             ? 'Leave cancelled. The balance and weekly planner have been updated.'
             : submittedAttempt.operation === 'legacy_cancel'
               ? 'Older leave cancelled. The weekly planner has been updated and the balance is unchanged.'
+              : submittedAttempt.operation === 'import'
+                ? 'Official holidays imported and the reviewed year confirmed. Existing leave and balances are unchanged.'
               : 'This setup step is complete. Continue with the next step when ready.';
       const reloaded = await load(submittedAttempt.workerId);
       if (scopeGuard.current.isCurrent(token)) {
@@ -472,7 +479,7 @@ export function AnnualLeaveView({
   );
   const pendingInvalidMessage = pending ? invalidAnnualLeaveAttemptMessage(pending) : null;
   const changesDisabled =
-    parentDisabled || busy || refreshing || Boolean(pending) || storageBlocked || !model;
+    parentDisabled || busy || refreshing || importLoading || Boolean(pending) || storageBlocked || !model;
   const changesDisabledReason = parentDisabled
     ? parentDisabledReason || 'Scheduling is not ready for leave changes.'
     : busy
@@ -988,6 +995,20 @@ export function AnnualLeaveView({
                 </p>
               ) : (
                 <>
+              <OfficialBankHolidayImport
+                key={`${scope}:${workerId}:${drafts.calendarId}:${selectedCalendar?.version}:${selectedCalendarYear?.revision}:${model?.assignmentVersion}`}
+                workspaceId={workspaceId}
+                workerId={workerId}
+                calendarId={selectedCalendar?.calendarId ?? null}
+                regionCode={selectedCalendar?.regionCode}
+                year={drafts.calendarYear}
+                disabled={changesDisabled && !importLoading}
+                invoke={invoke}
+                onLoading={setImportLoading}
+                onConfirm={previewId => void run('import', {action: 'confirm', workerId, previewId})}
+              />
+              <details className="mt-4">
+              <summary className="cursor-pointer font-medium">Manual calendar controls</summary>
               <p className="text-sm">
                 REV never invents holiday dates. Choose or create a calendar, assign it to this worker, review
                 every holiday for the year, then confirm that the list is complete. Adding or removing a
@@ -1095,7 +1116,6 @@ export function AnnualLeaveView({
                     Add bank holiday
                   </button>
                   {actionDisabledReason && <p className="text-sm mt-2">{actionDisabledReason}</p>}
-
                   <ul className="mt-3">
                     {model?.holidays
                       .filter(value => value.calendarId === drafts.calendarId)
@@ -1145,6 +1165,7 @@ export function AnnualLeaveView({
                   {actionDisabledReason && <p className="text-sm mt-2">{actionDisabledReason}</p>}
                 </>
               )}
+              </details>
                 </>
               )}
             </section>

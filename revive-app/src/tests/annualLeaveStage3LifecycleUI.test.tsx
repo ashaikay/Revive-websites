@@ -147,6 +147,31 @@ describe('Annual Leave mounted scope lifecycle',()=>{
   expect(mocks.invoke).not.toHaveBeenCalled();
  });
 
+ it('imports through mounted Leave settings and retries the identical confirmation after a lost response without re-fetching',async()=>{
+  const previewId='dddddddd-dddd-4ddd-8ddd-dddddddddddd',calendarId='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const source='https://www.gov.uk/bank-holidays.json',fetchedAt='2026-10-07T09:00:00Z';
+  mocks.invoke.mockImplementation(async(_name:string,{body}:{body:Record<string,unknown>})=>{
+   if(body.action==='preview')return{data:{action:'preview',workspaceId:wsA,workerId:workerA,previewId,calendarId:null,calendarName:'England and Wales',region:body.region,calendarYear:body.calendarYear,holidays:[{date:`${body.calendarYear}-01-01`,title:'New Year'}],conflicts:[],preserved:[],additions:1,existing:0,source,fetchedAt},error:null};
+   return{data:null,error:Error('Lost response')};
+  });
+  render(<AnnualLeaveView workspaceId={wsA} userId={userA} workers={[worker(wsA,workerA,'Worker A')]}/>);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Refresh'})).toBeEnabled());
+  expect(screen.queryByRole('button',{name:'Load official dates'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Leave settings'}));
+  fireEvent.click(screen.getByRole('button',{name:'Load official dates'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Confirm reviewed holidays'}));
+  await screen.findByText('We could not confirm what happened. Your original change is saved; use Retry same change before doing anything else.');
+  const saved=JSON.parse(window.sessionStorage.getItem(key(wsA,userA))??'null') as AnnualLeaveAttempt;
+  expect(saved.operation).toBe('import');expect(saved.body.previewId).toBe(previewId);
+  expect(screen.getByRole('button',{name:'Load official dates'})).toBeDisabled();
+  mocks.invoke.mockResolvedValueOnce({data:{action:'confirm',workspaceId:wsA,workerId:workerA,previewId,requestId:saved.requestId,calendarId,revision:1,confirmedRevision:1,source,fetchedAt},error:null});
+  fireEvent.click(screen.getByRole('button',{name:'Retry same change'}));
+  await screen.findByText('Official holidays imported and the reviewed year confirmed. Existing leave and balances are unchanged.');
+  expect(mocks.invoke).toHaveBeenCalledTimes(3);
+  expect(mocks.invoke.mock.calls[1]).toEqual(mocks.invoke.mock.calls[2]);
+  expect(window.sessionStorage.getItem(key(wsA,userA))).toBeNull();
+ });
+
   it('reactivates after Strict Mode cleanup while invalidating results captured by the prior effect generation',async()=>{
    const pendingA=attempt(wsA,workerA,requestA,accountA),stalePage=deferred<{data:null;error:{message:string}}>();
    rememberAnnualLeaveAttempt(window.sessionStorage,userA,pendingA);

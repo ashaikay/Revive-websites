@@ -52,6 +52,48 @@ npm run build
 npm audit
 ```
 
+## Official UK bank holidays (Annual Leave)
+
+Leave settings now offers: choose England and Wales, Scotland or Northern Ireland
+and a year, load official GOV.UK dates, review the full list and preserved manual
+dates, then confirm. A new regional calendar and worker assignment are created
+only on confirmation when needed. Existing shared calendar changes affect every
+assigned worker. Technical/manual calendar controls remain under Leave settings.
+
+The `rev-annual-leave-bank-holiday-import` Edge Function fetches only
+`https://www.gov.uk/bank-holidays.json`, with a timeout, bounded response and
+strict event validation. Missing years are refused without calculating dates.
+An immutable server-side preview records source, region, dates and fetch time.
+Confirmation uses that snapshot, never a second fetch or browser-provided dates.
+Manual same-date entries (including identical titles), cancelled entries, changed
+imported entries and previously imported dates absent from the new official list
+are reported as conflicts, not overwritten. Additional manual dates are preserved
+and shown for review.
+
+Migration `20261007000000_rev_official_bank_holiday_import.sql` adds three private
+snapshot/provenance/exact-retry tables and a service-role-only import function.
+It reuses workspace serialization, active manager checks, tenant-scoped calendar
+authority, holiday saves, revision invalidation, year confirmation and auditing
+in one atomic transaction. Stale reviews and conflicts cannot confirm completeness.
+No existing leave calculation, posting or balance is recalculated. There is no
+background scheduler or new dependency. Hosted application is a separate,
+explicitly authorised operation.
+
+Focused checks:
+
+```text
+node --experimental-strip-types --test supabase\functions\rev-annual-leave-bank-holiday-import\bankHolidayImportBoundary.test.ts
+npm test -- src/tests/officialBankHolidayImportUI.test.tsx src/tests/annualLeaveStage3LifecycleUI.test.tsx src/tests/annualLeaveStage3InteractionUI.test.tsx src/tests/annualLeaveStage3UI.test.tsx
+npx tsc --noEmit
+npm run build
+git diff --check
+```
+
+For local database checks only, apply the migration to the existing local stack,
+then pipe `src\tests\official_bank_holiday_import_local.sql` to its PostgreSQL
+container with `psql -v ON_ERROR_STOP=1`. The test uses disposable workspace
+fixtures and rolls back everything; it requires an existing local active owner.
+
 ## Database Preparation
 
 The Supabase-compatible migration files are under `supabase/migrations/`. They are preparation artifacts only and have not been applied remotely. Before Phase 2C:
