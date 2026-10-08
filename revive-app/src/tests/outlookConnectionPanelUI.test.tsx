@@ -38,7 +38,7 @@ beforeEach(()=>{
  mocks.read.mockClear();
  window.sessionStorage.removeItem('rev-calendar-oauth-pending');
  mocks.membership={data:{role:'owner',status:'active'},error:null};
- connectionRows=[{id:connectionId,connection_status:'connected',provider_account_reference:'client@example.test',authorized_by_user_id:userId}];
+ connectionRows=[{id:connectionId,connection_status:'connected',provider_account_reference:'client@example.test',authorized_by_user_id:userId,calendar_write_consent_at:null}];
  calendarRows=[{id:calendarId,connection_id:connectionId,display_name:'Client calendar',timezone:'Europe/London',is_selected:true,active:true}];
  mocks.read.mockImplementation((table:string,_columns:string,filters:[string,unknown][])=>{
   const requestedWorkspace=filters.find(([column])=>column==='workspace_id')?.[1];
@@ -69,10 +69,32 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   const metadataReads=mocks.read.mock.calls.filter(call=>call[0]==='workspace_calendar_connections'||call[0]==='workspace_calendars') as [string,string,[string,unknown][]][];
   expect(metadataReads.length).toBeGreaterThanOrEqual(2);
   expect(metadataReads).toEqual(expect.arrayContaining([
-   ['workspace_calendar_connections','id,connection_status,provider_account_reference,authorized_by_user_id',[['workspace_id',workspaceA]]],
+   ['workspace_calendar_connections','id,connection_status,provider_account_reference,authorized_by_user_id,calendar_write_consent_at',[['workspace_id',workspaceA]]],
    ['workspace_calendars','id,connection_id,display_name,timezone,is_selected,active',[['workspace_id',workspaceA]]],
   ]));
   expect(metadataReads.every(([, ,filters])=>filters.every(([column,value])=>column!=='workspace_id'||value===workspaceA))).toBe(true);
+ });
+
+ it('offers a separately initiated write-consent flow only for the selected calendar',async()=>{
+  vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
+  render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  expect(await screen.findByRole('button',{name:'AUTHORIZE CALENDAR CHANGES'})).toBeInTheDocument();
+  expect(screen.getByText('This separately asks Outlook to allow calendar changes for the selected calendar. It does not enable bookings.')).toBeInTheDocument();
+ });
+
+ it('shows the saved write-consent status instead of offering another upgrade',async()=>{
+  vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
+  connectionRows=[{...connectionRows[0],calendar_write_consent_at:'2026-10-09T12:00:00Z'}];
+  render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  expect(await screen.findByText('Outlook calendar-change permission is authorized. Bookings remain disabled.')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'AUTHORIZE CALENDAR CHANGES'})).toBeNull();
+ });
+
+ it('lets an active workspace manager initiate consent without changing connection ownership',async()=>{
+  vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
+  connectionRows=[{...connectionRows[0],authorized_by_user_id:'55555555-5555-4555-8555-555555555555'}];
+  render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  expect(await screen.findByRole('button',{name:'AUTHORIZE CALENDAR CHANGES'})).toBeInTheDocument();
  });
 
  it.each([
@@ -158,8 +180,8 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
   const pendingConnectionId='55555555-5555-4555-8555-555555555555';
   connectionRows=[
-   {id:connectionId,connection_status:'connected',provider_account_reference:'client@example.test',authorized_by_user_id:userId},
-   {id:pendingConnectionId,connection_status:'disconnected',provider_account_reference:null,authorized_by_user_id:userId},
+   {id:connectionId,connection_status:'connected',provider_account_reference:'client@example.test',authorized_by_user_id:userId,calendar_write_consent_at:null},
+   {id:pendingConnectionId,connection_status:'disconnected',provider_account_reference:null,authorized_by_user_id:userId,calendar_write_consent_at:null},
   ];
   mocks.invoke.mockImplementation(async(name:string,options:{body:Record<string,string>})=>{
    if(name==='rev-calendar-discover')return{data:null,error:{context:new Response(JSON.stringify({error:'Calendar connection unavailable.',code:'outlook_account_already_connected'}),{status:409,headers:{'Content-Type':'application/json'}})}};
@@ -200,7 +222,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   mocks.invoke.mockImplementation(async(name:string,options:{body:Record<string,string>})=>{
    const body=options.body;
    if(name==='rev-calendar-connection-create'){
-    connectionRows=[{id:body.requestId,connection_status:'disconnected',provider_account_reference:null,authorized_by_user_id:null}];
+    connectionRows=[{id:body.requestId,connection_status:'disconnected',provider_account_reference:null,authorized_by_user_id:null,calendar_write_consent_at:null}];
     return{data:{connectionId:body.requestId,connectionStatus:'disconnected'},error:null};
    }
    if(name==='rev-calendar-oauth-start')return{data:{authorizationUrl:authorizationUrl.href},error:null};

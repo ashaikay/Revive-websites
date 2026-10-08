@@ -7,13 +7,14 @@ const connectionId = '4d2b4b34-9f79-496b-82b0-663e71cd3b5a';
 const userId = 'baf67b40-2fdf-4496-9c1d-1ac1aa5e9892';
 const origin = 'http://127.0.0.1:5180';
 function fixture(overrides: Partial<CalendarOAuthStartDependencies> = {}) {
-  const calls: string[] = []; const stored: Parameters<CalendarOAuthStartDependencies['begin']>[0][] = [];
+  const calls: string[] = []; const stored: Record<string,string>[] = [];
   const deps: CalendarOAuthStartDependencies = {
     allowedOrigin: origin, clientId: userId, authority: 'organizations', redirectUri: 'http://127.0.0.1:55321/functions/v1/rev-calendar-oauth-callback',
     getUserId: async () => { calls.push('auth'); return userId; },
     canManage: async () => { calls.push('membership'); return true; },
     hasConnection: async () => { calls.push('connection'); return true; },
-    begin: async (input) => { calls.push('store'); stored.push(input); return connectionId; }, ...overrides,
+    begin: async (input) => { calls.push('store'); stored.push(input); return connectionId; },
+    beginWithConsent: async (input) => { calls.push('store-write-consent'); stored.push(input); return connectionId; }, ...overrides,
   };
   return { deps, calls, stored };
 }
@@ -35,12 +36,19 @@ test('authorized start stores actor-bound state and S256 verifier before returni
   assert.equal(url.searchParams.get('scope'), 'offline_access https://graph.microsoft.com/Calendars.Read');
   assert.ok(!JSON.stringify(body).includes(s.pkce_verifier));
 });
+test('write consent is explicit, stored in the bound transaction and requests only calendar read-write scope',async()=>{
+ const f=fixture();const response=await handleCalendarOAuthStart(request({workspaceId,connectionId,accessMode:'write'}),f.deps);
+ assert.equal(response.status,200);const url=new URL((await response.json()).authorizationUrl);
+ assert.equal(url.searchParams.get('scope'),'offline_access https://graph.microsoft.com/Calendars.ReadWrite');
+ assert.deepEqual(f.calls,['auth','membership','connection','store-write-consent']);
+ assert.equal(f.stored[0].requested_access_mode,'write');assert.equal(f.stored[0].initiating_user_id,userId);
+});
 test('each attempt has independent random state and verifier', async () => {
   const f = fixture(); await handleCalendarOAuthStart(request(), f.deps); await handleCalendarOAuthStart(request(), f.deps);
   assert.notEqual(f.stored[0].raw_state, f.stored[1].raw_state); assert.notEqual(f.stored[0].pkce_verifier, f.stored[1].pkce_verifier);
 });
 test('origin, preflight, bearer and injected inputs stop before storage', async () => {
-  for (const [req, status] of [[request(undefined,{Origin:'https://evil.test'}),403], [request(undefined,{Authorization:''}),401], [request({workspaceId,connectionId,actorUserId:userId}),400], [request({workspaceId:'bad',connectionId}),400], [request(undefined,{'Content-Type':'text/plain'}),415]] as const) {
+  for (const [req, status] of [[request(undefined,{Origin:'https://evil.test'}),403], [request(undefined,{Authorization:''}),401], [request({workspaceId,connectionId,actorUserId:userId}),400], [request({workspaceId:'bad',connectionId}),400], [request({workspaceId,connectionId,accessMode:'admin'}),400], [request(undefined,{'Content-Type':'text/plain'}),415]] as const) {
     const f = fixture(); assert.equal((await handleCalendarOAuthStart(req,f.deps)).status,status); assert.deepEqual(f.calls,[]);
   }
   const f = fixture(); const response = await handleCalendarOAuthStart(request(undefined,{},'OPTIONS'),f.deps);

@@ -13,7 +13,7 @@ Deno.serve((request) => handleCalendarOAuthCompletion(request,{
   getUserId:async(authorization)=>{const {data,error}=await caller(authorization).auth.getUser();return error?null:data.user?.id??null;},
   canManage:async(authorization,workspaceId,userId)=>{const {data,error}=await caller(authorization).from('workspace_members').select('role,status').eq('workspace_id',workspaceId).eq('user_id',userId).maybeSingle();return !error&&data?.status==='active'&&['owner','admin'].includes(data.role);},
   validateConfiguration:()=>validateOAuthTokenConfiguration(configuration()),
-  consume:async(input)=>{const data=await trustedRpc('consume_rev_calendar_oauth',input);if(typeof data!=='string')throw new Error('OAuth state unavailable');return data;},
-  exchange:(code,verifier)=>exchangeCalendarOAuthCode(configuration(),code,verifier),
-  store:async(input)=>{const data=await trustedRpc('store_rev_calendar_credential',input);const row=Array.isArray(data)?data[0]:data;if(!row)throw new Error('Credential unavailable');return row;},
+  consume:async(input)=>{const data=await trustedRpc('consume_rev_calendar_oauth_with_consent',input);const row=Array.isArray(data)&&data.length===1?data[0]:null;if(!row||typeof row.pkce_verifier!=='string'||!['read','write'].includes(row.requested_access_mode)||!Number.isSafeInteger(row.expected_credential_revision))throw new Error('OAuth state unavailable');return{verifier:row.pkce_verifier,accessMode:row.requested_access_mode,expectedRevision:row.expected_credential_revision};},
+  exchange:(code,verifier,accessMode)=>exchangeCalendarOAuthCode(configuration(),code,verifier,accessMode),
+  store:async(input)=>{const data=await trustedRpc('store_rev_calendar_credential_with_consent',input);const row=Array.isArray(data)?data[0]:data;if(!row)throw new Error('Credential unavailable');return row;},
 }));

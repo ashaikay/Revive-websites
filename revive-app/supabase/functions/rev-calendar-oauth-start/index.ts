@@ -24,4 +24,10 @@ Deno.serve((request) => handleCalendarOAuthStart(request, {
     if (error || typeof data !== 'string') throw new Error('OAuth transaction unavailable');
     return data;
   },
+  beginWithConsent: async (input) => {
+    const service = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await service.rpc('begin_rev_calendar_oauth_consent', input);
+    if (error || typeof data !== 'string') throw new Error('OAuth transaction unavailable');
+    return data;
+  },
 }));

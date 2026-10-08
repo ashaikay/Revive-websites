@@ -13,10 +13,10 @@ export async function isDuplicateCalendarAccountResponse(error:unknown):Promise<
   return result.code==='outlook_account_already_connected'&&result.error==='Calendar connection unavailable.';
  }catch{return false;}
 }
-export const connectionColumns = 'id,connection_status,provider_account_reference,authorized_by_user_id';
+export const connectionColumns = 'id,connection_status,provider_account_reference,authorized_by_user_id,calendar_write_consent_at';
 export const calendarColumns = 'id,connection_id,display_name,timezone,is_selected,active';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export interface CalendarConnectionMetadata { id:string; status:string; account:string|null; authorizedBy:string|null; }
+export interface CalendarConnectionMetadata { id:string; status:string; account:string|null; authorizedBy:string|null; writeConsentGranted:boolean; }
 export interface CalendarMetadata {id:string;connectionId:string;displayName:string;timezone:string;selected:boolean;active:boolean;}
 export type CalendarMetadataRead=(table:string,columns:string,workspaceId:string)=>Promise<unknown>;
 function rows(value:unknown):Record<string,unknown>[] {if(!Array.isArray(value)||value.some(r=>!r||typeof r!=='object'||Array.isArray(r)))throw new Error('Calendar metadata unavailable');return value;}
@@ -24,8 +24,8 @@ export async function loadCalendarConnectionMetadata(workspaceId:string,read:Cal
  if(!uuid.test(workspaceId))throw new Error('Workspace required');
  const [rawConnections,rawCalendars]=await Promise.all([read('workspace_calendar_connections',connectionColumns,workspaceId),read('workspace_calendars',calendarColumns,workspaceId)]);
  const connections:CalendarConnectionMetadata[]=rows(rawConnections).map(row=>{
-  if(typeof row.id!=='string'||!uuid.test(row.id)||typeof row.connection_status!=='string'||!['disconnected','connected','expired','revoked','error'].includes(row.connection_status)||(row.provider_account_reference!==null&&typeof row.provider_account_reference!=='string')||(row.authorized_by_user_id!==null&&(typeof row.authorized_by_user_id!=='string'||!uuid.test(row.authorized_by_user_id))))throw new Error('Calendar metadata unavailable');
-  return{id:row.id,status:row.connection_status,account:row.provider_account_reference as string|null,authorizedBy:row.authorized_by_user_id as string|null};
+  if(typeof row.id!=='string'||!uuid.test(row.id)||typeof row.connection_status!=='string'||!['disconnected','connected','expired','revoked','error'].includes(row.connection_status)||(row.provider_account_reference!==null&&typeof row.provider_account_reference!=='string')||(row.authorized_by_user_id!==null&&(typeof row.authorized_by_user_id!=='string'||!uuid.test(row.authorized_by_user_id)))||(row.calendar_write_consent_at!==null&&typeof row.calendar_write_consent_at!=='string'))throw new Error('Calendar metadata unavailable');
+  return{id:row.id,status:row.connection_status,account:row.provider_account_reference as string|null,authorizedBy:row.authorized_by_user_id as string|null,writeConsentGranted:row.calendar_write_consent_at!==null};
  });
  const ids=new Set(connections.map(c=>c.id));
  const calendars:CalendarMetadata[]=rows(rawCalendars).map(row=>{

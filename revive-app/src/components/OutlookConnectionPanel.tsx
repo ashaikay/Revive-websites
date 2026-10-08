@@ -1,7 +1,7 @@
 import { CalendarBusinessHoursPanel } from './CalendarBusinessHoursPanel';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
-import { calendarOAuthReturn, startCalendarOAuth, reconnectCalendarOAuth, completeCalendarOAuth, type OAuthInvoke } from '@/services/calendarOAuthBrowser';
+import { calendarOAuthReturn, startCalendarOAuth, startCalendarWriteConsent, reconnectCalendarOAuth, completeCalendarOAuth, type OAuthInvoke } from '@/services/calendarOAuthBrowser';
 import { CalendarAccountAlreadyConnectedError, isDuplicateCalendarAccountResponse, loadCalendarConnectionMetadata, requestCalendarDiscovery, requestCalendarSelection, requestCalendarDisconnect } from '@/services/calendarConnectionMetadata';
 const invoke: OAuthInvoke = async (name, body) => {
   if (!supabaseClient) throw new Error('Calendar service unavailable');
@@ -46,7 +46,7 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
   const execute=async()=>{
     if(locked.current||done)return;locked.current=true;setBusy(true);setMessage('');
     try{
-      if(callback){if(!calendarOAuthReturn)throw new Error('Missing callback');await completeCalendarOAuth(calendarOAuthReturn,userId,window.sessionStorage,invoke);setDone(true);setMessage('Outlook authorization saved. Return to REV and discover calendars to finish setting up read access.');}
+      if(callback){if(!calendarOAuthReturn)throw new Error('Missing callback');const accessMode=await completeCalendarOAuth(calendarOAuthReturn,userId,window.sessionStorage,invoke);setDone(true);setMessage(accessMode==='write'?'Outlook calendar-change permission saved. Bookings remain disabled.':'Outlook authorization saved. Return to REV and discover calendars to finish setting up read access.');}
       else{const url=await startCalendarOAuth(workspaceId,userId,window.sessionStorage,invoke);window.location.assign(url);}
     }catch{setMessage(callback?'Authorization could not be completed. Return to REV and start a new connection attempt.':'Outlook connection could not be started. Please try again.');if(callback)setDone(true);}
     finally{setBusy(false);locked.current=false;}
@@ -93,6 +93,16 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       setMessage('Outlook authorization could not be started. Check the connection status before trying again.');
     }finally{setBusy(false);locked.current=false;}
   };
+  const grantWriteConsent=async(connectionId:string)=>{
+    if(locked.current||disconnectConfirmation!==null)return;
+    locked.current=true;setBusy(true);setMessage('');
+    try{
+      const url=await startCalendarWriteConsent(workspaceId,userId,connectionId,window.sessionStorage,invoke);
+      window.location.assign(url);
+    }catch{
+      setMessage('Outlook calendar-change permission could not be started. Check the selected calendar and try again.');
+    }finally{setBusy(false);locked.current=false;}
+  };
   const disconnect=async(connectionId:string)=>{
     if(locked.current||disconnectConfirmation!==connectionId)return;
     locked.current=true;setBusy(true);setMessage('');
@@ -130,6 +140,10 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
           <button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void reconnect(connection.id)}>{connection.status==='disconnected'?'AUTHORIZE OUTLOOK':'RECONNECT OUTLOOK'}</button>
         </div>}
         {connection.status==='disconnected'&&connection.authorizedBy===userId&&<><p className="text-sm my-2">After saving Outlook authorization, discover its calendars here.</p><button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void discover(connection.id)}>DISCOVER CALENDARS</button></>}
+        {connection.status==='connected'&&connection.writeConsentGranted&&<p className="text-sm mt-3">Outlook calendar-change permission is authorized. Bookings remain disabled.</p>}
+        {connection.status==='connected'&&!connection.writeConsentGranted&&(metadata.calendars.some(calendar=>calendar.connectionId===connection.id&&calendar.active&&calendar.selected)
+          ?<div className="mt-3"><p className="text-sm mb-2">This separately asks Outlook to allow calendar changes for the selected calendar. It does not enable bookings.</p><button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void grantWriteConsent(connection.id)}>AUTHORIZE CALENDAR CHANGES</button></div>
+          :<p className="text-sm mt-3">Select an active Outlook calendar before authorizing calendar changes. Bookings remain disabled.</p>)}
         {connection.status!=='revoked'&&(disconnectConfirmation===connection.id?<div className="my-3" role="group" aria-label="Confirm Outlook disconnect">
           <p className="text-sm mb-2">{duplicateAccountConnectionId===connection.id?'Remove only this unfinished Outlook connection from REV? The existing connected account and its selected calendar will not be changed.':'Disconnect this Outlook connection from REV? Its stored access will be removed and calendar selection cleared. Existing events are unchanged. Microsoft consent can be removed separately in your Microsoft account.'}</p>
           <button className="btn-secondary" disabled={busy} onClick={()=>void disconnect(connection.id)}>{duplicateAccountConnectionId===connection.id?'CONFIRM REMOVE CONNECTION':'CONFIRM DISCONNECT'}</button>

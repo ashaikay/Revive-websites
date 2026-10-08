@@ -1,4 +1,14 @@
-# Current Handover — Customer Outlook Verification (2026-10-08)
+# Current Handover — Customer Outlook Verified (2026-10-09)
+
+**Latest manual check (user-reported):** The new customer Outlook account completed discovery and calendar selection. Availability returned slots for 9 October 2026. Meeting proposal “orbis” was approved but not booked; no event was created. Commit `abf597a` (“Use workspace timezone for calendar availability default date”) is recorded, and CI was reported green.
+
+The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check. Their exact underlying causes were not all proven; do not claim otherwise. The workspace-timezone date fix addresses a demonstrated local-date boundary defect but does not prove that it caused every earlier empty result or credential-load failure.
+
+**Safety/release state:** Live calendar booking remains disabled. “Approved but not booked” is not permission to create an event. Continue customer Outlook verification, then the remaining Phase 5 calendar MVP roadmap, preserving the feature scope freeze and CI release gates. Worker job-brief uploads and assignment emails remain planned, not implemented: private manager-uploaded briefs; recipient email separate from REV login; confirmed-assignment details and a secure brief link using a separately authorized organization sending account; duplicate-send protection; sent/failed/not-sent status; and assignment-change/cancellation updates. Calendar-read consent does not grant email-sending authority.
+
+The detailed 2026-10-08 checkpoint below is historical and superseded by this manual verification for blocker status. Historical diagnostic uncertainty remains; do not reinterpret earlier failures as having a proven common cause.
+
+# Previous Handover — Customer Outlook Verification (2026-10-08)
 
 **Current roadmap:** Worker Scheduling is implemented as a separate domain. The verified scope includes assignment/cancellation and planner refresh, Annual Leave management and official UK bank-holiday importing, and `all` / `any` skill matching. Continue customer-managed Outlook verification first, then the remaining Phase 5 calendar MVP roadmap. The Phase 5L scope freeze and CI release gates remain in force: no event-creation permission, booking, provider execution, or release without its separate authorization and gates.
 

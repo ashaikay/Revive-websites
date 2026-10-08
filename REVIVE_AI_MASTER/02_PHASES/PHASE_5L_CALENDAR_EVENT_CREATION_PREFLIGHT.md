@@ -81,3 +81,9 @@ No raw token, provider response, attendee details, notes or confidential interna
 Phase 5L does **not** authorize `Calendars.ReadWrite`, provider mutation code, migrations, deployment, secrets, production enablement or a live calendar event.
 
 Those require a separate reviewed implementation phase and explicit authorization.
+
+## Local delegated-consent slice
+
+The repository now contains an additive, undeployed customer-Outlook consent path for an owner or admin to explicitly request `Calendars.ReadWrite` on an already selected calendar. The verified scope is stored as private consent metadata and a service-only authority check validates workspace, selected calendar, active connection and credential revision. Existing read-only credentials are not upgraded, and the write-consent path is not connected to event execution.
+
+This local support does not authorize live OAuth/provider calls, deployment, event creation or a change to `CREATE_CALENDAR_EVENT=false`. Booking remains disabled until a separate reviewed phase authorizes and implements the complete execution path.

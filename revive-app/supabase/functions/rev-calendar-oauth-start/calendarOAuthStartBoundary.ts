@@ -9,6 +9,7 @@ export interface CalendarOAuthStartDependencies {
   canManage(authorization: string, workspaceId: string, userId: string): Promise<boolean>;
   hasConnection(authorization: string, workspaceId: string, connectionId: string): Promise<boolean>;
   begin(input: { target_workspace_id: string; target_connection_id: string; initiating_user_id: string; raw_state: string; pkce_verifier: string }): Promise<string>;
+  beginWithConsent?(input: { target_workspace_id: string; target_connection_id: string; initiating_user_id: string; raw_state: string; pkce_verifier: string; requested_access_mode: 'write' }): Promise<string>;
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function base64url(bytes: Uint8Array): string {
@@ -28,7 +29,8 @@ export async function handleCalendarOAuthStart(request: Request, deps: CalendarO
     const raw = await request.text();
     if (raw.length > 1024) return reply(400, { error: 'Invalid request.' });
     const body = JSON.parse(raw);
-    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join(',') !== 'connectionId,workspaceId' || !uuid.test(body.workspaceId) || !uuid.test(body.connectionId)) return reply(400, { error: 'Invalid request.' });
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !['connectionId,workspaceId','accessMode,connectionId,workspaceId'].includes(Object.keys(body).sort().join(',')) || !uuid.test(body.workspaceId) || !uuid.test(body.connectionId) || (body.accessMode !== undefined && body.accessMode !== 'write')) return reply(400, { error: 'Invalid request.' });
+    const writeConsent = body.accessMode === 'write';
     const userId = await deps.getUserId(authorization);
     if (!userId || !uuid.test(userId)) return reply(401, { error: 'Authentication required.' });
     if (!await deps.canManage(authorization, body.workspaceId, userId) || !await deps.hasConnection(authorization, body.workspaceId, body.connectionId)) return reply(403, { error: 'Calendar connection unavailable.' });
@@ -39,8 +41,16 @@ export async function handleCalendarOAuthStart(request: Request, deps: CalendarO
     const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
     const challenge = base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
     const url = new URL(`https://login.microsoftonline.com/${deps.authority}/oauth2/v2.0/authorize`);
-    url.search = new URLSearchParams({ client_id: deps.clientId, response_type: 'code', redirect_uri: redirect.href, response_mode: 'query', scope: 'offline_access https://graph.microsoft.com/Calendars.Read', state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'select_account' }).toString();
-    const transactionId = await deps.begin({ target_workspace_id: body.workspaceId, target_connection_id: body.connectionId, initiating_user_id: userId, raw_state: state, pkce_verifier: verifier });
+    const scope = writeConsent
+      ? 'offline_access https://graph.microsoft.com/Calendars.ReadWrite'
+      : 'offline_access https://graph.microsoft.com/Calendars.Read';
+    url.search = new URLSearchParams({ client_id: deps.clientId, response_type: 'code', redirect_uri: redirect.href, response_mode: 'query', scope, state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'select_account' }).toString();
+    const transactionInput = { target_workspace_id: body.workspaceId, target_connection_id: body.connectionId, initiating_user_id: userId, raw_state: state, pkce_verifier: verifier };
+    let transactionId: string;
+    if (writeConsent) {
+      if (!deps.beginWithConsent) throw new Error('Write consent unavailable');
+      transactionId = await deps.beginWithConsent({ ...transactionInput, requested_access_mode: 'write' });
+    } else transactionId = await deps.begin(transactionInput);
     if (!uuid.test(transactionId)) throw new Error('Invalid transaction');
     return reply(200, { authorizationUrl: url.href });
   } catch { return reply(403, { error: 'Calendar connection unavailable.' }); }

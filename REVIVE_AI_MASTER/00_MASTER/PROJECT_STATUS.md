@@ -1,4 +1,14 @@
-## Current Checkpoint — Customer Outlook Verification (2026-10-08)
+## Current Checkpoint — Customer Outlook Verified (2026-10-09)
+
+**User-reported manual verification:** The new Outlook account successfully completed discovery and calendar selection; availability returned slots for 9 October 2026. Meeting proposal “orbis” is approved but not booked, and no event was created. Commit `abf597a` (“Use workspace timezone for calendar availability default date”) is recorded; CI was reported green.
+
+The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check, but their exact causes were not all proven. The timezone date fix addresses a demonstrated local-date boundary defect; it does not establish that this defect explains every earlier failure.
+
+Live calendar booking remains disabled. Continue customer Outlook verification, then the remaining Phase 5 calendar MVP roadmap while preserving the feature scope freeze and CI release gates. Worker job-brief uploads and assignment emails remain planned, not implemented. Keep private manager-uploaded briefs; recipient email separate from REV login; confirmed-assignment shift details and secure brief links through a separately authorized organization sending account; duplicate-send protection; sent/failed/not-sent status; assignment-change/cancellation updates; and the rule that calendar-read consent does not grant email-sending authority.
+
+The previous 2026-10-08 blocker investigation below is historical and superseded for the manual check. Do not claim the exact causes of every earlier credential or availability failure were proven.
+
+## Previous checkpoint — Customer Outlook Verification (2026-10-08)
 
 This dated checkpoint supersedes older “Current Phase,” “Current Objective,” and “Next Task” statements below where they conflict. The project remains within the Phase 5 calendar MVP roadmap; customer-managed Outlook verification is the immediate work. Continue through the remaining calendar MVP roadmap only under the feature-scope freeze and existing CI/release gates. Phase 5L preflight does not authorize `Calendars.ReadWrite`, event creation, booking, or provider execution.
 

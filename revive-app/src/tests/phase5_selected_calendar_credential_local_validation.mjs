@@ -94,6 +94,9 @@ try {
  check('SELECTED_CREDENTIAL_SCOPED',snap.calendar_id===ids[0]&&snap.connection_id===connectionId&&snap.credential_reference===reference&&snap.refresh_token==='fake-selection-refresh'&&snap.revision===1);
  check('ACTIVE_MEMBER_READ_AUTHORITY',(await load(member.id)).status===200);
  check('CROSS_TENANT_READ_DENIED',(await load(outsider.id)).status>=400&&(await load(owner.id,otherWorkspaceId)).status>=400);
+ const writeAuthority=(actor=owner.id,workspace=workspaceId,calendar=ids[0])=>rpc(serviceKey,'require_rev_selected_calendar_write_consent',{target_workspace_id:workspace,requesting_user_id:actor,target_calendar_id:calendar});
+ check('READ_ONLY_WRITE_AUTHORITY_DENIED',(await writeAuthority()).status>=400);
+ check('CROSS_TENANT_WRITE_AUTHORITY_DENIED',(await writeAuthority(outsider.id,otherWorkspaceId,ids[0])).status>=400);
  const rotated=await rotate(snap);
  check('ROTATION_ALLOWED',rotated.status===200&&rotated.rows[0]?.revision===2);
  check('STALE_ROTATION_DENIED',(await rotate(snap)).status>=400);
@@ -105,6 +108,15 @@ try {
  check('READ_FOLLOWS_SELECTION',switched?.calendar_id===ids[1]);
  const race=await Promise.all([rotate(switched),rotate(switched)]);
  check('CONCURRENT_ROTATION_ONCE',race.filter(r=>r.status===200).length===1&&race.filter(r=>r.status>=400).length===1);
+ const beforeWrite=(await load()).rows[0];
+ const writeGrant=await rpc(serviceKey,'store_rev_calendar_credential_with_consent',{...bound,refresh_token:'fake-write-consent-refresh',expected_revision:beforeWrite.revision,requested_access_mode:'write',granted_calendar_scopes:['https://graph.microsoft.com/calendars.readwrite']});
+ check('VERIFIED_WRITE_CONSENT_STORED',writeGrant.status===200&&writeGrant.rows[0]?.revision===beforeWrite.revision+1&&writeGrant.rows[0]?.connection_status==='connected');
+ const writeSnapshot=await writeAuthority(owner.id,workspaceId,ids[1]);
+ check('WRITE_AUTHORITY_REQUIRES_SELECTED_CALENDAR',writeSnapshot.status===200&&writeSnapshot.rows[0]?.calendar_id===ids[1]&&writeSnapshot.rows[0]?.connection_id===connectionId&&writeSnapshot.rows[0]?.revision===beforeWrite.revision+1);
+ const attemptedDowngrade=await rpc(serviceKey,'store_rev_calendar_credential_with_consent',{...bound,refresh_token:'fake-read-downgrade',expected_revision:beforeWrite.revision+1,requested_access_mode:'read',granted_calendar_scopes:['https://graph.microsoft.com/calendars.read']});
+ check('CONNECTED_WRITE_CONSENT_CANNOT_BE_DOWNGRADED_BY_READ_FLOW',attemptedDowngrade.status>=400&&(await writeAuthority(owner.id,workspaceId,ids[1])).rows[0]?.revision===beforeWrite.revision+1);
+ check('MEMBER_WRITE_AUTHORITY_DENIED',(await writeAuthority(member.id,workspaceId,ids[1])).status>=400);
+ check('WRONG_SELECTED_CALENDAR_WRITE_DENIED',(await writeAuthority(owner.id,workspaceId,ids[0])).status>=400);
  await request(serviceKey,'PATCH',`/rest/v1/workspace_members?workspace_id=eq.${workspaceId}&user_id=eq.${member.id}`,{status:'suspended'});
  check('SUSPENDED_REQUESTER_DENIED',(await load(member.id)).status>=400);
  for(const token of [anonKey,owner.token]){
