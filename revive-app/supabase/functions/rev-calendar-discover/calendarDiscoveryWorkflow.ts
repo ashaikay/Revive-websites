@@ -1,8 +1,27 @@
 import { validateOAuthTokenConfiguration, type OAuthTokenConfiguration } from '../rev-calendar-oauth-complete/calendarOAuthCompletion.ts';
 import { type OutlookCalendarDiscovery } from '../_shared/microsoftGraphCalendarDiscovery.ts';
 export type CalendarDiscoveryStage='configuration'|'manager_check'|'credential_load'|'token_refresh'|'credential_rotation'|'calendar_discovery'|'database_save';
-export type CalendarDiscoveryErrorCode='configuration_unavailable'|'manager_denied'|'manager_check_failed'|'credential_load_failed'|'token_refresh_failed'|'credential_rotation_failed'|'calendar_discovery_failed'|'database_save_failed';
+export type CalendarDiscoveryErrorCode='configuration_unavailable'|'manager_denied'|'manager_check_failed'|'credential_load_failed'|'token_refresh_failed'|'credential_rotation_failed'|'calendar_discovery_failed'|'database_save_failed'|'database_save_refused'|'database_save_manager_denied'|'database_save_pending_connection_unavailable'|'database_save_revision_conflict'|'database_save_invalid_account'|'database_save_invalid_timezone'|'database_save_invalid_calendar_metadata'|'database_save_constraint'|'database_save_permission_denied'|'database_save_concurrency'|'database_save_other';
 export type CalendarDiscoveryDiagnostic=(stage:CalendarDiscoveryStage,code:CalendarDiscoveryErrorCode)=>void;
+export function calendarDatabaseSaveErrorCode(sqlState:unknown,message:unknown):CalendarDiscoveryErrorCode{
+ if(sqlState==='P0001'){
+  switch(message){
+   case'Active owner or admin required':return'database_save_manager_denied';
+   case'Pending connection unavailable':return'database_save_pending_connection_unavailable';
+   case'Credential revision conflict':return'database_save_revision_conflict';
+   case'Account reference required':return'database_save_invalid_account';
+   case'Timezone required':return'database_save_invalid_timezone';
+   case'Calendar metadata required':case'Invalid calendar metadata':return'database_save_invalid_calendar_metadata';
+   default:return'database_save_refused';
+  }
+ }
+ switch(sqlState){
+  case'23502':case'23503':case'23505':case'23514':return'database_save_constraint';
+  case'42501':return'database_save_permission_denied';
+  case'40001':case'40P01':return'database_save_concurrency';
+  default:return'database_save_other';
+ }
+}
 export class CalendarDiscoveryFailure extends Error{
  readonly stage:CalendarDiscoveryStage;
  readonly code:CalendarDiscoveryErrorCode;
@@ -47,6 +66,6 @@ export async function runCalendarDiscovery(connectionId:string,deps:DiscoveryWor
   try{
     saved=await deps.save(result,rotated.credential_reference,rotated.revision);
     if(saved.connection_id!==connectionId||saved.connection_status!=='connected'||!Number.isSafeInteger(saved.calendar_count)||saved.calendar_count<1||saved.calendar_count>1000||saved.calendar_count!==result.calendars.length)throw new Error();
-  }catch{throw failure('database_save','database_save_failed');}
+  }catch(error){if(error instanceof CalendarDiscoveryFailure)throw error;throw failure('database_save','database_save_failed');}
   return{connectionId,connectionStatus:'connected' as const,calendarCount:saved.calendar_count};
 }

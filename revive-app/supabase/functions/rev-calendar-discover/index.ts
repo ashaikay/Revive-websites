@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { handleCalendarDiscovery } from './calendarDiscoveryBoundary.ts';
-import { runCalendarDiscovery, refreshCalendarDiscoveryToken, CalendarDiscoveryFailure } from './calendarDiscoveryWorkflow.ts';
+import { runCalendarDiscovery, refreshCalendarDiscoveryToken, CalendarDiscoveryFailure, calendarDatabaseSaveErrorCode } from './calendarDiscoveryWorkflow.ts';
 import { discoverMicrosoftGraphCalendars } from '../_shared/microsoftGraphCalendarDiscovery.ts';
 import { validateOAuthTokenConfiguration } from '../rev-calendar-oauth-complete/calendarOAuthCompletion.ts';
 const url=Deno.env.get('SUPABASE_URL')!;
@@ -15,7 +15,7 @@ Deno.serve(request=>handleCalendarDiscovery(request,{
   const configuration={clientId:Deno.env.get('REV_CALENDAR_OAUTH_CLIENT_ID')??'',clientSecret:Deno.env.get('REV_CALENDAR_OAUTH_CLIENT_SECRET')??'',authority:Deno.env.get('REV_CALENDAR_OAUTH_AUTHORITY')??'',redirectUri:Deno.env.get('REV_CALENDAR_OAUTH_REDIRECT_URI')??''};
   try{validateOAuthTokenConfiguration(configuration);}catch{throw new CalendarDiscoveryFailure('configuration','configuration_unavailable');}
   const service=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
-  const rpc=async(name:string,args:Record<string,unknown>)=>{const{data,error}=await service.rpc(name,args);const row=Array.isArray(data)?data[0]:data;if(error||!row)throw new Error('Discovery storage unavailable');return row;};
+  const rpc=async(name:string,args:Record<string,unknown>)=>{const{data,error}=await service.rpc(name,args);if(error){if(name==='save_rev_calendar_discovery'){const state=error&&typeof error==='object'&&'code'in error?error.code:undefined;const message=error&&typeof error==='object'&&'message'in error?error.message:undefined;throw new CalendarDiscoveryFailure('database_save',calendarDatabaseSaveErrorCode(state,message));}throw new Error('Discovery storage unavailable');}const row=Array.isArray(data)?data[0]:data;if(!row)throw new Error('Discovery storage unavailable');return row;};
   const bound={target_workspace_id:workspaceId,target_connection_id:connectionId,initiating_user_id:userId};
   return runCalendarDiscovery(connectionId,{
    load:()=>rpc('load_rev_pending_calendar_credential',bound),

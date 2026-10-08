@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleCalendarDiscovery } from './calendarDiscoveryBoundary.ts';
-import { CalendarDiscoveryFailure, runCalendarDiscovery, type DiscoveryWorkflowDependencies } from './calendarDiscoveryWorkflow.ts';
+import { calendarDatabaseSaveErrorCode, CalendarDiscoveryFailure, runCalendarDiscovery, type DiscoveryWorkflowDependencies } from './calendarDiscoveryWorkflow.ts';
 
 const connectionId='4d2b4b34-9f79-496b-82b0-663e71cd3b5a';
 const workspaceId='fdce6c53-d1cb-48bc-b35a-7f57674d80f6';
@@ -55,6 +55,45 @@ test('configuration failure diagnostic contains no configuration details and pub
  assert.deepEqual(await response.json(),{error:'Calendar connection unavailable.'});
  assert.deepEqual(diagnostics,[['configuration','configuration_unavailable']]);
  assert.doesNotMatch(JSON.stringify(diagnostics),/secret|token|@example\.test|authorization URL/i);
+});
+
+test('database save SQLSTATEs map only to fixed refusal categories',()=>{
+ const cases=[
+  ['P0001','Active owner or admin required','database_save_manager_denied'],
+  ['P0001','Pending connection unavailable','database_save_pending_connection_unavailable'],
+  ['P0001','Credential revision conflict','database_save_revision_conflict'],
+  ['P0001','Account reference required','database_save_invalid_account'],
+  ['P0001','Timezone required','database_save_invalid_timezone'],
+  ['P0001','Calendar metadata required','database_save_invalid_calendar_metadata'],
+  ['P0001','Invalid calendar metadata','database_save_invalid_calendar_metadata'],
+  ['P0001','Unknown database refusal','database_save_refused'],
+  ['P0001','Credential revision conflict: mailbox@example.test','database_save_refused'],
+  ['23514','Invalid calendar metadata','database_save_constraint'],
+  ['23502','Active owner or admin required','database_save_constraint'],
+  ['23503',undefined,'database_save_constraint'],
+  ['23505',undefined,'database_save_constraint'],
+  ['42501','Pending connection unavailable','database_save_permission_denied'],
+  ['40001',undefined,'database_save_concurrency'],
+  ['40P01',undefined,'database_save_concurrency'],
+  ['private mailbox@example.test token',undefined,'database_save_other'],
+  [undefined,'Active owner or admin required','database_save_other'],
+ ] as const;
+ for(const [sqlState,message,expected] of cases)assert.equal(calendarDatabaseSaveErrorCode(sqlState,message),expected);
+});
+
+test('database refusal category reaches logs while public response remains unchanged',async()=>{
+ const diagnostics:Array<[string,string]>=[];
+ const response=await handleCalendarDiscovery(request(),{
+  allowedOrigin:origin,
+  getUserId:async()=>userId,
+  canManage:async()=>true,
+  discover:async()=>{throw new CalendarDiscoveryFailure('database_save','database_save_invalid_calendar_metadata');},
+  reportFailure:(stage,code)=>diagnostics.push([stage,code]),
+ });
+ assert.equal(response.status,403);
+ assert.deepEqual(await response.json(),{error:'Calendar connection unavailable.'});
+ assert.deepEqual(diagnostics,[['database_save','database_save_invalid_calendar_metadata']]);
+ assert.doesNotMatch(JSON.stringify(diagnostics),/P0001|mailbox|token|secret|calendar contents/i);
 });
 
 test('manager refusal is logged as a fixed diagnostic without running discovery',async()=>{
