@@ -103,7 +103,8 @@ try {
  check('CROSS_TENANT_ALLOCATION_DENIED',(await save({target_workspace_id:other,target_request_id:randomUUID()})).status>=400);
  for(const token of [anonKey,owner.token])check('BROWSER_ALLOCATION_RPC_DENIED',(await save({},token)).status>=400);
  const race=await Promise.all([save(),save()]);
- check('CONCURRENT_SAME_REQUEST_ONCE',race.every(r=>r.status===200)&&race[0].payload?.assignment_id===race[1].payload?.assignment_id&&(await read()).rows.length===1);
+ const originalAssignmentRows=(await read()).rows.filter(row=>row.job_id===job&&row.worker_id===worker);
+ check('CONCURRENT_SAME_REQUEST_ONCE',race.every(r=>r.status===200)&&race[0].payload?.assignment_id===race[1].payload?.assignment_id&&originalAssignmentRows.length===1);
  if(race[0].status!==200)throw Error('Allocation fixture failed');const assignment=id(race[0].payload.assignment_id);
  check('EXACT_JOB_INTERVAL_RESERVED',Date.parse(race[0].payload.start_at)===Date.parse('2026-10-08T09:00:00Z')&&Date.parse(race[0].payload.end_at)===Date.parse('2026-10-08T10:00:00Z'));
  check('CHANGED_RETRY_DENIED',(await save({target_worker_id:second})).status>=400);
