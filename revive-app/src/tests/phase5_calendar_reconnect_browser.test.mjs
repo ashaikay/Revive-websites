@@ -24,6 +24,6 @@ test('prepare or start failure is not retried and never saves a usable callback 
 test('unsafe authorization destination is refused after reset',async()=>{
  const s=storage();await assert.rejects(reconnectCalendarOAuth(workspace,user,connection,s,async name=>name==='rev-calendar-reconnect'?{connectionId:connection,connectionStatus:'disconnected'}:{authorizationUrl:'https://evil.test'},now));assert.equal(JSON.parse(s.values()[0]).state,'');
 });
-test('panel provides reconnect for inactive rows and hides generic create while saved rows exist',()=>{
- const source=readFileSync(new URL('../components/OutlookConnectionPanel.tsx',import.meta.url),'utf8');assert.match(source,/callback\|\|metadata.connections.length===0/);assert.match(source,/\['revoked','expired','error','disconnected'\].includes\(connection.status\)/);assert.match(source,/RECONNECT OUTLOOK/);assert.match(source,/AUTHORIZE OUTLOOK/);assert.match(source,/reconnectCalendarOAuth\(workspaceId,userId,connectionId/);
+test('panel provides reconnect for inactive rows and permits adding another connection',()=>{
+ const source=readFileSync(new URL('../components/OutlookConnectionPanel.tsx',import.meta.url),'utf8');assert.match(source,/metadataStatus==='loading'\?/);assert.match(source,/metadataStatus==='error'\?/);assert.match(source,/metadata.connections.length\?'ADD OUTLOOK CONNECTION':'CONNECT OUTLOOK'/);assert.match(source,/\['revoked','expired','error','disconnected'\].includes\(connection.status\)/);assert.match(source,/RECONNECT OUTLOOK/);assert.match(source,/AUTHORIZE OUTLOOK/);assert.match(source,/reconnectCalendarOAuth\(workspaceId,userId,connectionId/);
 });

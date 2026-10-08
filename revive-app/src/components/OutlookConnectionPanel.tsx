@@ -18,20 +18,21 @@ async function loadMetadata(workspaceId:string):Promise<Metadata>{
 }
 export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{workspaceId:string;userId:string;callback?:boolean}) {
   const [allowed,setAllowed]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[done,setDone]=useState(false);
+  const [metadataStatus,setMetadataStatus]=useState<'loading'|'ready'|'error'>('loading');
   const [metadata,setMetadata]=useState<Metadata>({connections:[],calendars:[]});
   const [timezone,setTimezone]=useState(()=>Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/London');
   const [disconnectConfirmation,setDisconnectConfirmation]=useState<string|null>(null);
   const locked=useRef(false);
   const enabled=import.meta.env.VITE_REV_CALENDAR_OAUTH_UI_ENABLED==='true';
   useEffect(()=>{
-    let mounted=true;setDisconnectConfirmation(null);setAllowed(false);setMetadata({connections:[],calendars:[]});
+    let mounted=true;setDisconnectConfirmation(null);setAllowed(false);setMetadata({connections:[],calendars:[]});setMetadataStatus('loading');setMessage('');
     const client=supabaseClient;
     if(!enabled||!client||callback)return;
     void (async()=>{
       const{data,error}=await client.from('workspace_members').select('role,status').eq('workspace_id',workspaceId).eq('user_id',userId).maybeSingle();
       if(!mounted)return;
       const permitted=!error&&data?.status==='active'&&['owner','admin'].includes(data.role);setAllowed(permitted);
-      if(permitted){try{const loaded=await loadMetadata(workspaceId);if(mounted)setMetadata(loaded);}catch{if(mounted)setMessage('Calendar connections could not be loaded. Refresh to try again.');}}
+      if(permitted){try{const loaded=await loadMetadata(workspaceId);if(mounted){setMetadata(loaded);setMetadataStatus('ready');}}catch{if(mounted){setMetadataStatus('error');setMessage('Calendar connections could not be loaded. Refresh to try again.');}}}
     })();
     return()=>{mounted=false;};
   },[workspaceId,userId,enabled,callback]);
@@ -44,6 +45,11 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       else{const url=await startCalendarOAuth(workspaceId,userId,window.sessionStorage,invoke);window.location.assign(url);}
     }catch{setMessage(callback?'Authorization could not be completed. Return to REV and start a new connection attempt.':'Outlook connection could not be started. Please try again.');if(callback)setDone(true);}
     finally{setBusy(false);locked.current=false;}
+  };
+  const reloadMetadata=async()=>{
+    setMetadataStatus('loading');setMessage('');
+    try{setMetadata(await loadMetadata(workspaceId));setMetadataStatus('ready');}
+    catch{setMetadataStatus('error');setMessage('Calendar connections could not be loaded. Refresh to try again.');}
   };
   const discover=async(connectionId:string)=>{
     if(locked.current)return;locked.current=true;setBusy(true);setMessage('');
@@ -101,9 +107,11 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
   return <section className="max-w-4xl mx-auto card p-6 my-6">
     <h2 className="text-lg font-semibold">{callback?'Complete Outlook authorization':'Outlook calendar connection'}</h2>
     <p className="text-sm text-neutral-600 my-3">Connect calendar read access. This does not enable bookings or send invitations.</p>
-    {message&&<p role="status" className="my-3">{message}</p>}
-    {!done&&(callback||metadata.connections.length===0)&&<button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void execute()}>{busy?'Please wait...':callback?'SAVE OUTLOOK AUTHORIZATION':'CONNECT OUTLOOK'}</button>}
-    {callback?<a className="block mt-4" href="/#rev">Return to REV</a>:<>
+    {callback&&message&&<p role="status" className="my-3">{message}</p>}
+    {callback&&!done&&<button className="btn-secondary" disabled={busy} onClick={()=>void execute()}>{busy?'Please wait...':'SAVE OUTLOOK AUTHORIZATION'}</button>}
+    {callback?<a className="block mt-4" href="/#rev">Return to REV</a>:metadataStatus==='loading'?<p className="my-3" role="status">Loading Outlook connections...</p>:metadataStatus==='error'?<div className="my-3"><p role="alert">{message}</p><button className="btn-secondary mt-3" onClick={()=>void reloadMetadata()}>RETRY LOADING CONNECTIONS</button></div>:<>
+      {message&&<p role="status" className="my-3">{message}</p>}
+      {!done&&<button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void execute()}>{busy?'CONNECTING...':metadata.connections.length?'ADD OUTLOOK CONNECTION':'CONNECT OUTLOOK'}</button>}
       <label className="block text-sm mt-4">Calendar timezone<input className="block border rounded px-3 py-2 mt-1" value={timezone} disabled={busy} onChange={event=>setTimezone(event.target.value)} placeholder="Europe/London" /></label>
       {metadata.connections.length===0&&<p className="text-sm mt-4">No Outlook connections saved.</p>}
       {metadata.connections.map(connection=><div key={connection.id} className="border rounded p-4 mt-4">
