@@ -21,7 +21,7 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: node scripts/verify-rev-meeting.mjs
-      - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx src/tests/schedulingRecoveryUI.test.tsx src/tests/schedulingWorkerArchiveUI.test.tsx src/tests/schedulingSuitabilityUI.test.tsx src/tests/jobAssignmentsPanelUI.test.tsx src/tests/schedulingDailySaveFeedbackUI.test.tsx src/tests/schedulingJobCancellationUI.test.tsx src/tests/schedulingSuitabilityRefreshUI.test.tsx src/tests/annualLeaveStage3UI.test.tsx src/tests/annualLeaveStage3InteractionUI.test.tsx src/tests/annualLeaveStage3LifecycleUI.test.tsx src/tests/officialBankHolidayImportUI.test.tsx
+      - run: npm test -- src/tests/phase5j_meetingProposalSubmission.test.tsx src/tests/phase5k_meetingProposalReview.test.tsx src/tests/schedulingRecoveryUI.test.tsx src/tests/schedulingWorkerArchiveUI.test.tsx src/tests/schedulingSuitabilityUI.test.tsx src/tests/jobAssignmentsPanelUI.test.tsx src/tests/schedulingDailySaveFeedbackUI.test.tsx src/tests/schedulingJobCancellationUI.test.tsx src/tests/schedulingSuitabilityRefreshUI.test.tsx src/tests/schedulingRequiredSkillsUI.test.tsx src/tests/annualLeaveStage3UI.test.tsx src/tests/annualLeaveStage3InteractionUI.test.tsx src/tests/annualLeaveStage3LifecycleUI.test.tsx src/tests/officialBankHolidayImportUI.test.tsx
       - name: Test customer calendar integration
         run: |
           node --experimental-strip-types --test \
