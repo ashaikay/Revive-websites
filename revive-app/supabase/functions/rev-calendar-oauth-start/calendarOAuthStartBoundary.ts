@@ -1,3 +1,5 @@
+import { resolveAnnualLeaveOrigin } from '../_shared/annualLeaveOrigins.ts';
+
 export interface CalendarOAuthStartDependencies {
   allowedOrigin?: string;
   clientId?: string;
@@ -13,8 +15,9 @@ function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export async function handleCalendarOAuthStart(request: Request, deps: CalendarOAuthStartDependencies): Promise<Response> {
-  if (!deps.allowedOrigin || request.headers.get('Origin') !== deps.allowedOrigin) return new Response(null, { status: 403 });
-  const headers = { 'Access-Control-Allow-Origin': deps.allowedOrigin, Vary: 'Origin', 'Cache-Control': 'no-store', 'Content-Type': 'application/json' };
+  const origin = resolveAnnualLeaveOrigin(request.headers.get('Origin'), deps.allowedOrigin);
+  if (!origin) return new Response(null, { status: 403 });
+  const headers = { 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Cache-Control': 'no-store', 'Content-Type': 'application/json' };
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info' } });
   if (request.method !== 'POST') return reply(405, { error: 'Method not allowed.' });

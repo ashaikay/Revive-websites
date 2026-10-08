@@ -1,3 +1,5 @@
+import { resolveAnnualLeaveOrigin } from '../_shared/annualLeaveOrigins.ts';
+
 export interface CalendarReconnectDependencies {
   allowedOrigin?: string;
   getUserId(authorization: string): Promise<string | null>;
@@ -6,8 +8,9 @@ export interface CalendarReconnectDependencies {
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export async function handleCalendarReconnect(request: Request, deps: CalendarReconnectDependencies): Promise<Response> {
-  if (!deps.allowedOrigin || request.headers.get('Origin') !== deps.allowedOrigin) return new Response(null, { status: 403 });
-  const headers = { 'Access-Control-Allow-Origin': deps.allowedOrigin, Vary: 'Origin', 'Cache-Control': 'no-store', 'Content-Type': 'application/json' };
+  const origin = resolveAnnualLeaveOrigin(request.headers.get('Origin'), deps.allowedOrigin);
+  if (!origin) return new Response(null, { status: 403 });
+  const headers = { 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Cache-Control': 'no-store', 'Content-Type': 'application/json' };
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info' } });
   if (request.method !== 'POST') return reply(405, { error: 'Method not allowed.' });

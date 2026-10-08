@@ -46,6 +46,29 @@ test('origin, preflight, bearer and injected inputs stop before storage', async 
   const f = fixture(); const response = await handleCalendarOAuthStart(request(undefined,{},'OPTIONS'),f.deps);
   assert.equal(response.status,204); assert.match(response.headers.get('Access-Control-Allow-Headers')!,/x-client-info/); assert.deepEqual(f.calls,[]);
 });
+test('local preflights allow both configured development origins and return the exact origin',async()=>{
+  for(const acceptedOrigin of ['http://localhost:5180','http://127.0.0.1:5180']){
+    const f=fixture({allowedOrigin:'http://localhost:5180'});
+    const response=await handleCalendarOAuthStart(request(undefined,{Origin:acceptedOrigin},'OPTIONS'),f.deps);
+    assert.equal(response.status,204);assert.equal(response.headers.get('Access-Control-Allow-Origin'),acceptedOrigin);assert.equal(response.headers.get('Vary'),'Origin');assert.deepEqual(f.calls,[]);
+  }
+});
+test('missing and unrelated preflight origins are rejected before auth or authority',async()=>{
+  const missing=request(undefined,{},'OPTIONS');missing.headers.delete('Origin');
+  for(const req of [missing,request(undefined,{Origin:'https://unrelated.test'},'OPTIONS')]){
+    const f=fixture();const response=await handleCalendarOAuthStart(req,f.deps);
+    assert.equal(response.status,403);assert.deepEqual(f.calls,[]);
+  }
+});
+test('production origin remains restricted to its exact configured origin',async()=>{
+  const f=fixture({allowedOrigin:'https://app.example.test'});
+  const allowed=await handleCalendarOAuthStart(request(undefined,{Origin:'https://app.example.test'},'OPTIONS'),f.deps);
+  assert.equal(allowed.status,204);assert.equal(allowed.headers.get('Access-Control-Allow-Origin'),'https://app.example.test');assert.equal(allowed.headers.get('Vary'),'Origin');
+  for(const requestOrigin of ['http://localhost:5180','http://127.0.0.1:5180','https://unrelated.test']){
+    const rejected=await handleCalendarOAuthStart(request(undefined,{Origin:requestOrigin},'OPTIONS'),f.deps);assert.equal(rejected.status,403);
+  }
+  assert.deepEqual(f.calls,[]);
+});
 test('unverified caller, denied role and wrong tenant connection stop before service storage', async () => {
   for (const overrides of [{getUserId:async()=>null},{canManage:async()=>false},{hasConnection:async()=>false}]) {
     const f = fixture(overrides); assert.ok((await handleCalendarOAuthStart(request(),f.deps)).status >= 400); assert.equal(f.stored.length,0);
