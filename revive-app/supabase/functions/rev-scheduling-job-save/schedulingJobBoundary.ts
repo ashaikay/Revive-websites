@@ -10,6 +10,10 @@ export interface JobDependencies {
  canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;
  save(input:JobInput):Promise<unknown>;
 }
+export type JobSaveRefusalCode='active_assignments';
+export class JobSaveRefusal extends Error{readonly code:JobSaveRefusalCode;constructor(code:JobSaveRefusalCode){super(code);this.code=code;}}
+// Only the assignment guard's own raise (SQLSTATE P0001 with its exact message) is a definitive refusal; every other database error stays unconfirmed.
+export function jobSaveRefusalFor(error:unknown):JobSaveRefusal|null{if(!error||typeof error!=='object')return null;const e=error as {code?:unknown;message?:unknown};return e.code==='P0001'&&e.message==='Cancel affected assignments before changing job'?new JobSaveRefusal('active_assignments'):null;}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
 function utc(v:unknown):v is string{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v))return false;const ms=Date.parse(v);return Number.isFinite(ms)&&new Date(ms).toISOString()===v;}
@@ -40,7 +44,9 @@ export async function handleSchedulingJobSave(request:Request,deps:JobDependenci
   const userId=await deps.getUserId(authorization);if(!id(userId))return reply(401,{error:'Authentication required.'});
   if(!await deps.canManage(authorization,body.workspaceId,userId))return reply(403,{error:'Job could not be saved.'});
   const skills=[...body.requiredSkills].sort();
-  const value=await deps.save({target_workspace_id:body.workspaceId,initiating_user_id:userId,target_request_id:body.requestId,target_job_id:body.jobId,target_title:body.title,target_start_at:body.startAt,target_end_at:body.endAt,target_timezone:body.timezone,target_location:body.location,target_required_skills:skills,target_staffing_count:body.staffingCount,target_status:body.status,expected_version:body.expectedVersion});
+  let value:unknown;try{value=await deps.save({target_workspace_id:body.workspaceId,initiating_user_id:userId,target_request_id:body.requestId,target_job_id:body.jobId,target_title:body.title,target_start_at:body.startAt,target_end_at:body.endAt,target_timezone:body.timezone,target_location:body.location,target_required_skills:skills,target_staffing_count:body.staffingCount,target_status:body.status,expected_version:body.expectedVersion});}
+  // The database guard rolled back the whole request, so this refusal is definitive and bound to this request.
+  catch(error){if(error instanceof JobSaveRefusal)return reply(409,{status:'refused',code:error.code,requestId:body.requestId});throw error;}
   if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Invalid result');const row=value as Record<string,unknown>;
   if(!id(row.job_id)||(body.jobId!==null&&row.job_id!==body.jobId)||row.workspace_id!==body.workspaceId||storedInstant(row.start_at)!==body.startAt||storedInstant(row.end_at)!==body.endAt||row.title!==body.title||row.timezone!==body.timezone||row.location!==body.location||JSON.stringify(row.required_skills)!==JSON.stringify(skills)||row.staffing_count!==body.staffingCount||row.status!==body.status||row.version!==body.expectedVersion+1)throw new Error('Invalid result');
   return reply(200,{jobId:row.job_id,workspaceId:row.workspace_id,title:row.title,startAt:body.startAt,endAt:body.endAt,timezone:row.timezone,location:row.location,requiredSkills:skills,staffingCount:row.staffing_count,status:row.status,version:row.version});

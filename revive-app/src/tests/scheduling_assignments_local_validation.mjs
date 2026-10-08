@@ -123,6 +123,10 @@ try {
  check('SKILL_REMOVAL_CANNOT_INVALIDATE_ASSIGNMENT',(await rpc(serviceKey,'save_rev_scheduling_worker',{...updateWorker,target_request_id:randomUUID(),target_active:true,target_skill_tags:[]})).status>=400);
  const jobUpdate={...jobBody('First job'),target_job_id:job,expected_version:1};
  for(const patch of [{target_status:'cancelled'},{target_start_at:'2026-10-08T08:30:00Z'},{target_location:'Other office'},{target_required_skills:['Phone']}])check('JOB_CHANGE_CANNOT_INVALIDATE_ASSIGNMENT',(await rpc(serviceKey,'save_rev_scheduling_job',{...jobUpdate,...patch,target_request_id:randomUUID()})).status>=400);
+ // rev-scheduling-job-save maps this exact message to a request-bound refusal; the rollback must leave no request record, so an exact retry is refused identically.
+ const assignedCancel={...jobUpdate,target_status:'cancelled',target_request_id:randomUUID()};
+ const refusedCancel=[await rpc(serviceKey,'save_rev_scheduling_job',assignedCancel),await rpc(serviceKey,'save_rev_scheduling_job',assignedCancel)];
+ check('ASSIGNED_JOB_CANCELLATION_DEFINITIVELY_REFUSED',refusedCancel.every(r=>r.status>=400&&r.payload?.code==='P0001'&&r.payload?.message==='Cancel affected assignments before changing job')&&sql(`select count(*) from rev_scheduling_private.job_requests where request_id='${id(assignedCancel.target_request_id)}';`)==='0'&&sql(`select status||':'||version from public.scheduling_jobs where id='${job}';`)==='open:1');
  const cancelledJob=await makeJob('Cancelled job');
  check('CANCEL_JOB_FIXTURE',(await rpc(serviceKey,'save_rev_scheduling_job',{...jobBody('Cancelled job'),target_job_id:cancelledJob,target_status:'cancelled',expected_version:1})).status===200);
  check('CANCELLED_JOB_ALLOCATION_DENIED',(await save({target_worker_id:second,target_job_id:cancelledJob,expected_job_version:2,target_request_id:randomUUID()})).status>=400);
