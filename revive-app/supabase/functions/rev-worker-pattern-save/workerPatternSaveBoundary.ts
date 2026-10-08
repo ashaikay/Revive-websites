@@ -1,3 +1,5 @@
+import { resolveAnnualLeaveOrigin } from '../_shared/annualLeaveOrigins.ts';
+
 export interface WorkerPatternInput {
  target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_worker_id:string;
  target_timezone:string;target_working_days:number[];target_start_local:string;target_end_local:string;
@@ -18,8 +20,9 @@ function date(v:unknown):v is string{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2
 function timezone(v:unknown):v is string{if(typeof v!=='string'||!v||v.trim()!==v||v.length>100)return false;try{new Intl.DateTimeFormat('en-GB',{timeZone:v});return true;}catch{return false;}}
 function days(v:unknown):v is number[]{return Array.isArray(v)&&v.length>=1&&v.length<=7&&v.every(d=>Number.isInteger(d)&&d>=1&&d<=7)&&new Set(v).size===v.length;}
 export async function handleWorkerPatternSave(request:Request,deps:WorkerPatternDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+ const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);
+ if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});
