@@ -1,4 +1,5 @@
 import {localLeaveToUtc} from './workerUnavailability.ts';
+import {hasSkills} from './skillMatching.ts';
 
 export const plannerColumns={
  scheduling_workers:'id,workspace_id,display_name,role_labels,skill_tags,active,version',
@@ -57,7 +58,7 @@ export function workerSetupIssue(data:PlannerData,workerId:string,week:string):s
 function suitability(workerId:string,reason:WorkerSuitabilityReason|null):WorkerSuitability{return {workerId,suitable:reason===null,reason,message:reason===null?'Appears suitable. Final checks run when saving.':workerSuitabilityMessages[reason]};}
 export function workerSuitability(data:PlannerData,job:PlannerJob,worker:PlannerWorker):WorkerSuitability{
  if(!worker.active)return suitability(worker.id,'worker_inactive');
- if(!job.skills.every(skill=>worker.skills.includes(skill)))return suitability(worker.id,'missing_skills');
+ if(!hasSkills(job.skills,worker.skills))return suitability(worker.id,'missing_skills');
  if(job.status!=='open'||jobVacancies(data,job)===0)return suitability(worker.id,'capacity_full');
  const pattern=data.patterns.find(value=>value.workerId===worker.id);if(!pattern)return suitability(worker.id,'no_working_pattern');
  try{const day=localPlannerDate(job.startAt,pattern.timezone),endDay=localPlannerDate(new Date(Date.parse(job.endAt)-1).toISOString(),pattern.timezone),weekday=((new Date(day+'T12:00:00Z').getUTCDay()+6)%7)+1;
@@ -67,4 +68,4 @@ export function workerSuitability(data:PlannerData,job:PlannerJob,worker:Planner
  if(data.assignments.some(assignment=>assignment.status==='active'&&assignment.workerId===worker.id&&assignment.startAt<job.endAt&&job.startAt<assignment.endAt))return suitability(worker.id,'overlap');
  return suitability(worker.id,null);
 }
-export function assignmentConflict(data:PlannerData,a:PlannerAssignment):boolean{const j=data.jobs.find(j=>j.id===a.jobId),w=data.workers.find(w=>w.id===a.workerId);return !j||!w||!w.active||j.status!=='open'||j.startAt!==a.startAt||j.endAt!==a.endAt||!j.skills.every(s=>w.skills.includes(s))||data.leave.some(l=>l.status==='active'&&l.workerId===a.workerId&&l.startAt<a.endAt&&a.startAt<l.endAt)||data.assignments.some(b=>b.id!==a.id&&b.status==='active'&&b.workerId===a.workerId&&b.startAt<a.endAt&&a.startAt<b.endAt)||data.assignments.filter(b=>b.status==='active'&&b.jobId===a.jobId).length>j.count;}
+export function assignmentConflict(data:PlannerData,a:PlannerAssignment):boolean{const j=data.jobs.find(j=>j.id===a.jobId),w=data.workers.find(w=>w.id===a.workerId);return !j||!w||!w.active||j.status!=='open'||j.startAt!==a.startAt||j.endAt!==a.endAt||!hasSkills(j.skills,w.skills)||data.leave.some(l=>l.status==='active'&&l.workerId===a.workerId&&l.startAt<a.endAt&&a.startAt<l.endAt)||data.assignments.some(b=>b.id!==a.id&&b.status==='active'&&b.workerId===a.workerId&&b.startAt<a.endAt&&a.startAt<b.endAt)||data.assignments.filter(b=>b.status==='active'&&b.jobId===a.jobId).length>j.count;}

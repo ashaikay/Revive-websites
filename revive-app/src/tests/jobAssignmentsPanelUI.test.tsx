@@ -39,13 +39,13 @@ describe('mounted job allocation panel',()=>{
   expect(screen.getByRole('heading',{name:'REV allocation test'})).toBeInTheDocument();
   expect(screen.getByText('08/10/2026 11:00–15:30')).toBeInTheDocument();
   expect(screen.getByText('Cardiff')).toBeInTheDocument();
-  expect(within(screen.getByRole('region',{name:'Workers'})).getByText('Harrison')).toBeInTheDocument();
+  expect(within(screen.getByRole('region',{name:'Workers'})).getAllByRole('list')[0]).toHaveTextContent('Harrison');
   expect(screen.getByRole('button',{name:'Assign worker'})).toBeDisabled();
   const actions=screen.getByRole('region',{name:'Job actions'});
   expect(within(actions).getByRole('button',{name:'Edit job'})).toBeInTheDocument();
   expect(within(actions).getByRole('button',{name:'Cancel job'})).toBeInTheDocument();
   expect(within(screen.getByRole('region',{name:'Workers'})).queryByRole('button',{name:'Edit job'})).toBeNull();
-  const why=screen.getByText('Why can’t I assign someone?').closest('details');expect(why).not.toHaveAttribute('open');expect(within(why as HTMLElement).getByText(/Priya:/)).toBeInTheDocument();
+  const why=screen.getByText('Why can’t I assign someone?').closest('details');expect(why).not.toHaveAttribute('open');expect(within(why as HTMLElement).getByText('Priya')).toBeInTheDocument();
   const history=screen.getByText('View assignment history').closest('details');expect(history).not.toHaveAttribute('open');expect(within(history as HTMLElement).getByText('Priya – cancelled')).toBeInTheDocument();
   expect(screen.getAllByText('The one place is filled. Cancel an assignment to free a place.')).toHaveLength(1);
   expect(document.body.textContent).not.toMatch(/server|request|endpoint|revision/i);

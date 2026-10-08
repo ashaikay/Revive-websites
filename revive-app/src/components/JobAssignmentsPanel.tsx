@@ -4,7 +4,8 @@ import {loadSchedulingWorkers,type Worker} from '@/services/schedulingWorkers';
 import {loadWorkingPattern} from '@/services/workerWorkingPatterns';
 import type {SchedulingJob} from '@/services/schedulingJobs';
 import {loadAssignments,submitAssignmentAttempt,rememberAssignment,restoreAssignment,clearAssignment,AllocationRefused,AssignmentOutcomeUnknown,type Assignment,type AssignmentAttempt,type AssignmentInvoke} from '@/services/schedulingAssignments';
-import {loadPlannerData,workerSuitability,type PlannerData} from '@/services/schedulingPlanner';
+import {missingSkills,hasSkills} from '@/services/skillMatching';
+import {loadPlannerData,workerSuitability,type PlannerData,type PlannerJob,type PlannerWorker,type WorkerSuitabilityReason} from '@/services/schedulingPlanner';
 
 type Action='assign'|'cancel'|'retry'|'refresh';
 type Feedback={action:Action;tone:'success'|'error';text:string}|null;
@@ -29,13 +30,30 @@ function revealIfNeeded(element:HTMLElement){
  if(box.top<0||box.bottom>window.innerHeight)element.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 
+// Presentation only: eligibility uses skillKey() and is checked again by Revive when assigning.
+const looseTag=(tag:string)=>tag.normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
+const fixedReasons:Partial<Record<WorkerSuitabilityReason,string>>={outside_working_availability:'Outside working hours',overlap:'Already booked',worker_inactive:'Archived worker',no_working_pattern:'No working hours set',capacity_full:'Shift already full',availability_unchecked:'Working hours could not be checked'};
+function reasonLabel(planner:PlannerData,job:PlannerJob,worker:PlannerWorker,reason:WorkerSuitabilityReason|null):string{
+ if(reason===null)return 'Available';
+ if(reason==='missing_skills'){
+  const missing=missingSkills(job.skills,worker.skills);
+  const similar=missing.some(skill=>worker.skills.some(tag=>looseTag(tag)===looseTag(skill)));
+  return `Required skill${missing.length===1?'':'s'} not listed: ${missing.join(', ')}${similar?'. A similar skill is saved with different spelling or spacing; edit the worker’s skills to match exactly.':''}`;
+ }
+ if(reason==='worker_unavailable')return planner.leave.some(period=>period.status==='active'&&period.category==='leave'&&period.workerId===worker.id&&period.startAt<job.endAt&&job.startAt<period.endAt)?'On annual leave':'Marked as unavailable';
+ return fixedReasons[reason]??'Not available';
+}
+
 export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,disabledReason,collapsible=false,when,note,jobActions}:{workspaceId:string;userId:string;job:SchedulingJob;disabled?:boolean;disabledReason?:string;collapsible?:boolean;when?:string;note?:ReactNode;jobActions?:ReactNode}){
  const [workers,setWorkers]=useState<Worker[]>([]),[assignments,setAssignments]=useState<Assignment[]>([]),[planner,setPlanner]=useState<PlannerData|null>(null),[ready,setReady]=useState(false),[loadFailed,setLoadFailed]=useState(false),[working,setWorking]=useState<Action|null>(null),[blocked,setBlocked]=useState(false),[pending,setPending]=useState<AssignmentAttempt|null>(null),[recovery,setRecovery]=useState<Recovery>(null),[selected,setSelected]=useState(''),[cancel,setCancel]=useState<Assignment|null>(null),[feedback,setFeedback]=useState<Feedback>(null),[needsHours,setNeedsHours]=useState<string|null>(null);
  const mounted=useRef(true),lock=useRef(false),focusNext=useRef<FocusTarget>(null),confirmRef=useRef<HTMLButtonElement|null>(null),recoveryRef=useRef<HTMLDivElement|null>(null),feedbackRef=useRef<HTMLParagraphElement|null>(null);
  const [expanded,setExpanded]=useState(false);
+ const loadSeq=useRef(0);
  const ids=`job-${job.jobId}`;
  const readWorkers=()=>loadSchedulingWorkers(workspaceId,async(columns,ws)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from('scheduling_workers').select(columns).eq('workspace_id',ws);if(error)throw Error('Unavailable');return data;});
- const reload=async()=>{const [people,rows,schedule]=await Promise.all([readWorkers(),loadAssignments(workspaceId,job.jobId,async(columns,ws,id)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from('scheduling_assignments').select(columns).eq('workspace_id',ws).eq('job_id',id);if(error)throw Error('Unavailable');return data;}),loadPlannerData(workspaceId,async(table,columns,ws,from,to)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from(table).select(columns).eq('workspace_id',ws).order('id',{ascending:true}).range(from,to);if(error)throw Error('Unavailable');return data;})]);if(mounted.current){setWorkers(people);setAssignments(rows);setPlanner(schedule);setReady(true);setLoadFailed(false);}return rows;};
+ const reload=async()=>{const token=++loadSeq.current;const [people,rows,schedule]=await Promise.all([readWorkers(),loadAssignments(workspaceId,job.jobId,async(columns,ws,id)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from('scheduling_assignments').select(columns).eq('workspace_id',ws).eq('job_id',id);if(error)throw Error('Unavailable');return data;}),loadPlannerData(workspaceId,async(table,columns,ws,from,to)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from(table).select(columns).eq('workspace_id',ws).order('id',{ascending:true}).range(from,to);if(error)throw Error('Unavailable');return data;})]);if(mounted.current&&token===loadSeq.current){setWorkers(people);setAssignments(rows);setPlanner(schedule);setReady(true);setLoadFailed(false);}return rows;};
+ // Worker, hours, leave and other jobs' assignment changes elsewhere on the page must refresh this allocation.
+ useEffect(()=>{const onChange=()=>{void reload().catch(()=>{});};window.addEventListener('rev-scheduling-changed',onChange);return()=>window.removeEventListener('rev-scheduling-changed',onChange);},[workspaceId,job.jobId]);
  useEffect(()=>{mounted.current=true;void(async()=>{try{const a=restoreAssignment(window.sessionStorage,workspaceId,userId,job.jobId);if(a&&mounted.current){setPending(a);setRecovery('restored');}}catch{if(mounted.current){setBlocked(true);setRecovery('storage');}}try{await reload();}catch{if(mounted.current)setLoadFailed(true);}})();return()=>{mounted.current=false;};},[workspaceId,userId,job.jobId]);
  useEffect(()=>{const target=focusNext.current;if(!target)return;const element=target==='confirm'?confirmRef.current:target==='recovery'?recoveryRef.current:feedbackRef.current;if(!element)return;focusNext.current=null;element.focus({preventScroll:true});revealIfNeeded(element);});
 
@@ -55,7 +73,7 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,disab
     else{
      if(job.status!=='open'||!selected)throw Error('Choose worker');
      const people=await readWorkers(),worker=people.find(w=>w.workerId===selected);
-     if(!worker?.active||!job.requiredSkills.every(s=>worker.skillTags.includes(s)))throw Error('Worker not suitable');
+     if(!worker?.active||!hasSkills(job.requiredSkills,worker.skillTags))throw Error('Worker not suitable');
      const pattern=await loadWorkingPattern(workspaceId,selected,async(columns,ws,id)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from('scheduling_worker_patterns').select(columns).eq('workspace_id',ws).eq('worker_id',id);if(error)throw Error('Unavailable');return data;});
      if(!pattern){if(mounted.current){setNeedsHours(selected);show('assign','error',`${worker.displayName} has no working hours saved. Select “Set working hours”, save their days and hours, then try again.`);}return;}
      attempt={workspaceId,workerId:selected,jobId:job.jobId,requestId:crypto.randomUUID(),assignmentId:null,status:'active',expectedVersion:0,expectedWorkerVersion:worker.version,expectedJobVersion:job.version,expectedPatternVersion:pattern.version,expectedStartAt:job.startAt,expectedEndAt:job.endAt};
@@ -95,11 +113,11 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,disab
 
  const busy=working!==null,controlsDisabled=busy||disabled||blocked||!ready||!!pending,full=activeRows.length>=job.staffingCount;
  const plannerJob=planner?.jobs.find(value=>value.id===job.jobId),guidance=planner&&plannerJob?planner.workers.map(worker=>({worker,...workerSuitability(planner,plannerJob,worker)})):[];
- const suitable=guidance.filter(value=>value.suitable),unavailable=guidance.filter(value=>!value.suitable);
+ const suitable=guidance.filter(value=>value.suitable);
  const candidates=workers.filter(worker=>suitable.some(value=>value.workerId===worker.workerId));
  const selectedCandidate=candidates.some(worker=>worker.workerId===selected);
  const open=job.status==='open';
- const hint=blocked?null:disabled?(disabledReason??'Worker changes are paused while this job is being edited or saved. Finish or discard that change first.'):!ready?(loadFailed?'Workers could not be loaded. Select “Refresh allocation”.':'Loading workers…'):pending?null:!open?null:full?`${job.staffingCount===1?'The one place is':`All ${job.staffingCount} places are`} filled. Cancel an assignment to free a place.`:plannerJob&&!candidates.length?'No one can be assigned right now. Open “Why can’t I assign someone?” to see the reasons.':null;
+ const hint=blocked?null:disabled?(disabledReason??'Worker changes are paused while this job is being edited or saved. Finish or discard that change first.'):!ready?(loadFailed?'Workers could not be loaded. Select “Refresh allocation”.':'Loading workers…'):pending?null:!open?null:full?`${job.staffingCount===1?'The one place is':`All ${job.staffingCount} places are`} filled. Cancel an assignment to free a place.`:plannerJob&&!candidates.length?'No available workers for this shift. Check the reasons below or adjust the shift.':null;
 
  const retryLabel=pending?.status==='cancelled'?'Retry cancellation':'Retry assignment';
  const pendingChange=pending?(pending.status==='cancelled'?`Cancelling ${nameOf(pending.workerId)}’s assignment`:`Assigning ${nameOf(pending.workerId)}`):'This change';
@@ -129,7 +147,7 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,disab
    {hint&&<p id={`${ids}-hint`} className="mt-2 text-sm text-neutral-700">{hint}</p>}
    {open&&ready&&!plannerJob&&<p className="mt-2 text-sm" role="status">Availability could not be checked. Refresh the allocation and review each worker's working hours before assigning.</p>}
    <div className="mt-3"><button className="btn-secondary" aria-busy={working==='refresh'} disabled={busy||disabled} onClick={refresh}>{working==='refresh'?workingLabels.refresh:'Refresh allocation'}</button>{feedbackFor('refresh')}</div>
-   {open&&ready&&plannerJob&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">Why can’t I assign someone?</summary><div aria-label="Worker suitability guidance" className="mt-2"><p>Required skills: {job.requiredSkills.join(', ')||'None'}</p><p className="font-medium mt-2">Appears suitable</p>{suitable.length?<ul className="list-disc pl-5">{suitable.map(value=><li key={value.workerId}>{value.worker.name}</li>)}</ul>:<p>None currently.</p>}<p className="font-medium mt-2">Cannot currently be assigned</p>{unavailable.length?<ul className="list-disc pl-5">{unavailable.map(value=><li key={value.workerId}><span className="font-medium">{value.worker.name}:</span> {value.message}</li>)}</ul>:<p>None.</p>}<p className="text-xs mt-2">Guidance only. Revive checks again when you assign.</p></div></details>}
+   {open&&ready&&plannerJob&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">Why can’t I assign someone?</summary><div aria-label="Worker suitability guidance" className="mt-2"><p>Required skills: {job.requiredSkills.join(', ')||'None'}</p><ul className="mt-2 divide-y divide-neutral-200">{guidance.map(value=><li key={value.workerId} className="flex flex-wrap justify-between gap-2 py-1"><span className="font-medium">{value.worker.name}</span><span className={value.suitable?'text-green-800':'text-neutral-700'}>{reasonLabel(planner as PlannerData,plannerJob,value.worker,value.reason)}</span></li>)}</ul><p className="text-xs mt-2">Revive checks again when you assign.</p></div></details>}
    {cancelledRows.length>0&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">View assignment history</summary><ul className="mt-2 list-disc pl-5">{cancelledRows.map(a=><li key={a.assignmentId}>{nameOf(a.workerId)} – cancelled</li>)}</ul></details>}
       </div>}
      </section>
