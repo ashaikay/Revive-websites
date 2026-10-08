@@ -1,5 +1,6 @@
 import type { OAuthInvoke } from './calendarOAuthBrowser';
 import type { SchedulingJob } from './schedulingJobs';
+import type { SkillRequirementMode } from './skillMatching';
 import { localLeaveToUtc } from './workerUnavailability.ts';
 
 export interface DailySessionPlan {
@@ -7,6 +8,7 @@ export interface DailySessionPlan {
   timezone: string;
   location: string;
   requiredSkills: string[];
+  skillRequirementMode: SkillRequirementMode;
   staffingCount: number;
   firstDay: string;
   lastDay: string;
@@ -43,9 +45,11 @@ interface Storage {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clock = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
-const inputKeys = 'endLocal,firstDay,lastDay,location,requestId,requiredSkills,staffingCount,startLocal,timezone,title,workingDays,workspaceId';
+const legacyInputKeys = 'endLocal,firstDay,lastDay,location,requestId,requiredSkills,staffingCount,startLocal,timezone,title,workingDays,workspaceId';
+const inputKeys = 'endLocal,firstDay,lastDay,location,requestId,requiredSkills,skillRequirementMode,staffingCount,startLocal,timezone,title,workingDays,workspaceId';
 const resultKeys = 'jobs,requestId,scheduleType,workspaceId';
-const jobKeys = 'endAt,jobId,location,requiredSkills,staffingCount,startAt,status,timezone,title,version,workspaceId';
+const legacyJobKeys = 'endAt,jobId,location,requiredSkills,staffingCount,startAt,status,timezone,title,version,workspaceId';
+const jobKeys = 'endAt,jobId,location,requiredSkills,skillRequirementMode,staffingCount,startAt,status,timezone,title,version,workspaceId';
 
 function id(value: unknown): value is string {
   return typeof value === 'string' && uuid.test(value);
@@ -88,6 +92,7 @@ function validatePlan(value: DailySessionPlan): DailySessionPlan {
   if (typeof input.title !== 'string' || input.title !== input.title.trim() || input.title.length < 1 || input.title.length > 160
     || typeof input.location !== 'string' || input.location !== input.location.trim() || input.location.length < 1 || input.location.length > 300
     || !validTimezone(input.timezone) || !validTags(input.requiredSkills)
+    || !['all', 'any'].includes((input.skillRequirementMode ?? 'all') as string)
     || !Number.isInteger(input.staffingCount) || (input.staffingCount as number) < 1 || (input.staffingCount as number) > 100
     || !validDate(input.firstDay) || !validDate(input.lastDay) || input.lastDay < input.firstDay
     || (Date.parse(`${input.lastDay}T12:00:00.000Z`) - Date.parse(`${input.firstDay}T12:00:00.000Z`)) / 86400000 > 30
@@ -100,6 +105,7 @@ function validatePlan(value: DailySessionPlan): DailySessionPlan {
   }
   return {
     ...(value as DailySessionPlan),
+    skillRequirementMode: (input.skillRequirementMode ?? 'all') as SkillRequirementMode,
     requiredSkills: [...(input.requiredSkills as string[])].sort(),
     workingDays: [...(input.workingDays as number[])].sort((left, right) => left - right),
   };
@@ -131,10 +137,12 @@ export function previewDailySessions(value: DailySessionPlan): DailySessionPrevi
 
 export function validateDailySessionAttempt(value: unknown): DailySessionAttempt {
   const input = object(value);
-  if (Object.keys(input).sort().join(',') !== inputKeys || !id(input.workspaceId) || !id(input.requestId)) throw new Error('Valid daily schedule required.');
+  const keys = Object.keys(input).sort().join(',');
+  if ((keys !== inputKeys && keys !== legacyInputKeys) || !id(input.workspaceId) || !id(input.requestId)) throw new Error('Valid daily schedule required.');
   const plan = validatePlan(input as unknown as DailySessionPlan);
   return {
     ...(input as unknown as DailySessionAttempt),
+    skillRequirementMode: plan.skillRequirementMode,
     requiredSkills: plan.requiredSkills,
     workingDays: plan.workingDays,
   };
@@ -150,15 +158,17 @@ export async function submitDailySessionAttempt(attempt: DailySessionAttempt, in
   const seen = new Set<string>();
   const jobs = result.jobs.map((candidate, index) => {
     const job = object(candidate);
-    if (Object.keys(job).sort().join(',') !== jobKeys || !id(job.jobId) || seen.has(job.jobId)
+    const mode = job.skillRequirementMode ?? 'all';
+    if ((Object.keys(job).sort().join(',') !== jobKeys && Object.keys(job).sort().join(',') !== legacyJobKeys) || !['all', 'any'].includes(mode as string) || !id(job.jobId) || seen.has(job.jobId)
       || job.workspaceId !== input.workspaceId || job.title !== input.title || job.timezone !== input.timezone
       || job.location !== input.location || JSON.stringify(job.requiredSkills) !== JSON.stringify(input.requiredSkills)
+      || mode !== input.skillRequirementMode
       || job.staffingCount !== input.staffingCount || job.status !== 'open' || job.version !== 1) throw new Error('Save unconfirmed.');
     const startAt = instant(job.startAt);
     const endAt = instant(job.endAt);
     if (startAt !== expected[index].startAt || endAt !== expected[index].endAt) throw new Error('Save unconfirmed.');
     seen.add(job.jobId);
-    return { ...job, startAt, endAt } as unknown as SchedulingJob;
+    return { ...job, skillRequirementMode: mode, startAt, endAt } as unknown as SchedulingJob;
   });
   return { requestId: input.requestId, workspaceId: input.workspaceId, scheduleType: 'daily_daytime', jobs };
 }

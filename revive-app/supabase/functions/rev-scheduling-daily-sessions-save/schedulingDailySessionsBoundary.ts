@@ -8,6 +8,7 @@ export interface DailySessionsInput {
   target_timezone: string;
   target_location: string;
   target_required_skills: string[];
+  target_skill_requirement_mode: 'all' | 'any';
   target_staffing_count: number;
   target_first_day: string;
   target_last_day: string;
@@ -25,9 +26,11 @@ export interface DailySessionsDependencies {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clock = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
-const requestKeys = 'endLocal,firstDay,lastDay,location,requestId,requiredSkills,staffingCount,startLocal,timezone,title,workingDays,workspaceId';
+const legacyRequestKeys = 'endLocal,firstDay,lastDay,location,requestId,requiredSkills,staffingCount,startLocal,timezone,title,workingDays,workspaceId';
+const requestKeys = 'endLocal,firstDay,lastDay,location,requestId,requiredSkills,skillRequirementMode,staffingCount,startLocal,timezone,title,workingDays,workspaceId';
 const resultKeys = 'jobs,request_id,schedule_type,workspace_id';
-const jobKeys = 'end_at,job_id,location,required_skills,staffing_count,start_at,status,timezone,title,version,workspace_id';
+const legacyJobKeys = 'end_at,job_id,location,required_skills,staffing_count,start_at,status,timezone,title,version,workspace_id';
+const jobKeys = 'end_at,job_id,location,required_skills,skill_requirement_mode,staffing_count,start_at,status,timezone,title,version,workspace_id';
 
 function id(value: unknown): value is string {
   return typeof value === 'string' && uuid.test(value);
@@ -58,6 +61,10 @@ function validTags(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= 30
     && value.every(tag => typeof tag === 'string' && tag.length > 0 && tag.length <= 80 && tag === tag.trim())
     && new Set(value).size === value.length;
+}
+
+function validSkillRequirementMode(value: unknown): value is 'all' | 'any' {
+  return value === 'all' || value === 'any';
 }
 
 interface ExpectedSession {
@@ -141,8 +148,10 @@ export async function handleSchedulingDailySessionsSave(
     const raw = await request.text();
     if (raw.length > 8192) return reply(400, { error: 'Invalid daily schedule.' });
     const body = object(JSON.parse(raw));
-    if (Object.keys(body).sort().join(',') !== requestKeys
+    const keys = Object.keys(body).sort().join(',');
+    if ((keys !== requestKeys && keys !== legacyRequestKeys)
       || !id(body.workspaceId) || !id(body.requestId)
+      || (body.skillRequirementMode !== undefined && !validSkillRequirementMode(body.skillRequirementMode))
       || typeof body.title !== 'string' || body.title !== body.title.trim() || body.title.length < 1 || body.title.length > 160
       || typeof body.location !== 'string' || body.location !== body.location.trim() || body.location.length < 1 || body.location.length > 300
       || !validTimezone(body.timezone) || !validTags(body.requiredSkills)
@@ -163,6 +172,7 @@ export async function handleSchedulingDailySessionsSave(
       return reply(400, { error: 'Selected hours are ambiguous or nonexistent in this timezone. Choose different daytime hours.' });
     }
     if (expected.length === 0) return reply(400, { error: 'Choose at least one scheduled day.' });
+    const skillRequirementMode = body.skillRequirementMode ?? 'all';
     const userId = await dependencies.getUserId(authorization);
     if (!id(userId)) return reply(401, { error: 'Authentication required.' });
     if (!await dependencies.canManage(authorization, body.workspaceId, userId)) return reply(403, { error: 'Daily sessions could not be saved.' });
@@ -176,6 +186,7 @@ export async function handleSchedulingDailySessionsSave(
       target_timezone: body.timezone,
       target_location: body.location,
       target_required_skills: skills,
+      target_skill_requirement_mode: skillRequirementMode,
       target_staffing_count: body.staffingCount as number,
       target_first_day: body.firstDay,
       target_last_day: body.lastDay,
@@ -191,9 +202,12 @@ export async function handleSchedulingDailySessionsSave(
       const row = object(candidate);
       const startAt = instant(row.start_at);
       const endAt = instant(row.end_at);
-      if (Object.keys(row).sort().join(',') !== jobKeys || !id(row.job_id) || jobIds.has(row.job_id)
+      const rowKeys = Object.keys(row).sort().join(',');
+      const returnedMode = row.skill_requirement_mode ?? 'all';
+      if ((rowKeys !== jobKeys && rowKeys !== legacyJobKeys) || !id(row.job_id) || jobIds.has(row.job_id)
         || row.workspace_id !== body.workspaceId || row.title !== body.title || row.timezone !== body.timezone
         || row.location !== body.location || JSON.stringify(row.required_skills) !== JSON.stringify(skills)
+        || returnedMode !== skillRequirementMode
         || row.staffing_count !== body.staffingCount || row.status !== 'open' || row.version !== 1
         || !startAt || !endAt || startAt >= endAt) throw new Error('Invalid result.');
       if (startAt !== expected[index].startAt || endAt !== expected[index].endAt) throw new Error('Invalid result.');
@@ -207,6 +221,7 @@ export async function handleSchedulingDailySessionsSave(
         timezone: row.timezone,
         location: row.location,
         requiredSkills: row.required_skills,
+        skillRequirementMode,
         staffingCount: row.staffing_count,
         status: row.status,
         version: row.version,

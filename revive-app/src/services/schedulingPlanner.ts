@@ -1,9 +1,9 @@
 import {localLeaveToUtc} from './workerUnavailability.ts';
-import {hasSkills} from './skillMatching.ts';
+import {missingSkills,satisfiesSkillRequirement,type SkillRequirementMode} from './skillMatching.ts';
 
 export const plannerColumns={
  scheduling_workers:'id,workspace_id,display_name,role_labels,skill_tags,active,version',
- scheduling_jobs:'id,workspace_id,title,start_at,end_at,timezone,location,required_skills,staffing_count,status,version',
+ scheduling_jobs:'id,workspace_id,title,start_at,end_at,timezone,location,required_skills,skill_requirement_mode,staffing_count,status,version',
  scheduling_assignments:'id,workspace_id,worker_id,job_id,start_at,end_at,status,version',
  scheduling_worker_patterns:'id,workspace_id,worker_id,timezone,working_days,start_local,end_local,effective_from,effective_until,version',
  scheduling_worker_unavailability:'id,workspace_id,worker_id,start_at,end_at,category,status,version',
@@ -11,7 +11,7 @@ export const plannerColumns={
 export type PlannerTable=keyof typeof plannerColumns;
 export type PlannerRead=(table:PlannerTable,columns:string,workspaceId:string,from:number,to:number)=>Promise<unknown>;
 export interface PlannerWorker{id:string;name:string;active:boolean;skills:string[];}
-export interface PlannerJob{id:string;title:string;startAt:string;endAt:string;timezone:string;location:string;skills:string[];count:number;status:'open'|'cancelled';}
+export interface PlannerJob{id:string;title:string;startAt:string;endAt:string;timezone:string;location:string;skills:string[];skillRequirementMode:SkillRequirementMode;count:number;status:'open'|'cancelled';}
 export interface PlannerAssignment{id:string;workerId:string;jobId:string;startAt:string;endAt:string;status:'active'|'cancelled';}
 export interface PlannerPattern{workerId:string;timezone:string;days:number[];startLocal:string;endLocal:string;from:string;until:string|null;}
 export interface PlannerLeave{id:string;workerId:string;startAt:string;endAt:string;category:'leave'|'unavailable';status:'active'|'cancelled';}
@@ -32,7 +32,7 @@ function status<T extends string>(v:unknown,allowed:T[]):T{if(typeof v!=='string
 async function readRows(table:PlannerTable,ws:string,read:PlannerRead):Promise<Record<string,unknown>[]>{
  const all:Record<string,unknown>[]=[];const seen=new Set<string>();const size=500;
  for(let page=0;page<10;page++){const raw=await read(table,plannerColumns[table],ws,page*size,page*size+size-1);if(!Array.isArray(raw)||raw.length>size)throw Error('Planner page unavailable');
- for(const v of raw){const r=object(v);if(Object.keys(r).sort().join(',')!==plannerColumns[table].split(',').sort().join(',')||!id(r.id)||seen.has(r.id)||r.workspace_id!==ws||!Number.isSafeInteger(r.version)||(r.version as number)<1)throw Error('Planner scope or row invalid');seen.add(r.id);all.push(r);}
+ for(const v of raw){const r=object(v),keys=Object.keys(r).sort().join(','),expected=plannerColumns[table].split(',').sort().join(','),legacy=table==='scheduling_jobs'?plannerColumns[table].split(',').filter(column=>column!=='skill_requirement_mode').sort().join(','):'';if((keys!==expected&&keys!==legacy)||!id(r.id)||seen.has(r.id)||r.workspace_id!==ws||!Number.isSafeInteger(r.version)||(r.version as number)<1)throw Error('Planner scope or row invalid');seen.add(r.id);all.push(r);}
  if(raw.length<size)return all;
  }throw Error('Planner data exceeds supported limit; no partial schedule shown');
 }
@@ -41,7 +41,7 @@ export async function loadPlannerData(ws:string,read:PlannerRead):Promise<Planne
  const [wr,jr,ar,pr,lr]=await Promise.all((Object.keys(plannerColumns) as PlannerTable[]).map(t=>readRows(t,ws,read)));
  const workers=wr.map(r=>{if(typeof r.active!=='boolean')throw Error('Invalid worker');tags(r.role_labels);return {id:r.id as string,name:text(r.display_name,120),active:r.active,skills:tags(r.skill_tags)};});
  const workerIds=new Set(workers.map(w=>w.id));
- const jobs=jr.map(r=>{if(!Number.isInteger(r.staffing_count)||(r.staffing_count as number)<1||(r.staffing_count as number)>100)throw Error('Invalid staffing');return {id:r.id as string,title:text(r.title,160),...interval(r),timezone:zone(r.timezone),location:text(r.location,300),skills:tags(r.required_skills),count:r.staffing_count as number,status:status(r.status,['open','cancelled'])};});
+ const jobs=jr.map(r=>{const mode=r.skill_requirement_mode??'all';if(!Number.isInteger(r.staffing_count)||(r.staffing_count as number)<1||(r.staffing_count as number)>100||!['all','any'].includes(mode as string))throw Error('Invalid staffing');return {id:r.id as string,title:text(r.title,160),...interval(r),timezone:zone(r.timezone),location:text(r.location,300),skills:tags(r.required_skills),skillRequirementMode:mode as SkillRequirementMode,count:r.staffing_count as number,status:status(r.status,['open','cancelled'])};});
  const jobIds=new Set(jobs.map(j=>j.id));
  const assignments=ar.map(r=>{if(!id(r.worker_id)||!workerIds.has(r.worker_id)||!id(r.job_id)||!jobIds.has(r.job_id))throw Error('Orphan assignment');return {id:r.id as string,workerId:r.worker_id,jobId:r.job_id,...interval(r),status:status(r.status,['active','cancelled'])};});
  const patternWorkers=new Set<string>();
@@ -58,7 +58,7 @@ export function workerSetupIssue(data:PlannerData,workerId:string,week:string):s
 function suitability(workerId:string,reason:WorkerSuitabilityReason|null):WorkerSuitability{return {workerId,suitable:reason===null,reason,message:reason===null?'Appears suitable. Final checks run when saving.':workerSuitabilityMessages[reason]};}
 export function workerSuitability(data:PlannerData,job:PlannerJob,worker:PlannerWorker):WorkerSuitability{
  if(!worker.active)return suitability(worker.id,'worker_inactive');
- if(!hasSkills(job.skills,worker.skills))return suitability(worker.id,'missing_skills');
+ if(!satisfiesSkillRequirement(job.skills,worker.skills,job.skillRequirementMode)){const missing=missingSkills(job.skills,worker.skills);return {workerId:worker.id,suitable:false,reason:'missing_skills',message:job.skillRequirementMode==='any'?`None of these skills listed: ${job.skills.join(', ')}`:`Required skills not listed: ${missing.join(', ')}`};}
  if(job.status!=='open'||jobVacancies(data,job)===0)return suitability(worker.id,'capacity_full');
  const pattern=data.patterns.find(value=>value.workerId===worker.id);if(!pattern)return suitability(worker.id,'no_working_pattern');
  try{const day=localPlannerDate(job.startAt,pattern.timezone),endDay=localPlannerDate(new Date(Date.parse(job.endAt)-1).toISOString(),pattern.timezone),weekday=((new Date(day+'T12:00:00Z').getUTCDay()+6)%7)+1;
@@ -68,4 +68,4 @@ export function workerSuitability(data:PlannerData,job:PlannerJob,worker:Planner
  if(data.assignments.some(assignment=>assignment.status==='active'&&assignment.workerId===worker.id&&assignment.startAt<job.endAt&&job.startAt<assignment.endAt))return suitability(worker.id,'overlap');
  return suitability(worker.id,null);
 }
-export function assignmentConflict(data:PlannerData,a:PlannerAssignment):boolean{const j=data.jobs.find(j=>j.id===a.jobId),w=data.workers.find(w=>w.id===a.workerId);return !j||!w||!w.active||j.status!=='open'||j.startAt!==a.startAt||j.endAt!==a.endAt||!hasSkills(j.skills,w.skills)||data.leave.some(l=>l.status==='active'&&l.workerId===a.workerId&&l.startAt<a.endAt&&a.startAt<l.endAt)||data.assignments.some(b=>b.id!==a.id&&b.status==='active'&&b.workerId===a.workerId&&b.startAt<a.endAt&&a.startAt<b.endAt)||data.assignments.filter(b=>b.status==='active'&&b.jobId===a.jobId).length>j.count;}
+export function assignmentConflict(data:PlannerData,a:PlannerAssignment):boolean{const j=data.jobs.find(j=>j.id===a.jobId),w=data.workers.find(w=>w.id===a.workerId);return !j||!w||!w.active||j.status!=='open'||j.startAt!==a.startAt||j.endAt!==a.endAt||!satisfiesSkillRequirement(j.skills,w.skills,j.skillRequirementMode)||data.leave.some(l=>l.status==='active'&&l.workerId===a.workerId&&l.startAt<a.endAt&&a.startAt<l.endAt)||data.assignments.some(b=>b.id!==a.id&&b.status==='active'&&b.workerId===a.workerId&&b.startAt<a.endAt&&a.startAt<b.endAt)||data.assignments.filter(b=>b.status==='active'&&b.jobId===a.jobId).length>j.count;}

@@ -6,7 +6,7 @@ const workspaceId = '11111111-1111-4111-8111-111111111111';
 const actorId = '22222222-2222-4222-8222-222222222222';
 const requestId = '33333333-3333-4333-8333-333333333333';
 const origin = 'http://localhost:5180';
-const body = { workspaceId, requestId, title: 'Cardiff installation', timezone: 'Europe/London', location: 'Cardiff', requiredSkills: ['Installer', 'Safety'], staffingCount: 2, firstDay: '2026-10-15', lastDay: '2026-10-17', workingDays: [4, 5, 6], startLocal: '11:00', endLocal: '16:00' };
+const body = { workspaceId, requestId, title: 'Cardiff installation', timezone: 'Europe/London', location: 'Cardiff', requiredSkills: ['Installer', 'Safety'], skillRequirementMode: 'all', staffingCount: 2, firstDay: '2026-10-15', lastDay: '2026-10-17', workingDays: [4, 5, 6], startLocal: '11:00', endLocal: '16:00' };
 const ids = ['44444444-4444-4444-8444-444444444444', '55555555-5555-4555-8555-555555555555', '66666666-6666-4666-8666-666666666666'];
 const graphTimes = [
   ['2026-10-15T10:00:00+00:00', '2026-10-15T15:00:00+00:00'],
@@ -28,7 +28,7 @@ function fixture(times = graphTimes) {
     canManage: async () => { roleCalls += 1; return true; },
     save: async input => {
       calls.push(input);
-      return { request_id: input.target_request_id, workspace_id: input.target_workspace_id, schedule_type: 'daily_daytime', jobs: times.map(([start_at, end_at], index) => ({ job_id: ids[index] ?? `${String(index + 10).padStart(8, '0')}-4444-4444-8444-444444444444`, workspace_id: workspaceId, title: input.target_title, start_at, end_at, timezone: input.target_timezone, location: input.target_location, required_skills: input.target_required_skills, staffing_count: input.target_staffing_count, status: 'open', version: 1 })) };
+      return { request_id: input.target_request_id, workspace_id: input.target_workspace_id, schedule_type: 'daily_daytime', jobs: times.map(([start_at, end_at], index) => ({ job_id: ids[index] ?? `${String(index + 10).padStart(8, '0')}-4444-4444-8444-444444444444`, workspace_id: workspaceId, title: input.target_title, start_at, end_at, timezone: input.target_timezone, location: input.target_location, required_skills: input.target_required_skills, skill_requirement_mode: input.target_skill_requirement_mode, staffing_count: input.target_staffing_count, status: 'open', version: 1 })) };
     },
   };
   return { dependencies, calls, counts: () => ({ authenticationCalls, roleCalls }) };
@@ -43,9 +43,21 @@ test('verified manager creates three sanitized Cardiff daytime sessions', async 
   assert.equal(context.calls[0].initiating_user_id, actorId);
   assert.deepEqual(context.calls[0].target_working_days, [4, 5, 6]);
   assert.deepEqual(context.calls[0].target_required_skills, ['Installer', 'Safety']);
+  assert.equal(context.calls[0].target_skill_requirement_mode, 'all');
   const result = await response.json();
   assert.equal(result.jobs.length, 3);
   assert.ok(result.jobs.every((job: Record<string, unknown>) => job.staffingCount === 2 && !('private_token' in job)));
+});
+
+test('any mode reaches authority and older request shapes default to all', async () => {
+  const any = fixture();
+  assert.equal((await handleSchedulingDailySessionsSave(request({ ...body, skillRequirementMode: 'any' }), any.dependencies)).status, 200);
+  assert.equal(any.calls[0].target_skill_requirement_mode, 'any');
+  const legacy = fixture();
+  const oldBody = { ...body };
+  delete (oldBody as Partial<typeof body>).skillRequirementMode;
+  assert.equal((await handleSchedulingDailySessionsSave(request(oldBody), legacy.dependencies)).status, 200);
+  assert.equal(legacy.calls[0].target_skill_requirement_mode, 'all');
 });
 
 test('permissions and session are checked before the single service write', async () => {
@@ -66,6 +78,7 @@ test('invalid ranges, empty selections and overnight hours stop before auth', as
     { startLocal: '16:00', endLocal: '11:00' },
     { startLocal: '11:00', endLocal: '11:00' },
     { actorUserId: actorId },
+    { skillRequirementMode: 'any-of' },
   ]) {
     const context = fixture();
     const response = await handleSchedulingDailySessionsSave(request({ ...body, ...patch }), context.dependencies);

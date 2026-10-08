@@ -4,7 +4,7 @@ import {loadSchedulingWorkers,type Worker} from '@/services/schedulingWorkers';
 import {loadWorkingPattern} from '@/services/workerWorkingPatterns';
 import type {SchedulingJob} from '@/services/schedulingJobs';
 import {loadAssignments,submitAssignmentAttempt,rememberAssignment,restoreAssignment,clearAssignment,AllocationRefused,AssignmentOutcomeUnknown,type Assignment,type AssignmentAttempt,type AssignmentInvoke} from '@/services/schedulingAssignments';
-import {missingSkills,hasSkills} from '@/services/skillMatching';
+import {missingSkills,satisfiesSkillRequirement} from '@/services/skillMatching';
 import {loadPlannerData,workerSuitability,type PlannerData,type PlannerJob,type PlannerWorker,type WorkerSuitabilityReason} from '@/services/schedulingPlanner';
 
 type Action='assign'|'cancel'|'retry'|'refresh';
@@ -37,6 +37,7 @@ function reasonLabel(planner:PlannerData,job:PlannerJob,worker:PlannerWorker,rea
  if(reason===null)return 'Available';
  if(reason==='missing_skills'){
   const missing=missingSkills(job.skills,worker.skills);
+  if(job.skillRequirementMode==='any')return `None of these skills listed: ${job.skills.join(', ')}`;
   const similar=missing.some(skill=>worker.skills.some(tag=>looseTag(tag)===looseTag(skill)));
   return `Required skill${missing.length===1?'':'s'} not listed: ${missing.join(', ')}${similar?'. A similar skill is saved with different spelling or spacing; edit the worker’s skills to match exactly.':''}`;
  }
@@ -73,7 +74,7 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,disab
     else{
      if(job.status!=='open'||!selected)throw Error('Choose worker');
      const people=await readWorkers(),worker=people.find(w=>w.workerId===selected);
-     if(!worker?.active||!hasSkills(job.requiredSkills,worker.skillTags))throw Error('Worker not suitable');
+     if(!worker?.active||!satisfiesSkillRequirement(job.requiredSkills,worker.skillTags,job.skillRequirementMode))throw Error('Worker not suitable');
      const pattern=await loadWorkingPattern(workspaceId,selected,async(columns,ws,id)=>{if(!supabaseClient)throw Error('Unavailable');const {data,error}=await supabaseClient.from('scheduling_worker_patterns').select(columns).eq('workspace_id',ws).eq('worker_id',id);if(error)throw Error('Unavailable');return data;});
      if(!pattern){if(mounted.current){setNeedsHours(selected);show('assign','error',`${worker.displayName} has no working hours saved. Select “Set working hours”, save their days and hours, then try again.`);}return;}
      attempt={workspaceId,workerId:selected,jobId:job.jobId,requestId:crypto.randomUUID(),assignmentId:null,status:'active',expectedVersion:0,expectedWorkerVersion:worker.version,expectedJobVersion:job.version,expectedPatternVersion:pattern.version,expectedStartAt:job.startAt,expectedEndAt:job.endAt};
@@ -147,7 +148,7 @@ export function JobAssignmentsPanel({workspaceId,userId,job,disabled=false,disab
    {hint&&<p id={`${ids}-hint`} className="mt-2 text-sm text-neutral-700">{hint}</p>}
    {open&&ready&&!plannerJob&&<p className="mt-2 text-sm" role="status">Availability could not be checked. Refresh the allocation and review each worker's working hours before assigning.</p>}
    <div className="mt-3"><button className="btn-secondary" aria-busy={working==='refresh'} disabled={busy||disabled} onClick={refresh}>{working==='refresh'?workingLabels.refresh:'Refresh allocation'}</button>{feedbackFor('refresh')}</div>
-   {open&&ready&&plannerJob&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">Why can’t I assign someone?</summary><div aria-label="Worker suitability guidance" className="mt-2"><p>Required skills: {job.requiredSkills.join(', ')||'None'}</p><ul className="mt-2 divide-y divide-neutral-200">{guidance.map(value=><li key={value.workerId} className="flex flex-wrap justify-between gap-2 py-1"><span className="font-medium">{value.worker.name}</span><span className={value.suitable?'text-green-800':'text-neutral-700'}>{reasonLabel(planner as PlannerData,plannerJob,value.worker,value.reason)}</span></li>)}</ul><p className="text-xs mt-2">Revive checks again when you assign.</p></div></details>}
+   {open&&ready&&plannerJob&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">Why can’t I assign someone?</summary><div aria-label="Worker suitability guidance" className="mt-2"><p>Required skills ({job.skillRequirementMode==='all'?'all':'at least one'}): {job.requiredSkills.join(', ')||'None'}</p><ul className="mt-2 divide-y divide-neutral-200">{guidance.map(value=><li key={value.workerId} className="flex flex-wrap justify-between gap-2 py-1"><span className="font-medium">{value.worker.name}</span><span className={value.suitable?'text-green-800':'text-neutral-700'}>{reasonLabel(planner as PlannerData,plannerJob,value.worker,value.reason)}</span></li>)}</ul><p className="text-xs mt-2">Revive checks again when you assign.</p></div></details>}
    {cancelledRows.length>0&&<details className="mt-3 rounded-lg border border-neutral-200 p-3 text-sm"><summary className="cursor-pointer font-medium">View assignment history</summary><ul className="mt-2 list-disc pl-5">{cancelledRows.map(a=><li key={a.assignmentId}>{nameOf(a.workerId)} – cancelled</li>)}</ul></details>}
       </div>}
      </section>

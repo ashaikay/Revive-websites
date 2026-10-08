@@ -107,7 +107,7 @@ describe('mounted job cancellation and list tidy-up',()=>{
  });
 
  it('a retained daily save locks job actions with one explanation and is never cleared',async()=>{
-  const attempt={workspaceId,requestId:'55555555-5555-4555-8555-555555555555',title:'Cardiff installation',timezone:'Europe/London',location:'Cardiff',requiredSkills:[],staffingCount:1,firstDay:'2026-10-15',lastDay:'2026-10-16',workingDays:[1,2,3,4,5],startLocal:'09:00',endLocal:'17:00'};
+  const attempt={workspaceId,requestId:'55555555-5555-4555-8555-555555555555',title:'Cardiff installation',timezone:'Europe/London',location:'Cardiff',requiredSkills:[],skillRequirementMode:'all' as const,staffingCount:1,firstDay:'2026-10-15',lastDay:'2026-10-16',workingDays:[1,2,3,4,5],startLocal:'09:00',endLocal:'17:00'};
   rememberDailySessionAttempt(window.sessionStorage,userId,attempt);
   mocks.read.mockResolvedValue(listOf(allocation,other));
   render(<SchedulingJobsPanel workspaceId={workspaceId} userId={userId}/>);

@@ -13,7 +13,7 @@ vi.mock('@/components/JobAssignmentsPanel',()=>({JobAssignmentsPanel:()=>null}))
 import {SchedulingJobsPanel} from '@/components/SchedulingJobsPanel';
 
 function deferred(){let resolve!:(value:unknown)=>void;const promise=new Promise(r=>{resolve=r;});return{promise,resolve};}
-function success(body:DailySessionAttempt){return{data:{requestId:body.requestId,workspaceId,scheduleType:'daily_daytime',jobs:[['2026-10-15T08:00:00.000Z','2026-10-15T16:00:00.000Z','44444444-4444-4444-8444-444444444441'],['2026-10-16T08:00:00.000Z','2026-10-16T16:00:00.000Z','44444444-4444-4444-8444-444444444442']].map(([startAt,endAt,jobId])=>({jobId,workspaceId,title:body.title,startAt,endAt,timezone:'Europe/London',location:body.location,requiredSkills:[],staffingCount:1,status:'open',version:1}))},error:null};}
+function success(body:DailySessionAttempt){return{data:{requestId:body.requestId,workspaceId,scheduleType:'daily_daytime',jobs:[['2026-10-15T08:00:00.000Z','2026-10-15T16:00:00.000Z','44444444-4444-4444-8444-444444444441'],['2026-10-16T08:00:00.000Z','2026-10-16T16:00:00.000Z','44444444-4444-4444-8444-444444444442']].map(([startAt,endAt,jobId])=>({jobId,workspaceId,title:body.title,startAt,endAt,timezone:'Europe/London',location:body.location,requiredSkills:[],skillRequirementMode:body.skillRequirementMode,staffingCount:1,status:'open',version:1}))},error:null};}
 const unavailable={data:null,error:{name:'FunctionsFetchError',context:new TypeError('Failed to fetch')}};
 const retained=()=>{const raw=window.sessionStorage.getItem(storageKey);return raw?JSON.parse(raw):null;};
 async function openForm(lastDay='2026-10-16'){
@@ -80,7 +80,7 @@ describe('mounted daily-session save feedback',()=>{
  });
 
  it('retries a request restored after reload beside its button and scrolls only when the result is off screen',async()=>{
-  const attempt:DailySessionAttempt={workspaceId,requestId:'55555555-5555-4555-8555-555555555555',title:'Cardiff installation',timezone:'Europe/London',location:'Cardiff',requiredSkills:[],staffingCount:1,firstDay:'2026-10-15',lastDay:'2026-10-16',workingDays:[1,2,3,4,5],startLocal:'09:00',endLocal:'17:00'};
+  const attempt:DailySessionAttempt={workspaceId,requestId:'55555555-5555-4555-8555-555555555555',title:'Cardiff installation',timezone:'Europe/London',location:'Cardiff',requiredSkills:[],skillRequirementMode:'all',staffingCount:1,firstDay:'2026-10-15',lastDay:'2026-10-16',workingDays:[1,2,3,4,5],startLocal:'09:00',endLocal:'17:00'};
   rememberDailySessionAttempt(window.sessionStorage,userId,attempt);
   const scroll=vi.fn();HTMLElement.prototype.scrollIntoView=scroll;
   vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockReturnValue({top:2000,bottom:2040,left:0,right:0,width:0,height:40,x:0,y:2000,toJSON:()=>({})});

@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {supabaseClient} from '@/data/supabaseClient';
 import {loadSchedulingWorkers,type Worker} from '@/services/schedulingWorkers';
 import {skillKey} from '@/services/skillMatching';
+import type {SkillRequirementMode} from '@/services/skillMatching';
 
 export interface SkillOption{label:string;key:string;held:boolean;}
 
@@ -18,7 +19,7 @@ export function skillOptions(workers:readonly Worker[],selected:readonly string[
  return options.sort((a,b)=>byLabel(a.label,b.label));
 }
 
-export function RequiredSkillsSelector({workspaceId,selected,existing,onChange}:{workspaceId:string;selected:string[];existing:string[];onChange:(skills:string[])=>void}){
+export function RequiredSkillsSelector({workspaceId,selected,existing,mode,onChange}:{workspaceId:string;selected:string[];existing:string[];mode:SkillRequirementMode;onChange:(skills:string[])=>void}){
  const [workers,setWorkers]=useState<Worker[]>([]),[state,setState]=useState<'loading'|'ready'|'failed'>('loading');
  const seq=useRef(0);
  useEffect(()=>{
@@ -31,7 +32,7 @@ export function RequiredSkillsSelector({workspaceId,selected,existing,onChange}:
  const toggle=(label:string,on:boolean)=>onChange(on?[...selected,label]:selected.filter(value=>value!==label));
  return <fieldset className="my-3 rounded-lg border border-neutral-300 p-3" aria-describedby="required-skills-help">
   <legend className="px-1 text-sm font-medium">Required skills</legend>
-  <p id="required-skills-help" className="text-sm text-neutral-700">Choose the skills needed. Workers must have every selected skill.</p>
+  <p id="required-skills-help" className="text-sm text-neutral-700">Choose the skills needed. {mode==='all'?'Workers must have every selected skill.':'Workers must have at least one selected skill.'}</p>
   {state==='loading'&&<p role="status" className="mt-2 text-sm text-neutral-600">Loading saved worker skills…</p>}
   {state==='failed'&&<p role="alert" className="mt-2 text-sm text-red-800">Saved worker skills could not be loaded. Skills already on this job are kept. Close and reopen the form to try again.</p>}
   {state==='ready'&&options.length===0&&<p className="mt-2 text-sm text-neutral-600">No worker skills saved yet. Add skills to a worker first.</p>}

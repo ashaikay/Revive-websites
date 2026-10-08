@@ -19,10 +19,10 @@ const ws='11111111-1111-4111-8111-111111111111',userId='22222222-2222-4222-8222-
 const otherJobId='33333333-3333-4333-8333-333333333331',assignedJobId='33333333-3333-4333-8333-333333333332';
 const karol='44444444-4444-4444-8444-444444444441',tom='44444444-4444-4444-8444-444444444442',karolAssignment='55555555-5555-4555-8555-555555555551';
 const startAt='2026-11-13T10:00:00.000Z',endAt='2026-11-13T15:00:00.000Z',skill='Dsear & Fire';
-const job=(jobId:string,title:string):SchedulingJob=>({jobId,workspaceId:ws,title,startAt,endAt,timezone:'Europe/London',location:'Cardiff',requiredSkills:[skill],staffingCount:1,status:'open',version:1});
+const job=(jobId:string,title:string):SchedulingJob=>({jobId,workspaceId:ws,title,startAt,endAt,timezone:'Europe/London',location:'Cardiff',requiredSkills:[skill],skillRequirementMode:'all',staffingCount:1,status:'open',version:1});
 const otherJob=job(otherJobId,'Other job'),assignedJob=job(assignedJobId,'assigned job');
 const workerRow=(id:string,name:string,skills:string[])=>({id,workspace_id:ws,display_name:name,role_labels:[],skill_tags:skills,active:true,version:1});
-const jobRow=(j:SchedulingJob)=>({id:j.jobId,workspace_id:ws,title:j.title,start_at:j.startAt,end_at:j.endAt,timezone:j.timezone,location:j.location,required_skills:j.requiredSkills,staffing_count:1,status:'open',version:1});
+const jobRow=(j:SchedulingJob)=>({id:j.jobId,workspace_id:ws,title:j.title,start_at:j.startAt,end_at:j.endAt,timezone:j.timezone,location:j.location,required_skills:j.requiredSkills,skill_requirement_mode:j.skillRequirementMode,staffing_count:1,status:'open',version:1});
 const hours=(id:string,workerId:string)=>({id,workspace_id:ws,worker_id:workerId,timezone:'Europe/London',working_days:[1,2,3,4,5,6,7],start_local:'09:00',end_local:'17:00',effective_from:'2026-10-01',effective_until:null,version:1});
 function seed({karolSkills=[skill],tomHours=true,karolBooked=true}:{karolSkills?:string[];tomHours?:boolean;karolBooked?:boolean}={}){
  mocks.db={
@@ -81,7 +81,18 @@ describe('worker suitability stays current across panels',()=>{
   render(<JobAssignmentsPanel workspaceId={ws} userId={userId} job={assignedJob}/>);
   await waitFor(()=>expect(reasonFor('assigned job','Karol')).toBe('Available'));
   expect(options('assigned job')).toEqual(['Choose worker','Karol','Tom']);
-  expect(within(guidance('assigned job')).getByText('Required skills: Dsear & Fire')).toBeInTheDocument();
+  expect(within(guidance('assigned job')).getByText('Required skills (all): Dsear & Fire')).toBeInTheDocument();
+ });
+
+ it('shows at-least-one suitability and guidance using the saved mode',async()=>{
+  const anyJob={...assignedJob,requiredSkills:[skill,'First aid'],skillRequirementMode:'any' as const};
+  seed({karolSkills:['Different'],karolBooked:false});
+  mocks.db.scheduling_jobs=[jobRow(anyJob)];
+  render(<JobAssignmentsPanel workspaceId={ws} userId={userId} job={anyJob}/>);
+  await waitFor(()=>expect(reasonFor('assigned job','Karol')).toBe('None of these skills listed: Dsear & Fire, First aid'));
+  expect(reasonFor('assigned job','Tom')).toBe('Available');
+  expect(options('assigned job')).toEqual(['Choose worker','Tom']);
+  expect(within(guidance('assigned job')).getByText('Required skills (at least one): Dsear & Fire, First aid')).toBeInTheDocument();
  });
 
  it('names the exact missing tag when a skill truly differs and explains when no one is available',async()=>{

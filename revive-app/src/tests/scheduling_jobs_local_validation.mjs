@@ -83,7 +83,17 @@ try {
  if(first[0].status!==200)throw Error('Job create failed');
  const job=id(first[0].payload.job_id);
  check('CANONICAL_REQUIREMENTS',first[0].payload.version===1&&JSON.stringify(first[0].payload.required_skills)==='["Admin","Phone"]'&&first[0].payload.staffing_count===2);
+ check('LEGACY_JOB_DEFAULTS_TO_ALL',first[0].payload.skill_requirement_mode==='all'&&sql(`select skill_requirement_mode from public.scheduling_jobs where id='${job}';`)==='all');
  check('RETRY_SAME_RESULT',JSON.stringify((await save()).payload)===JSON.stringify(first[0].payload));
+ sql(`update rev_scheduling_private.job_requests set input=input-'skill_requirement_mode' where request_id='${id(input.target_request_id)}';`);
+ check('LEGACY_REQUEST_HISTORY_RETRIES_AS_ALL',JSON.stringify((await save()).payload)===JSON.stringify(first[0].payload));
+ check('MODE_CHANGE_ON_SAME_REQUEST_DENIED',(await save({target_skill_requirement_mode:'any'})).status>=400);
+ const anyRequest={...input,target_request_id:randomUUID(),target_title:'Any skill shift',target_start_at:'2026-10-08T13:00:00.000Z',target_end_at:'2026-10-08T15:00:00.000Z',target_skill_requirement_mode:'any'};
+ const anySave=async(patch={})=>rpc(serviceKey,'save_rev_scheduling_job',{...anyRequest,...patch});
+ const anyCreated=await anySave();
+ check('ANY_MODE_SAVED',anyCreated.status===200&&anyCreated.payload.skill_requirement_mode==='any'&&sql(`select skill_requirement_mode from public.scheduling_jobs where id='${id(anyCreated.payload.job_id)}';`)==='any');
+ check('ANY_MODE_EXACT_RETRY',JSON.stringify((await anySave()).payload)===JSON.stringify(anyCreated.payload));
+ check('ANY_MODE_CHANGED_RETRY_DENIED',(await anySave({target_skill_requirement_mode:'all'})).status>=400);
  check('CHANGED_RETRY_DENIED',(await save({target_title:'Changed'})).status>=400);
  for(const token of [member.token,outsider.token])check('UNAUTHORISED_JOB_READ_DENIED',(await read(token)).status===200&&(await read(token)).rows.length===0);
  check('MEMBER_SAVE_DENIED',(await save({initiating_user_id:member.id,target_request_id:randomUUID()})).status>=400);

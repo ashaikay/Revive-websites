@@ -16,7 +16,7 @@ import {skillOptions} from '@/components/RequiredSkillsSelector';
 let n=0;
 const worker=(name:string,skills:string[],active=true)=>({id:`44444444-4444-4444-8444-${String(++n).padStart(12,'0')}`,workspace_id:workspaceId,display_name:name,role_labels:[],skill_tags:skills,active,version:1});
 const jobId='33333333-3333-4333-8333-333333333331';
-const jobRow=(skills:string[])=>({id:jobId,workspace_id:workspaceId,title:'Site survey',start_at:'2026-11-13T10:00:00.000Z',end_at:'2026-11-13T15:00:00.000Z',timezone:'Europe/London',location:'Cardiff',required_skills:skills,staffing_count:1,status:'open',version:3});
+const jobRow=(skills:string[],mode?:'all'|'any')=>({id:jobId,workspace_id:workspaceId,title:'Site survey',start_at:'2026-11-13T10:00:00.000Z',end_at:'2026-11-13T15:00:00.000Z',timezone:'Europe/London',location:'Cardiff',required_skills:skills,...(mode?{skill_requirement_mode:mode}:{}),staffing_count:1,status:'open',version:3});
 const skillsGroup=()=>screen.getByRole('group',{name:'Required skills'});
 const boxes=()=>within(skillsGroup()).getAllByRole('checkbox').map(box=>[box.closest('label')?.textContent,(box as HTMLInputElement).checked]);
 const box=(label:string)=>within(skillsGroup()).getByRole('checkbox',{name:new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}`)});
@@ -47,6 +47,7 @@ describe('required skills selector',()=>{
   const [name,{body}]=mocks.invoke.mock.calls[0];
   expect(name).toBe('rev-scheduling-daily-sessions-save');
   expect(body.requiredSkills).toEqual(['Dsear & Fire','First aid']);
+  expect(body.skillRequirementMode).toBe('all');
   // The unconfirmed request is retained exactly; the retry resends the same skills.
   await screen.findByText(/Not confirmed\. The daily jobs may or may not have been saved\./);
   mocks.invoke.mockResolvedValueOnce({data:null,error:{name:'FunctionsFetchError',context:new TypeError('Failed to fetch')}});
@@ -55,10 +56,33 @@ describe('required skills selector',()=>{
   expect(mocks.invoke.mock.calls[1][1].body).toEqual(body);
  });
 
+ it('saves daily jobs with at least one selected skill and retries that exact mode',async()=>{
+  await mount();fireEvent.click(screen.getByRole('button',{name:'ADD JOB / SHIFT'}));
+  fireEvent.click(screen.getByRole('radio',{name:'At least one selected skill'}));
+  expect(skillsGroup()).toHaveTextContent('Workers must have at least one selected skill.');
+  await waitFor(()=>expect(boxes()).toContainEqual(['Admin',false]));
+  fireEvent.click(box('Admin'));fireEvent.click(box('First aid'));
+  fireEvent.change(screen.getByLabelText('Title'),{target:{value:'Cardiff installation'}});
+  fireEvent.change(screen.getByLabelText('Location (use Remote for remote work)'),{target:{value:'Cardiff'}});
+  fireEvent.change(screen.getByLabelText('Start date'),{target:{value:'2026-10-15'}});
+  fireEvent.change(screen.getByLabelText('End date (inclusive)'),{target:{value:'2026-10-15'}});
+  mocks.invoke.mockResolvedValueOnce({data:null,error:{name:'FunctionsFetchError',context:new TypeError('Failed to fetch')}});
+  fireEvent.click(screen.getByRole('button',{name:'SAVE DAILY JOBS'}));
+  await waitFor(()=>expect(mocks.invoke).toHaveBeenCalledTimes(1));
+  const body=mocks.invoke.mock.calls[0][1].body;
+  expect(body.requiredSkills).toEqual(['Admin','First aid']);expect(body.skillRequirementMode).toBe('any');
+  await screen.findByRole('alert');
+  mocks.invoke.mockResolvedValueOnce({data:null,error:{name:'FunctionsFetchError',context:new TypeError('Failed to fetch')}});
+  fireEvent.click(screen.getByRole('button',{name:'RETRY IDENTICAL DAILY SAVE'}));
+  await waitFor(()=>expect(mocks.invoke).toHaveBeenCalledTimes(2));
+  expect(mocks.invoke.mock.calls[1][1].body).toEqual(body);
+ });
+
  it('keeps existing job requirements visible and unchanged when editing, including skills no worker has',async()=>{
   mocks.jobs=[jobRow(['DSEAR & Fire','Confined space'])];
   await mount();
   fireEvent.click(screen.getByRole('button',{name:'Edit job'}));
+  expect(screen.getByRole('radio',{name:'All selected skills (default)'})).toBeChecked();
   await waitFor(()=>expect(boxes()).toEqual([['Admin',false],['Confined spaceNo current worker has this skill',true],['DSEAR & Fire',true],['First aid',false]]));
 
   mocks.invoke.mockImplementationOnce(async(_name:string,{body}:{body:Record<string,unknown>})=>({data:{jobId:body.jobId,workspaceId,title:body.title,startAt:body.startAt,endAt:body.endAt,timezone:body.timezone,location:body.location,requiredSkills:body.requiredSkills,staffingCount:body.staffingCount,status:body.status,version:4},error:null}));
@@ -66,6 +90,17 @@ describe('required skills selector',()=>{
   await waitFor(()=>expect(mocks.invoke).toHaveBeenCalledTimes(1));
   expect(mocks.invoke.mock.calls[0][0]).toBe('rev-scheduling-job-save');
   expect(mocks.invoke.mock.calls[0][1].body.requiredSkills).toEqual(['Confined space','DSEAR & Fire']);
+ });
+
+ it('loads and preserves an existing at-least-one requirement when editing',async()=>{
+  mocks.jobs=[jobRow(['Admin','First aid'],'any')];await mount();
+  fireEvent.click(screen.getByRole('button',{name:'Edit job'}));
+  expect(screen.getByRole('radio',{name:'At least one selected skill'})).toBeChecked();
+  expect(skillsGroup()).toHaveTextContent('Workers must have at least one selected skill.');
+  mocks.invoke.mockImplementationOnce(async(_name:string,{body}:{body:Record<string,unknown>})=>({data:{jobId:body.jobId,workspaceId,title:body.title,startAt:body.startAt,endAt:body.endAt,timezone:body.timezone,location:body.location,requiredSkills:body.requiredSkills,skillRequirementMode:body.skillRequirementMode,staffingCount:body.staffingCount,status:body.status,version:4},error:null}));
+  fireEvent.click(screen.getByRole('button',{name:'SAVE JOB'}));
+  await waitFor(()=>expect(mocks.invoke).toHaveBeenCalledTimes(1));
+  expect(mocks.invoke.mock.calls[0][1].body.skillRequirementMode).toBe('any');
  });
 
  it('unticking an existing requirement keeps it listed so it can be re-ticked, and none selected submits no skills',async()=>{

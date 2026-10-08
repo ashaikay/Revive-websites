@@ -9,14 +9,14 @@ const userId = '22222222-2222-4222-8222-222222222222';
 const otherUserId = '33333333-3333-4333-8333-333333333333';
 const requestId = '44444444-4444-4444-8444-444444444444';
 const jobIds = ['55555555-5555-4555-8555-555555555555', '66666666-6666-4666-8666-666666666666', '77777777-7777-4777-8777-777777777777'];
-const attempt = { workspaceId, requestId, title: 'Cardiff installation', timezone: 'Europe/London', location: 'Cardiff', requiredSkills: ['Safety', 'Installer'], staffingCount: 2, firstDay: '2026-10-15', lastDay: '2026-10-17', workingDays: [6, 4, 5], startLocal: '11:00', endLocal: '16:00' };
+const attempt = { workspaceId, requestId, title: 'Cardiff installation', timezone: 'Europe/London', location: 'Cardiff', requiredSkills: ['Safety', 'Installer'], skillRequirementMode: 'all', staffingCount: 2, firstDay: '2026-10-15', lastDay: '2026-10-17', workingDays: [6, 4, 5], startLocal: '11:00', endLocal: '16:00' };
 
 function result(times = [
   ['2026-10-15T10:00:00.000Z', '2026-10-15T15:00:00.000Z'],
   ['2026-10-16T10:00:00.000Z', '2026-10-16T15:00:00.000Z'],
   ['2026-10-17T10:00:00.000Z', '2026-10-17T15:00:00.000Z'],
 ]) {
-  return { requestId, workspaceId, scheduleType: 'daily_daytime', jobs: times.map(([startAt, endAt], index) => ({ jobId: jobIds[index], workspaceId, title: attempt.title, startAt, endAt, timezone: attempt.timezone, location: attempt.location, requiredSkills: ['Installer', 'Safety'], staffingCount: 2, status: 'open', version: 1 })) };
+  return { requestId, workspaceId, scheduleType: 'daily_daytime', jobs: times.map(([startAt, endAt], index) => ({ jobId: jobIds[index], workspaceId, title: attempt.title, startAt, endAt, timezone: attempt.timezone, location: attempt.location, requiredSkills: ['Installer', 'Safety'], skillRequirementMode: attempt.skillRequirementMode, staffingCount: 2, status: 'open', version: 1 })) };
 }
 
 function storage() {
@@ -63,6 +63,7 @@ test('save sends one canonical request and validates three staffing requirements
     calls += 1;
     assert.equal(name, 'rev-scheduling-daily-sessions-save');
     assert.deepEqual(body.requiredSkills, ['Installer', 'Safety']);
+    assert.equal(body.skillRequirementMode,'all');
     assert.deepEqual(body.workingDays, [4, 5, 6]);
     return result();
   });
@@ -71,11 +72,23 @@ test('save sends one canonical request and validates three staffing requirements
   assert.ok(saved.jobs.every(job => job.staffingCount === 2));
 });
 
+test('any mode travels in the exact request and legacy stored attempts default to all', async () => {
+  const any={...attempt,skillRequirementMode:'any'};
+  let sent;
+  await submitDailySessionAttempt(any,async(_name,body)=>{sent=body;const reply=result();return{...reply,jobs:reply.jobs.map(job=>({...job,skillRequirementMode:body.skillRequirementMode}))};});
+  assert.equal(sent.skillRequirementMode,'any');
+  const saved=storage(),legacy={...attempt};delete legacy.skillRequirementMode;
+  saved.setItem(`rev-daily-job-save:${workspaceId}:${userId}`,JSON.stringify(legacy));
+  const restored=restoreDailySessionAttempt(saved,workspaceId,userId);
+  assert.equal(restored.skillRequirementMode,'all');
+  await submitDailySessionAttempt(restored,async(_name,body)=>{assert.equal(body.requestId,requestId);assert.equal(body.skillRequirementMode,'all');return result();});
+});
+
 test('saved daily sessions project onto separate planner dates with UK labels',async()=>{
  const saved=await submitDailySessionAttempt(attempt,async()=>result());
  const rows={
   scheduling_workers:[],
-  scheduling_jobs:saved.jobs.map(job=>({id:job.jobId,workspace_id:job.workspaceId,title:job.title,start_at:job.startAt,end_at:job.endAt,timezone:job.timezone,location:job.location,required_skills:job.requiredSkills,staffing_count:job.staffingCount,status:job.status,version:job.version})),
+  scheduling_jobs:saved.jobs.map(job=>({id:job.jobId,workspace_id:job.workspaceId,title:job.title,start_at:job.startAt,end_at:job.endAt,timezone:job.timezone,location:job.location,required_skills:job.requiredSkills,skill_requirement_mode:job.skillRequirementMode,staffing_count:job.staffingCount,status:job.status,version:job.version})),
   scheduling_assignments:[],scheduling_worker_patterns:[],scheduling_worker_unavailability:[],
  };
  const planner=await loadPlannerData(workspaceId,async table=>rows[table]);

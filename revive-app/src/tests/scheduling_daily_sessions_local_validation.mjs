@@ -87,8 +87,12 @@ try {
  const result=first[0].payload;
  check('THREE_SEPARATE_DAYTIME_SESSIONS',result.schedule_type==='daily_daytime'&&result.jobs.length===3&&result.jobs.every((j,i)=>new Date(j.start_at).toISOString()===`2026-10-${15+i}T10:00:00.000Z`&&new Date(j.end_at).toISOString()===`2026-10-${15+i}T15:00:00.000Z`));
  check('STAFFING_PER_SESSION',result.jobs.every(j=>j.staffing_count===2&&j.version===1&&j.status==='open'&&JSON.stringify(j.required_skills)==='["Admin","Phone"]'));
+ check('LEGACY_DAILY_DEFAULTS_TO_ALL',result.jobs.every(j=>j.skill_requirement_mode==='all'));
  check('REQUEST_BOUND_RESULT',result.request_id===input.target_request_id&&result.workspace_id===ws);
  check('RETRY_SAME_IDS',(await save({target_working_days:[1,2,3,4,5,6,7],target_required_skills:['Admin','Phone']})).payload.jobs.every((j,i)=>j.job_id===result.jobs[i].job_id));
+ sql(`update rev_scheduling_private.daily_job_requests set input=input-'skill_requirement_mode' where request_id='${id(input.target_request_id)}';`);
+ check('LEGACY_DAILY_REQUEST_HISTORY_RETRIES_AS_ALL',(await save()).payload.jobs.every((j,i)=>j.job_id===result.jobs[i].job_id));
+ check('DAILY_MODE_CHANGE_ON_SAME_REQUEST_DENIED',(await save({target_skill_requirement_mode:'any'})).status>=400);
  check('CHANGED_RETRY_DENIED',(await save({target_end_local:'17:00'})).status>=400);
  check('MEMBER_BATCH_DENIED',(await save({initiating_user_id:member.id,target_request_id:randomUUID()})).status>=400);
  check('CROSS_TENANT_BATCH_DENIED',(await save({target_workspace_id:other,target_request_id:randomUUID()})).status>=400);
@@ -113,6 +117,12 @@ try {
  check('LATER_DST_GAP_REFUSES_WHOLE_BATCH',gap.status>=400&&(await read()).rows.length===count);
  const clock=await save({target_request_id:randomUUID(),target_first_day:'2026-10-24',target_last_day:'2026-10-26'});
  check('LOCAL_HOURS_STABLE_ACROSS_CLOCK_CHANGE',clock.status===200&&new Date(clock.payload.jobs[0].start_at).getUTCHours()===10&&new Date(clock.payload.jobs[1].start_at).getUTCHours()===11&&clock.payload.jobs.every(j=>Date.parse(j.end_at)-Date.parse(j.start_at)===5*3600000));
+ const anyRequest={...input,target_request_id:randomUUID(),target_title:'Any skill daily work',target_first_day:'2026-10-19',target_last_day:'2026-10-19',target_working_days:[1],target_skill_requirement_mode:'any'};
+ const anySave=async(patch={})=>rpc(serviceKey,'create_rev_daily_job_sessions',{...anyRequest,...patch});
+ const anyCreated=await anySave();
+ check('DAILY_ANY_MODE_SAVED',anyCreated.status===200&&anyCreated.payload.jobs.length===1&&anyCreated.payload.jobs[0].skill_requirement_mode==='any');
+ check('DAILY_ANY_MODE_EXACT_RETRY',JSON.stringify((await anySave()).payload)===JSON.stringify(anyCreated.payload));
+ check('DAILY_ANY_MODE_CHANGED_RETRY_DENIED',(await anySave({target_skill_requirement_mode:'all'})).status>=400);
  check('NO_ASSIGNMENT_CREATED',sql(`select count(*) from public.scheduling_assignments where workspace_id='${id(ws)}';`)==='0');
  check('AUDIT_ONCE_PER_SESSION',sql(`select count(*) from public.audit_log where workspace_id='${id(ws)}' and resource_type='scheduling_job';`)===String((await read()).rows.length));
  check('PRIVATE_REQUEST_LEDGER_DENIED',sql("select not has_table_privilege('authenticated','rev_scheduling_private.daily_job_requests','SELECT') and not has_table_privilege('service_role','rev_scheduling_private.daily_job_requests','SELECT');")==='t');
