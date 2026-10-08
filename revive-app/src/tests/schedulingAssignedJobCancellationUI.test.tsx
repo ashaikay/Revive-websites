@@ -42,6 +42,19 @@ beforeEach(()=>{mocks.invoke.mockReset();HTMLElement.prototype.scrollIntoView=vi
 afterEach(()=>{cleanup();window.sessionStorage.clear();vi.restoreAllMocks();});
 
 describe('cancelling a job that still has an assigned worker',()=>{
+ it('retries a legacy retained cancellation without adding skillRequirementMode',async()=>{
+  render(<SchedulingJobsPanel workspaceId={ws} userId={userId}/>);
+  const retry=await retryButton();
+  mocks.invoke.mockResolvedValueOnce({data:null,error:{name:'FunctionsFetchError',context:new TypeError('Failed to fetch')}});
+  fireEvent.click(retry);
+  await waitFor(()=>expect(mocks.invoke).toHaveBeenCalledTimes(1));
+  const [name,options]=mocks.invoke.mock.calls[0];
+  expect(name).toBe('rev-scheduling-job-save');
+  expect(options).toEqual({body:retained});
+  expect(options.body).not.toHaveProperty('skillRequirementMode');
+  expect(JSON.parse(window.sessionStorage.getItem(storageKey)??'null')).toEqual(retained);
+ });
+
  it('a verified refusal releases the retained cancellation, then the assignment can be cancelled and the overlapping job updates',async()=>{
   render(<SchedulingJobsPanel workspaceId={ws} userId={userId}/>);
   const retry=await retryButton();
