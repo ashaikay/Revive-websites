@@ -118,8 +118,11 @@ const ownerRead = await request(owner.token, 'GET', `/rest/v1/workspace_calendar
 const adminRead = await request(admin.token, 'GET', `/rest/v1/workspace_calendar_connections?select=${safeColumns}`);
 const memberRead = await request(member.token, 'GET', `/rest/v1/workspace_calendar_connections?select=${safeColumns}`);
 const suspendedRead = await request(suspendedAdmin.token, 'GET', `/rest/v1/workspace_calendar_connections?select=${safeColumns}`);
+const otherOwnerRead = await request(outsider.token, 'GET', `/rest/v1/workspace_calendar_connections?select=${safeColumns}`);
 check('OWNER_ADMIN_SANITIZED_READ_ALLOWED', ownerRead.rows.length === 1 && adminRead.rows.length === 1
   && ownerRead.rows[0]?.workspace_id === workspaceId && adminRead.rows[0]?.workspace_id === workspaceId);
+check('CONNECTION_READ_TENANT_ISOLATION',ownerRead.rows[0]?.id!==otherConnectionId&&otherOwnerRead.rows.length===1
+  &&otherOwnerRead.rows[0]?.id===otherConnectionId&&otherOwnerRead.rows[0]?.workspace_id===otherWorkspaceId);
 check('MEMBER_SUSPENDED_READ_DENIED', memberRead.rows.length === 0 && suspendedRead.rows.length === 0);
 check('CREDENTIAL_REFERENCE_READ_DENIED',
   (await request(owner.token, 'GET', '/rest/v1/workspace_calendar_connections?select=credential_reference')).status >= 400);
