@@ -68,6 +68,8 @@ test('database save SQLSTATEs map only to fixed refusal categories',()=>{
   ['P0001','Invalid calendar metadata','database_save_invalid_calendar_metadata'],
   ['P0001','Unknown database refusal','database_save_refused'],
   ['P0001','Credential revision conflict: mailbox@example.test','database_save_refused'],
+  ['23505','duplicate key value violates unique constraint "workspace_calendar_connections_provider_account_unique"','database_save_duplicate_account'],
+  ['23505','duplicate key value violates unique constraint "workspace_calendar_connections_workspace_provider_unique"','database_save_constraint'],
   ['23514','Invalid calendar metadata','database_save_constraint'],
   ['23502','Active owner or admin required','database_save_constraint'],
   ['23503',undefined,'database_save_constraint'],
@@ -79,6 +81,22 @@ test('database save SQLSTATEs map only to fixed refusal categories',()=>{
   [undefined,'Active owner or admin required','database_save_other'],
  ] as const;
  for(const [sqlState,message,expected] of cases)assert.equal(calendarDatabaseSaveErrorCode(sqlState,message),expected);
+});
+
+test('only the verified duplicate-account constraint receives a safe recovery response',async()=>{
+ const diagnostics:Array<[string,string]>=[];
+ const response=await handleCalendarDiscovery(request(),{
+  allowedOrigin:origin,
+  getUserId:async()=>userId,
+  canManage:async()=>true,
+  discover:async()=>{throw new CalendarDiscoveryFailure('database_save','database_save_duplicate_account');},
+  reportFailure:(stage,code)=>diagnostics.push([stage,code]),
+ });
+ assert.equal(response.status,409);
+ const publicBody=await response.json();
+ assert.deepEqual(publicBody,{error:'Calendar connection unavailable.',code:'outlook_account_already_connected'});
+ assert.deepEqual(diagnostics,[['database_save','database_save_duplicate_account']]);
+ assert.doesNotMatch(JSON.stringify(publicBody),/mailbox|secret|token|account@example/i);
 });
 
 test('database refusal category reaches logs while public response remains unchanged',async()=>{

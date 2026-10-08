@@ -7,6 +7,7 @@ const workspaceA='11111111-1111-4111-8111-111111111111';
 const userId='22222222-2222-4222-8222-222222222222';
 const connectionId='33333333-3333-4333-8333-333333333333';
 const calendarId='44444444-4444-4444-8444-444444444444';
+const callbackState='a'.repeat(43);
 const mocks=vi.hoisted(()=>({invoke:vi.fn(),read:vi.fn(),membership:{data:{role:'owner',status:'active'},error:null}}));
 
 vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:mocks.invoke},from:(table:string)=>{
@@ -20,8 +21,13 @@ vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:mocks.in
  return query;
 }}}));
 vi.mock('@/components/CalendarBusinessHoursPanel',()=>({CalendarBusinessHoursPanel:()=>null}));
+vi.mock('@/services/calendarOAuthBrowser',async importOriginal=>{
+ const actual=await importOriginal<typeof import('@/services/calendarOAuthBrowser')>();
+ return{...actual,calendarOAuthReturn:{code:'mock-oauth-code',state:'a'.repeat(43),failed:false}};
+});
 
 import {OutlookConnectionPanel} from '@/components/OutlookConnectionPanel';
+import {startCalendarOAuth} from '@/services/calendarOAuthBrowser';
 
 let connectionRows:Record<string,unknown>[];
 let calendarRows:Record<string,unknown>[];
@@ -146,5 +152,89 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   expect(screen.getByText('Status: revoked')).toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'DISCONNECT OUTLOOK'})).toBeNull();
   expect(mocks.invoke).toHaveBeenCalledTimes(1);
+ });
+
+ it('offers the safe duplicate-account message and removes only the unfinished connection',async()=>{
+  vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
+  const pendingConnectionId='55555555-5555-4555-8555-555555555555';
+  connectionRows=[
+   {id:connectionId,connection_status:'connected',provider_account_reference:'client@example.test',authorized_by_user_id:userId},
+   {id:pendingConnectionId,connection_status:'disconnected',provider_account_reference:null,authorized_by_user_id:userId},
+  ];
+  mocks.invoke.mockImplementation(async(name:string,options:{body:Record<string,string>})=>{
+   if(name==='rev-calendar-discover')return{data:null,error:{context:new Response(JSON.stringify({error:'Calendar connection unavailable.',code:'outlook_account_already_connected'}),{status:409,headers:{'Content-Type':'application/json'}})}};
+   expect(name).toBe('rev-calendar-disconnect');
+   expect(options).toEqual({body:{workspaceId:workspaceA,connectionId:pendingConnectionId}});
+   connectionRows=connectionRows.map(row=>row.id===pendingConnectionId?{...row,connection_status:'revoked'}:row);
+   return{data:{connectionId:pendingConnectionId,connectionStatus:'revoked'},error:null};
+  });
+  render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  await screen.findByText('client@example.test');
+  const pending=screen.getByText('Status: disconnected').closest('.border');
+  expect(pending).not.toBeNull();
+  fireEvent.click(within(pending as HTMLElement).getByRole('button',{name:'DISCOVER CALENDARS'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('This Outlook account is already connected. Use the existing connection.');
+  fireEvent.click(within(pending as HTMLElement).getByRole('button',{name:'REMOVE UNFINISHED CONNECTION'}));
+  const confirmation=within(pending as HTMLElement).getByRole('group',{name:'Confirm Outlook disconnect'});
+  expect(within(confirmation).getByText('Remove only this unfinished Outlook connection from REV? The existing connected account and its selected calendar will not be changed.')).toBeInTheDocument();
+  fireEvent.click(within(confirmation).getByRole('button',{name:'CONFIRM REMOVE CONNECTION'}));
+  expect(await screen.findByText('Outlook disconnected from REV. Stored access was removed. Existing calendar events are unchanged.')).toBeInTheDocument();
+  expect(within(pending as HTMLElement).getByText('Status: revoked')).toBeInTheDocument();
+  expect(screen.getByText('client@example.test')).toBeInTheDocument();
+  expect(screen.getByText('Client calendar')).toHaveTextContent('Selected');
+  expect(mocks.invoke.mock.calls.map(([name])=>name)).toEqual(['rev-calendar-discover','rev-calendar-disconnect']);
+  expect(mocks.invoke.mock.calls[1][1].body).toEqual({workspaceId:workspaceA,connectionId:pendingConnectionId});
+ });
+
+ it('completes mocked authorization, returns to the panel, and discovers without reconnect or cleanup',async()=>{
+  vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
+  connectionRows=[];calendarRows=[];
+  const authorizationUrl=new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+  authorizationUrl.searchParams.set('client_id',userId);
+  authorizationUrl.searchParams.set('state',callbackState);
+  authorizationUrl.searchParams.set('redirect_uri',`${window.location.origin}/calendar/outlook/callback`);
+  authorizationUrl.searchParams.set('response_type','code');
+  authorizationUrl.searchParams.set('code_challenge_method','S256');
+  authorizationUrl.searchParams.set('code_challenge','b'.repeat(43));
+  authorizationUrl.searchParams.set('scope','offline_access https://graph.microsoft.com/Calendars.Read');
+  mocks.invoke.mockImplementation(async(name:string,options:{body:Record<string,string>})=>{
+   const body=options.body;
+   if(name==='rev-calendar-connection-create'){
+    connectionRows=[{id:body.requestId,connection_status:'disconnected',provider_account_reference:null,authorized_by_user_id:null}];
+    return{data:{connectionId:body.requestId,connectionStatus:'disconnected'},error:null};
+   }
+   if(name==='rev-calendar-oauth-start')return{data:{authorizationUrl:authorizationUrl.href},error:null};
+   if(name==='rev-calendar-oauth-complete'){
+    expect(body).toEqual({workspaceId:workspaceA,connectionId:connectionRows[0].id,state:callbackState,code:'mock-oauth-code'});
+    connectionRows=[{...connectionRows[0],authorized_by_user_id:userId}];
+    return{data:{connectionId:connectionRows[0].id,connectionStatus:'disconnected',status:'authorization_saved'},error:null};
+   }
+   if(name==='rev-calendar-discover'){
+    expect(body).toEqual({workspaceId:workspaceA,connectionId:connectionRows[0].id,timezone:expect.any(String)});
+    connectionRows=[{...connectionRows[0],connection_status:'connected'}];
+    return{data:{connectionId:connectionRows[0].id,connectionStatus:'connected',calendarCount:1},error:null};
+   }
+   throw new Error(`Unexpected endpoint ${name}`);
+  });
+  await startCalendarOAuth(workspaceA,userId,window.sessionStorage,async(name,body)=>{
+   const{data,error}=await mocks.invoke(name,{body});
+   if(error)throw error;
+   return data;
+  },Date.now());
+  expect(mocks.invoke.mock.calls.map(([name])=>name)).toEqual(['rev-calendar-connection-create','rev-calendar-oauth-start']);
+
+  const callbackView=render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId} callback/>);
+  fireEvent.click(screen.getByRole('button',{name:'SAVE OUTLOOK AUTHORIZATION'}));
+  expect(await screen.findByText('Outlook authorization saved. Return to REV and discover calendars to finish setting up read access.')).toBeInTheDocument();
+  expect(mocks.invoke.mock.calls.map(([name])=>name)).toEqual(['rev-calendar-connection-create','rev-calendar-oauth-start','rev-calendar-oauth-complete']);
+  callbackView.unmount();
+
+  render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  const discoverButton=await screen.findByRole('button',{name:'DISCOVER CALENDARS'});
+  expect(mocks.invoke.mock.calls.map(([name])=>name)).not.toContain('rev-calendar-reconnect');
+  fireEvent.click(discoverButton);
+  expect(await screen.findByText('1 calendar discovered. No calendar is selected and bookings remain disabled.')).toBeInTheDocument();
+  expect(mocks.invoke.mock.calls.map(([name])=>name)).toEqual(['rev-calendar-connection-create','rev-calendar-oauth-start','rev-calendar-oauth-complete','rev-calendar-discover']);
+  expect(mocks.invoke.mock.calls.some(([name])=>name==='rev-calendar-reconnect'||name==='rev-calendar-disconnect')).toBe(false);
  });
 });

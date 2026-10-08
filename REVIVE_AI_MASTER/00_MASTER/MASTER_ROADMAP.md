@@ -41,6 +41,10 @@
 | 12 | Industry Playbooks | REV Trades, REV Property, REV Beauty, etc. | ⏳ Future |
 | 13 | API & Integrations | Third-party integrations, API ecosystem | ⏳ Future |
 
+### Planned worker briefs and assignment communications — not implemented
+
+Future worker scheduling scope: managers may upload a private job brief; each worker has a recipient email separate from a REV login; confirmed assignments may send shift details and a secure brief link using the organisation's separately authorised sending account. The capability must prevent duplicate sends, track `sent` / `failed` / `not_sent`, and send appropriate updates when an assignment changes or is cancelled. Calendar read consent is not email-sending authority. This requirement is planned only: it is not implemented, enabled or authorised, and must receive its own security, permission, delivery and idempotency review before execution work.
+
 ## Core Product Evolution
 
 ### From: AI Website Builder

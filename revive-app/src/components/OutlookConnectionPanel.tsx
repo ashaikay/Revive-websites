@@ -2,11 +2,15 @@ import { CalendarBusinessHoursPanel } from './CalendarBusinessHoursPanel';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
 import { calendarOAuthReturn, startCalendarOAuth, reconnectCalendarOAuth, completeCalendarOAuth, type OAuthInvoke } from '@/services/calendarOAuthBrowser';
-import { loadCalendarConnectionMetadata, requestCalendarDiscovery, requestCalendarSelection, requestCalendarDisconnect } from '@/services/calendarConnectionMetadata';
+import { CalendarAccountAlreadyConnectedError, isDuplicateCalendarAccountResponse, loadCalendarConnectionMetadata, requestCalendarDiscovery, requestCalendarSelection, requestCalendarDisconnect } from '@/services/calendarConnectionMetadata';
 const invoke: OAuthInvoke = async (name, body) => {
   if (!supabaseClient) throw new Error('Calendar service unavailable');
   const {data,error} = await supabaseClient.functions.invoke(name,{body});
-  if(error)throw new Error('Calendar authorization unavailable');return data;
+  if(error){
+    if(name==='rev-calendar-discover'&&await isDuplicateCalendarAccountResponse(error))throw new CalendarAccountAlreadyConnectedError();
+    throw new Error('Calendar authorization unavailable');
+  }
+  return data;
 };
 type Metadata = Awaited<ReturnType<typeof loadCalendarConnectionMetadata>>;
 async function loadMetadata(workspaceId:string):Promise<Metadata>{
@@ -22,10 +26,11 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
   const [metadata,setMetadata]=useState<Metadata>({connections:[],calendars:[]});
   const [timezone,setTimezone]=useState(()=>Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/London');
   const [disconnectConfirmation,setDisconnectConfirmation]=useState<string|null>(null);
+  const [duplicateAccountConnectionId,setDuplicateAccountConnectionId]=useState<string|null>(null);
   const locked=useRef(false);
   const enabled=import.meta.env.VITE_REV_CALENDAR_OAUTH_UI_ENABLED==='true';
   useEffect(()=>{
-    let mounted=true;setDisconnectConfirmation(null);setAllowed(false);setMetadata({connections:[],calendars:[]});setMetadataStatus('loading');setMessage('');
+    let mounted=true;setDisconnectConfirmation(null);setDuplicateAccountConnectionId(null);setAllowed(false);setMetadata({connections:[],calendars:[]});setMetadataStatus('loading');setMessage('');
     const client=supabaseClient;
     if(!enabled||!client||callback)return;
     void (async()=>{
@@ -57,10 +62,13 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       const count=await requestCalendarDiscovery(workspaceId,connectionId,timezone,invoke);
       setMessage(`${count} calendar${count===1?'':'s'} discovered. No calendar is selected and bookings remain disabled.`);
       try{setMetadata(await loadMetadata(workspaceId));}catch{setMessage('Calendar discovery was saved. Refresh to reload the calendar list.');}
-    }catch{
+    }catch(error){
       // Reload durable state even after an uncertain response. Never automatically retry discovery.
       try{setMetadata(await loadMetadata(workspaceId));}catch{/* Keep the last known list. */}
-      setMessage('Discovery could not be confirmed. Check the refreshed connection status before trying again. If it is disconnected, Outlook authorization may need to be restarted.');
+      if(error instanceof CalendarAccountAlreadyConnectedError){
+        setDuplicateAccountConnectionId(connectionId);
+        setMessage(error.message);
+      }else setMessage('Discovery could not be confirmed. Check the refreshed connection status before trying again. If it is disconnected, Outlook authorization may need to be restarted.');
     }finally{setBusy(false);locked.current=false;}
   };
   const selectCalendar=async(calendarId:string,connectionId:string)=>{
@@ -93,6 +101,7 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       // A validated durable response is sufficient to hide stale execution/discovery controls.
       setMetadata(previous=>({connections:previous.connections.map(c=>c.id===connectionId?{...c,status:'revoked'}:c),calendars:previous.calendars.map(c=>c.connectionId===connectionId?{...c,active:false,selected:false}:c)}));
       setDisconnectConfirmation(null);
+      if(duplicateAccountConnectionId===connectionId)setDuplicateAccountConnectionId(null);
       try{
         const loaded=await loadMetadata(workspaceId);
         if(loaded.connections.find(c=>c.id===connectionId)?.status!=='revoked'||loaded.calendars.some(c=>c.connectionId===connectionId&&(c.active||c.selected)))throw new Error('Stale metadata');
@@ -122,10 +131,10 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
         </div>}
         {connection.status==='disconnected'&&connection.authorizedBy===userId&&<><p className="text-sm my-2">After saving Outlook authorization, discover its calendars here.</p><button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void discover(connection.id)}>DISCOVER CALENDARS</button></>}
         {connection.status!=='revoked'&&(disconnectConfirmation===connection.id?<div className="my-3" role="group" aria-label="Confirm Outlook disconnect">
-          <p className="text-sm mb-2">Disconnect this Outlook connection from REV? Its stored access will be removed and calendar selection cleared. Existing events are unchanged. Microsoft consent can be removed separately in your Microsoft account.</p>
-          <button className="btn-secondary" disabled={busy} onClick={()=>void disconnect(connection.id)}>CONFIRM DISCONNECT</button>
+          <p className="text-sm mb-2">{duplicateAccountConnectionId===connection.id?'Remove only this unfinished Outlook connection from REV? The existing connected account and its selected calendar will not be changed.':'Disconnect this Outlook connection from REV? Its stored access will be removed and calendar selection cleared. Existing events are unchanged. Microsoft consent can be removed separately in your Microsoft account.'}</p>
+          <button className="btn-secondary" disabled={busy} onClick={()=>void disconnect(connection.id)}>{duplicateAccountConnectionId===connection.id?'CONFIRM REMOVE CONNECTION':'CONFIRM DISCONNECT'}</button>
           <button className="btn-secondary ml-3" disabled={busy} onClick={()=>setDisconnectConfirmation(null)}>CANCEL</button>
-        </div>:<button className="btn-secondary mt-3" disabled={busy} onClick={()=>setDisconnectConfirmation(connection.id)}>DISCONNECT OUTLOOK</button>)}
+        </div>:<button className="btn-secondary mt-3" disabled={busy} onClick={()=>setDisconnectConfirmation(connection.id)}>{duplicateAccountConnectionId===connection.id?'REMOVE UNFINISHED CONNECTION':'DISCONNECT OUTLOOK'}</button>)}
         <ul className="mt-3 space-y-2">{metadata.calendars.filter(calendar=>calendar.connectionId===connection.id&&calendar.active).map(calendar=><li key={calendar.id}>{calendar.displayName} <span className="text-sm text-neutral-600">({calendar.timezone}) · {calendar.selected?'Selected':'Not selected'}</span>{connection.status==='connected'&&!calendar.selected&&<button className="btn-secondary ml-3" disabled={busy||disconnectConfirmation!==null} onClick={()=>void selectCalendar(calendar.id,connection.id)}>SELECT CALENDAR</button>}</li>)}</ul>
       </div>)}
       <CalendarBusinessHoursPanel key={workspaceId} workspaceId={workspaceId} disabled={busy||disconnectConfirmation!==null} />

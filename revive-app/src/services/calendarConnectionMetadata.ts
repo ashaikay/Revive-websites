@@ -1,4 +1,18 @@
 import type { OAuthInvoke } from './calendarOAuthBrowser';
+export class CalendarAccountAlreadyConnectedError extends Error {
+ constructor(){super('This Outlook account is already connected. Use the existing connection.');this.name='CalendarAccountAlreadyConnectedError';}
+}
+export async function isDuplicateCalendarAccountResponse(error:unknown):Promise<boolean>{
+ if(!error||typeof error!=='object')return false;
+ const context=(error as Record<string,unknown>).context;
+ if(!(context instanceof Response)||context.status!==409)return false;
+ try{
+  const body:unknown=await context.clone().json();
+  if(!body||typeof body!=='object'||Array.isArray(body))return false;
+  const result=body as Record<string,unknown>;
+  return result.code==='outlook_account_already_connected'&&result.error==='Calendar connection unavailable.';
+ }catch{return false;}
+}
 export const connectionColumns = 'id,connection_status,provider_account_reference,authorized_by_user_id';
 export const calendarColumns = 'id,connection_id,display_name,timezone,is_selected,active';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

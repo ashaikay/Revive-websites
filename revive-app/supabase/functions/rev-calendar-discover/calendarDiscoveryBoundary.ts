@@ -34,7 +34,10 @@ export async function handleCalendarDiscovery(request: Request, deps: CalendarDi
     if (result.connectionId !== body.connectionId || result.connectionStatus !== 'connected' || !Number.isSafeInteger(result.calendarCount) || result.calendarCount < 1 || result.calendarCount > 1000) throw new Error('Invalid discovery result');
     return reply(200,result);
   } catch (error) {
-    if(error instanceof CalendarDiscoveryFailure)report(deps,error.stage,error.code);
+    if(error instanceof CalendarDiscoveryFailure){
+      report(deps,error.stage,error.code);
+      if(error.code==='database_save_duplicate_account')return reply(409,{error:'Calendar connection unavailable.',code:'outlook_account_already_connected'});
+    }
     return reply(403, { error: 'Calendar connection unavailable.' });
   }
 }

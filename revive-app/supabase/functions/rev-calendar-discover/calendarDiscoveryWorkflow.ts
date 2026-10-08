@@ -1,7 +1,7 @@
 import { validateOAuthTokenConfiguration, type OAuthTokenConfiguration } from '../rev-calendar-oauth-complete/calendarOAuthCompletion.ts';
 import { type OutlookCalendarDiscovery } from '../_shared/microsoftGraphCalendarDiscovery.ts';
 export type CalendarDiscoveryStage='configuration'|'manager_check'|'credential_load'|'token_refresh'|'credential_rotation'|'calendar_discovery'|'database_save';
-export type CalendarDiscoveryErrorCode='configuration_unavailable'|'manager_denied'|'manager_check_failed'|'credential_load_failed'|'token_refresh_failed'|'credential_rotation_failed'|'calendar_discovery_failed'|'database_save_failed'|'database_save_refused'|'database_save_manager_denied'|'database_save_pending_connection_unavailable'|'database_save_revision_conflict'|'database_save_invalid_account'|'database_save_invalid_timezone'|'database_save_invalid_calendar_metadata'|'database_save_constraint'|'database_save_permission_denied'|'database_save_concurrency'|'database_save_other';
+export type CalendarDiscoveryErrorCode='configuration_unavailable'|'manager_denied'|'manager_check_failed'|'credential_load_failed'|'token_refresh_failed'|'credential_rotation_failed'|'calendar_discovery_failed'|'database_save_failed'|'database_save_refused'|'database_save_manager_denied'|'database_save_pending_connection_unavailable'|'database_save_revision_conflict'|'database_save_invalid_account'|'database_save_invalid_timezone'|'database_save_invalid_calendar_metadata'|'database_save_duplicate_account'|'database_save_constraint'|'database_save_permission_denied'|'database_save_concurrency'|'database_save_other';
 export type CalendarDiscoveryDiagnostic=(stage:CalendarDiscoveryStage,code:CalendarDiscoveryErrorCode)=>void;
 export function calendarDatabaseSaveErrorCode(sqlState:unknown,message:unknown):CalendarDiscoveryErrorCode{
  if(sqlState==='P0001'){
@@ -15,6 +15,7 @@ export function calendarDatabaseSaveErrorCode(sqlState:unknown,message:unknown):
    default:return'database_save_refused';
   }
  }
+ if(sqlState==='23505'&&message==='duplicate key value violates unique constraint "workspace_calendar_connections_provider_account_unique"')return'database_save_duplicate_account';
  switch(sqlState){
   case'23502':case'23503':case'23505':case'23514':return'database_save_constraint';
   case'42501':return'database_save_permission_denied';

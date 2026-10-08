@@ -1,3 +1,43 @@
+# Current Handover — Customer Outlook Verification (2026-10-08)
+
+**Current roadmap:** Worker Scheduling is implemented as a separate domain. The verified scope includes assignment/cancellation and planner refresh, Annual Leave management and official UK bank-holiday importing, and `all` / `any` skill matching. Continue customer-managed Outlook verification first, then the remaining Phase 5 calendar MVP roadmap. The Phase 5L scope freeze and CI release gates remain in force: no event-creation permission, booking, provider execution, or release without its separate authorization and gates.
+
+## Completed and evidenced
+
+- Scheduling assignment and cancellation behavior, planner updates, Annual Leave and official UK bank-holiday import have focused local/CI verification. The all/any skill-matching change is recorded as deployed and manually verified in `REVIVE_AI_MASTER/CHANGELOG.md` (2026-10-08).
+- Relevant Scheduling commits include `2fdf40a` (all/any skill matching), `cfb638a` (Scheduling UI tidy-up and verified skill modes), and `ba89c50` (official UK bank-holiday import). The holiday-import work is local implementation; no hosted deployment is recorded for it.
+- Customer Outlook workspace-isolation and additional-account UI checks passed CI for commits `34e15e2` and `3a9324b`. The local app uses `http://localhost:5180` to match the OAuth callback origin.
+- Related committed Outlook work includes `fbb896c` (local origin handling), `cd4223d` (sanitized discovery-stage diagnostics), and `156e1b9` (fixed database refusal categories).
+- Existing hosted customer-calendar connection/OAuth/discovery/selection/availability work is recorded in the 2026-09-30 Outlook checkpoint in `PROJECT_STATUS.md`. That evidence predates the current additional-account and duplicate-account UX work; it does not establish those newer changes as deployed.
+
+## Current blocker — credential load remains unresolved
+
+The latest reported discovery ended at `credential_load_failed` after the user confirmed “Outlook authorization saved” for a different account. The cause is **unproven**. Do not attribute this to user error, infer that credentials were persisted, or treat the UI confirmation as proof that discovery can load the saved credential.
+
+Pause further sign-ins. A mocked mounted authorize → callback save → return/remount → discover regression now proves the frontend does not automatically invoke reconnect or cleanup between save and discovery. This rules out that particular automatic frontend action in the tested flow; it does not prove what happened in the hosted credential save/read path or explain the reported failure.
+
+An earlier same-account attempt reached database save and encountered a constraint. That is a separate issue from the different-account `credential_load_failed`.
+
+## Duplicate-account UX — locally tested, not released
+
+The separate duplicate-account UX recognizes only the exact known provider-account uniqueness constraint. It shows the fixed message “This Outlook account is already connected. Use the existing connection.” and offers confirmed removal of only the unfinished connection through existing scoped cleanup authority. A mounted regression verifies the other connected account and selected calendar remain unchanged.
+
+This UX and its related diagnostics are **tested locally but uncommitted and undeployed**. Do not present them as hosted behavior or treat the duplicate-account case as the proven cause of the current credential-load failure.
+
+Local checks for the current uncommitted changes: mounted Outlook panel tests 11/11; related Node browser tests 20/20; discovery boundary tests 7/7; Deno entry-point check; TypeScript/Vite production build; and `git diff --check`. The build passed with Vite's existing large-chunk advisory. No hosted calls, migrations, deployment, commit, or push were performed for this local work.
+
+## Exact next investigation step (read-only)
+
+With sign-ins paused, obtain the latest failed discovery's request ID/time and its workspace/connection IDs from safe existing logs. Correlate the fixed `credential_load_failed` stage with the OAuth completion for that **same** workspace and connection. Using read-only metadata only, verify whether completion returned a persisted credential reference/revision and whether a credential row exists for the exact workspace/connection and expected revision; then compare those identifiers and guards with `load_rev_pending_calendar_credential` and the discovery RPC call. Report the first mismatch or state that no mismatch was found.
+
+Do not retrieve secret contents, start or replay OAuth, invoke a provider, retry discovery, reconnect, disconnect, clear browser recovery state, modify hosted data, or deploy. If safe hosted logs/metadata are unavailable, stop and report precisely which evidence is missing. Unresolved questions are whether completion persisted credentials for the new connection, whether discovery queried the same tenant-scoped connection/revision, and whether the hosted SQL/function definition differs from the repository version.
+
+## Planned, not implemented
+
+Private manager-uploaded job briefs and worker assignment emails remain planned only. Each worker's recipient email must be separate from REV login identity; confirmed assignments may send shift details and a secure brief link through a separately authorized organization sending account. The future capability must prevent duplicate sends, retain `sent` / `failed` / `not_sent` status, and handle assignment changes and cancellations. Calendar-read consent is not email-sending authority. No upload, worker-recipient, brief-delivery or assignment-email execution capability is implemented or authorized.
+
+---
+
 # Phase 2D.2 / 2D.2A handover \u2014 CLOSED (PASS)
 
 ## Phase 3E.3A handover - CLOSED (PASS; remote untouched)

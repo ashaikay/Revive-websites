@@ -123,6 +123,12 @@ Existing customer-calendar and meeting workflows must remain intact.
 
 Automatic allocation, worker self-service, outbound notifications, payroll, timesheets,
 travel-time calculation, dispatch, route optimisation and external calendar sync.
+
+### Planned worker briefs and assignment communications — not implemented
+
+Managers may upload a private job brief. Each worker's recipient email address must be stored separately from any REV login identity; a login address is not an implicit recipient. After a worker assignment is confirmed, a future communication flow may send shift details and a secure, access-controlled link to the relevant brief using the organisation's separately authorised sending account.
+
+The future flow must provide duplicate-send protection and durable `sent`, `failed` and `not_sent` status. Assignment changes and cancellations require corresponding updates, protected by the same request identity and idempotency safeguards. Calendar read consent does not authorise email sending; sending requires its own organisation-level authority, verified recipients and delivery controls. This is roadmap-only scope: no uploads, worker-email fields, brief links, notification execution or sending permissions are implemented or authorised here.
 These are not dependencies for the first supervised scheduling release.
 ## Optional location planning and visual planner
 

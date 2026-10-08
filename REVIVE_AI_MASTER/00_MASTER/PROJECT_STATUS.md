@@ -1,3 +1,35 @@
+## Current Checkpoint — Customer Outlook Verification (2026-10-08)
+
+This dated checkpoint supersedes older “Current Phase,” “Current Objective,” and “Next Task” statements below where they conflict. The project remains within the Phase 5 calendar MVP roadmap; customer-managed Outlook verification is the immediate work. Continue through the remaining calendar MVP roadmap only under the feature-scope freeze and existing CI/release gates. Phase 5L preflight does not authorize `Calendars.ReadWrite`, event creation, booking, or provider execution.
+
+### Completed / verified
+
+- **Worker Scheduling:** assignment and cancellation, planner updates, Annual Leave management, official UK bank-holiday importing, and `all` / `any` skill matching are implemented and covered by focused local/CI verification. The skill-mode change is recorded as deployed and manually verified in `CHANGELOG.md` on 2026-10-08. Relevant commits: `2fdf40a` (skill modes), `cfb638a` (Scheduling UI tidy-up and verification record), `ba89c50` (official UK holiday import). No hosted deployment is recorded for the Annual Leave / bank-holiday implementation.
+- **Customer Outlook:** workspace-isolation and additional-account UI checks passed CI at commits `34e15e2` and `3a9324b`. Configure the local callback origin as `http://localhost:5180`, matching the OAuth callback. Related commits: `fbb896c` (local-origin handling), `cd4223d` (sanitized discovery diagnostics), `156e1b9` (fixed database refusal categories).
+- **Earlier hosted evidence:** the 2026-09-30 Outlook checkpoint below records hosted connection/OAuth/discovery/selection/availability work for its then-tested account. It is not evidence that the newer additional-account or duplicate-account UX is deployed.
+
+### Unresolved blocker — do not sign in again yet
+
+Discovery most recently reported `credential_load_failed` after the user confirmed “Outlook authorization saved” with a different account. The cause remains **unproven**. A local mocked mounted regression covers authorize → save callback → return/remount → discover and verifies that no automatic reconnect or cleanup runs between save and discovery. This rules out that tested frontend behavior, not a persistence or hosted credential-lookup defect.
+
+An earlier same-account attempt reached database save and hit a constraint. Treat that as distinct from the newer credential-load failure; do not infer that it caused the newer failure.
+
+### Duplicate-account UX — local only
+
+The exact-constraint duplicate-account UX and scoped unfinished-connection removal are tested locally, including preservation of the other connected account's selected calendar. They are **uncommitted and undeployed**. Current local checks: mounted UI 11/11, related Node browser tests 20/20, discovery boundary 7/7, Deno entry-point check, production build/type-check, and `git diff --check`. The build passed with Vite's existing large-chunk advisory. No hosted calls, migrations, deployments, commits, or pushes were made for this local work.
+
+### Exact next step
+
+Keep sign-ins paused. Read-only correlate the latest failed discovery request ID/time and workspace/connection IDs with the corresponding OAuth completion. Inspect safe metadata only to confirm whether completion persisted a credential reference/revision and whether a credential row exists for that exact workspace, connection, and expected revision. Compare those identifiers and guards against `load_rev_pending_calendar_credential` and the discovery RPC. Identify the first mismatch, or report that evidence did not establish one. Do not read secret contents, retry/replay OAuth or discovery, invoke providers, reconnect, disconnect, clear retained browser state, modify hosted data, or deploy. If hosted logs or metadata are unavailable, report exactly what cannot be verified.
+
+Open questions: Did OAuth completion persist credentials for the new connection? Did discovery query the same tenant-scoped connection and revision? Do deployed SQL/function definitions match the repository version?
+
+### Planned, not implemented
+
+Worker job-brief uploads and assignment emails remain planned only: private manager-uploaded briefs; recipient email stored separately from REV login; confirmed assignment shift details and a secure brief link sent through a separately authorized organization account; duplicate-send protection; durable `sent` / `failed` / `not_sent` status; and updates for assignment changes and cancellations. Calendar-read consent does not grant email-sending authority. This scope is not implemented or authorized.
+
+---
+
 ## Workspace business hours verified; worker scheduling prioritised
 
 Checkpoint: 30 September 2026. Latest verified CI commit: `84bafe9`.
