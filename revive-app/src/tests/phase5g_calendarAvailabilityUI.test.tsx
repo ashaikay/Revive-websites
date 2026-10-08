@@ -6,7 +6,7 @@ import {
   CalendarAvailabilityClientError,
   requestCalendarAvailability,
 } from '@/services/calendarAvailabilityClient';
-import { businessDateToUtcRange, formatAvailabilitySlot } from '@/utils/calendarAvailabilityTime';
+import { businessDateAt, businessDateToUtcRange, formatAvailabilitySlot } from '@/utils/calendarAvailabilityTime';
 
 const request = {
   workspaceId: 'workspace-1',
@@ -57,6 +57,10 @@ describe('Phase 5G read-only calendar availability UI and client', () => {
   it('converts selected business dates to UTC ranges across London DST boundaries', () => {
     expect(businessDateToUtcRange('2026-03-29', 'Europe/London')).toEqual({ searchStartAt: '2026-03-29T00:00:00.000Z', searchEndAt: '2026-03-29T23:00:00.000Z' });
     expect(businessDateToUtcRange('2026-10-25', 'Europe/London')).toEqual({ searchStartAt: '2026-10-24T23:00:00.000Z', searchEndAt: '2026-10-26T00:00:00.000Z' });
+  });
+
+  it('derives the default date in the workspace timezone rather than UTC', () => {
+    expect(businessDateAt(new Date('2026-10-08T23:00:00.000Z'), 'Europe/London')).toBe('2026-10-09');
   });
 
   it.each([

@@ -13,7 +13,7 @@ import {
   type SubmittedMeetingProposalState,
 } from '@/services/meetingProposalService';
 import { submitMeetingProposal, type MeetingProposalSubmitter } from '@/services/meetingProposalSubmissionClient';
-import { businessDateToUtcRange, formatAvailabilitySlot } from '@/utils/calendarAvailabilityTime';
+import { businessDateAt, businessDateToUtcRange, formatAvailabilitySlot } from '@/utils/calendarAvailabilityTime';
 
 export interface CalendarAvailabilityPanelProps {
   workspaceId: string;
@@ -47,8 +47,8 @@ export async function submitMeetingProposalAndReload(
   return submitted;
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
+function today(timezone: string): string {
+  return businessDateAt(new Date(), timezone);
 }
 
 export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps> = ({
@@ -59,7 +59,7 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
   canSubmitProposal = false,
   onProposalSubmitted,
 }) => {
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(() => today(initialTimezone));
   const [duration, setDuration] = useState<30 | 60>(30);
   const [timezone, setTimezone] = useState(initialTimezone);
   const [result, setResult] = useState<CalendarAvailabilityResult | null>(null);

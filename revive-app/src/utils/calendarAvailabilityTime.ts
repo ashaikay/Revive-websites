@@ -19,6 +19,17 @@ function zonedMidnightToUtc(year: number, month: number, day: number, timezone: 
   return new Date(timestamp).toISOString();
 }
 
+export function businessDateAt(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date).reduce<Record<string, string>>((result, part) => {
+    if (part.type !== 'literal') result[part.type] = part.value;
+    return result;
+  }, {});
+  if (!parts.year || !parts.month || !parts.day) throw new Error('A valid business timezone is required.');
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 export function businessDateToUtcRange(date: string, timezone: string): { searchStartAt: string; searchEndAt: string } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) throw new Error('A valid business date is required.');
