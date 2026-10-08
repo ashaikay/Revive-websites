@@ -67,6 +67,9 @@ describe('mounted job cancellation and list tidy-up',()=>{
   history.open=true;fireEvent(history,new Event('toggle'));
   expect(await within(history).findByRole('article',{name:'REV allocation test job'})).toBeInTheDocument();
   expect(within(history).queryByRole('region',{name:'Job actions'})).toBeNull();
+  expect(result.parentElement).toContainElement(screen.getByRole('button',{name:'ADD JOB / SHIFT'}));
+  fireEvent.click(screen.getByRole('button',{name:'ADD JOB / SHIFT'}));
+  expect(screen.queryByText('“REV allocation test” was cancelled and removed from active planning. Its history is kept under Cancelled job history.')).toBeNull();
  });
 
  it('keeps an unconfirmed cancellation, explains the lock once and retries the identical request',async()=>{

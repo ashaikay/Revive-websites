@@ -1,7 +1,7 @@
 # REV Worker Scheduling and Allocation
 
 Status: MVP priority authorised by Mike on 30 September 2026.
-Worker records, working patterns and unavailable periods are implemented. Hosted save, edit, cancellation and refresh persistence have been verified. Jobs/shifts and assignment authority are next.
+Worker records, working patterns, unavailable periods, jobs/shifts and assignment authority are implemented. Hosted save, edit, cancellation and refresh persistence have been verified. Skill requirement modes are deployed and manually verified; see the 8 October 2026 verification below.
 
 ## Multi-day daytime sessions — local implementation complete
 
@@ -65,7 +65,7 @@ Assignment requires an active worker and an open job/shift in the same workspace
 The complete interval must fit recorded working availability.
 Missing availability blocks allocation.
 Leave/unavailable exceptions block overlapping assignments.
-Required skills must be present and staffing capacity must remain available.
+Required skills must satisfy the job's saved skill requirement mode, and staffing capacity must remain available.
 Active assignments for the same worker cannot overlap, including across different jobs.
 Intervals use [start,end): adjacent assignments are permitted.
 Concurrent requests must enforce overlap and capacity protection in the database.
@@ -73,6 +73,19 @@ Repeated request IDs are idempotent; changed content under the same ID is reject
 Stale record versions are rejected rather than silently overwritten.
 Job edits, availability changes and worker deactivation must check affected assignments.
 Conflicting changes require explicit reassignment or cancellation first.
+
+## Skill requirement modes — deployed and verified
+
+Jobs support two exact skill requirements: **All selected skills** (default) requires every selected tag; **At least one selected skill** requires any selected tag. No selected skills means no skill restriction in either mode. Matching ignores capitalization, leading/trailing whitespace and repeated spaces, but remains exact-tag matching; it does not use substrings or fuzzy matching. Existing jobs and retained requests without a mode continue to use `all`.
+
+The mode is selected when creating or editing a job and when creating daily sessions. It is stored in job data and bound into new save-request identity. The assignment database authority enforces the selected mode alongside existing hours, leave, overlap, staffing, permission and tenant checks. Active assignments continue to prevent edits to their job's requirements.
+
+Migration `20261008120000_rev_scheduling_skill_requirement_modes.sql` is applied. The deployed scheduling save functions are `rev-scheduling-job-save` and `rev-scheduling-daily-sessions-save`; assignment suitability is enforced by the deployed `rev-scheduling-assignment-save` path and database authority.
+
+Verification on 8 October 2026:
+
+- The scheduling UI and job, daily-session and assignment database CI checks passed.
+- Manual planner check: assigning James fills one of two places. Cancelling his assignment removes him from the planner, restores two unfilled places and makes James available again. Cancellation history remains retained.
 
 ## Time handling
 

@@ -1,4 +1,12 @@
-﻿## 2026-10-04 - Annual Leave Stage 3 Manager UI (LOCAL IMPLEMENTATION)
+﻿## 2026-10-08 - Scheduling Skill Requirement Modes (DEPLOYED + VERIFIED)
+
+- Added saved **All selected skills** (default) and **At least one selected skill** job requirements, available in job creation/editing and daily-session creation. No selected skills imposes no restriction; matching is normalized, exact-tag only.
+- Preserved `all` behavior for existing jobs and retained requests that predate the mode. Included the mode in new save requests and exact-retry identity.
+- Applied migration `20261008120000_rev_scheduling_skill_requirement_modes.sql`; deployed `rev-scheduling-job-save` and `rev-scheduling-daily-sessions-save`. Assignment skill enforcement remains in the deployed `rev-scheduling-assignment-save` path and database authority.
+- Scheduling UI and job, daily-session and assignment database CI checks passed.
+- Manual verification: assigning James fills one of two places. Cancelling the assignment removes him from the planner, restores two unfilled places and makes James available again. Cancellation history is retained.
+
+## 2026-10-04 - Annual Leave Stage 3 Manager UI (LOCAL IMPLEMENTATION)
 
 - Added a dedicated manager-facing Annual Leave view within Scheduling while retaining the weekly planner as the default and keeping setup forms out of worker cards.
 - Added reconciled authoritative balance reads for frozen allowance, append-only adjustments, net deduction/reversal postings and remaining integer minutes. Hours/minutes are primary; day equivalents use each account's explicit frozen conversion.
