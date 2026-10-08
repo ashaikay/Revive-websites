@@ -106,9 +106,11 @@ try {
  check('CONCURRENT_UPDATE_ONCE',race.filter(r=>r.status===200).length===1&&race.filter(r=>r.status>=400).length===1);
  check('STALE_VERSION_DENIED',(await save({...update,target_request_id:randomUUID()})).status>=400);
  check('FOREIGN_JOB_UPDATE_DENIED',(await save({...update,target_workspace_id:other,initiating_user_id:outsider.id,target_request_id:randomUUID()})).status>=400);
- const current=(await read()).rows[0];
+ const current=(await read()).rows.find(row=>row.id===job);
+ if(!current)throw Error('Original scheduling job fixture was not found.');
  await request(serviceKey,'PATCH',`/rest/v1/workspace_members?workspace_id=eq.${ws}&user_id=eq.${member.id}`,{role:'admin'});
- check('ADMIN_READ_ALLOWED',(await read(member.token)).rows.length===1);
+ const adminRows=(await read(member.token)).rows;
+ check('ADMIN_READ_ALLOWED',adminRows.length===2&&adminRows.some(row=>row.id===job)&&adminRows.some(row=>row.id===id(anyCreated.payload.job_id)));
  check('OTHER_ACTOR_RETRY_DENIED',(await save({initiating_user_id:member.id})).status>=400);
  const cancel={target_job_id:job,expected_version:2,target_title:current.title,target_status:'cancelled',initiating_user_id:member.id,target_request_id:randomUUID()};
  check('CANCEL_CANNOT_CHANGE_DETAILS',(await save({...cancel,target_location:'Changed location',target_request_id:randomUUID()})).status>=400);
@@ -121,7 +123,7 @@ try {
  const endpoint=`/rest/v1/scheduling_jobs?workspace_id=eq.${ws}&id=eq.${job}`;
  check('DIRECT_BROWSER_WRITES_DENIED',(await request(owner.token,'POST','/rest/v1/scheduling_jobs',{})).status>=400&&(await request(owner.token,'PATCH',endpoint,{status:'open'})).status>=400&&(await request(owner.token,'DELETE',endpoint)).status>=400);
  check('PRIVATE_LEDGER_BROWSER_DENIED',sql("select not has_schema_privilege('authenticated','rev_scheduling_private','USAGE') and not has_schema_privilege('anon','rev_scheduling_private','USAGE');")==='t');
- check('AUDIT_EXACTLY_ONCE',sql(`select count(*) from public.audit_log where workspace_id='${id(ws)}' and resource_type='scheduling_job';`)==='3');
+ check('AUDIT_EXACTLY_ONCE',sql(`select count(*) from public.audit_log where workspace_id='${id(ws)}' and resource_type='scheduling_job' and resource_id='${job}';`)==='3');
  const failed=randomUUID();
  const atomic=sql(`begin;
  create function pg_temp.refuse_job_audit() returns trigger language plpgsql as $$begin raise exception 'Local audit refusal';end$$;
@@ -130,7 +132,8 @@ try {
  select case when not exists(select 1 from public.scheduling_jobs where workspace_id='${id(ws)}' and title='Rollback Job') and not exists(select 1 from rev_scheduling_private.job_requests where request_id='${id(failed)}') then 'JOB_ATOMIC_PASS' else 'JOB_ATOMIC_FAIL' end;
  rollback;`);
  check('AUDIT_FAILURE_ROLLS_BACK_JOB_AND_REQUEST',atomic.includes('JOB_ATOMIC_PASS'));
- check('CANCELLED_HISTORY_PRESERVED',(await read()).rows.length===1&&(await read()).rows[0].status==='cancelled');
+ const finalRows=(await read()).rows;
+ check('CANCELLED_HISTORY_PRESERVED',finalRows.length===2&&finalRows.some(row=>row.id===job&&row.status==='cancelled')&&finalRows.some(row=>row.id===id(anyCreated.payload.job_id)&&row.status==='open'&&row.skill_requirement_mode==='any'));
 } catch {check('LOCAL_JOB_VALIDATION',false);}
 finally {await retireFixtures(workspaces,identities);}
 console.log('EXTERNAL_PROVIDER_REQUESTS=0');check('SCHEDULING_JOBS_LOCAL',failures===0);if(failures)process.exitCode=1;
