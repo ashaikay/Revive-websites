@@ -1,8 +1,11 @@
+import { CalendarDiscoveryFailure, type CalendarDiscoveryDiagnostic, type CalendarDiscoveryErrorCode, type CalendarDiscoveryStage } from './calendarDiscoveryWorkflow.ts';
+
 export interface CalendarDiscoveryDependencies {
   allowedOrigin?: string;
   getUserId(authorization: string): Promise<string | null>;
   canManage(authorization: string, workspaceId: string, userId: string): Promise<boolean>;
   discover(workspaceId: string, connectionId: string, userId: string, timezone: string): Promise<{ connectionId: string; connectionStatus: 'connected'; calendarCount: number }>;
+  reportFailure?: CalendarDiscoveryDiagnostic;
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export async function handleCalendarDiscovery(request: Request, deps: CalendarDiscoveryDependencies): Promise<Response> {
@@ -21,11 +24,20 @@ export async function handleCalendarDiscovery(request: Request, deps: CalendarDi
     if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join(',') !== 'connectionId,timezone,workspaceId' || !uuid.test(body.workspaceId) || !uuid.test(body.connectionId)) return reply(400, { error: 'Invalid request.' });
     const userId = await deps.getUserId(authorization);
     if (!userId || !uuid.test(userId)) return reply(401, { error: 'Authentication required.' });
-    if (!await deps.canManage(authorization, body.workspaceId, userId)) return reply(403, { error: 'Calendar connection unavailable.' });
+    let permitted:boolean;
+    try{permitted=await deps.canManage(authorization, body.workspaceId, userId);}
+    catch{report(deps,'manager_check','manager_check_failed');return reply(403,{error:'Calendar connection unavailable.'});}
+    if (!permitted){report(deps,'manager_check','manager_denied');return reply(403, { error: 'Calendar connection unavailable.' });}
     if (typeof body.timezone !== 'string' || !body.timezone.trim()) return reply(400, { error: 'Timezone required.' });
     new Intl.DateTimeFormat('en-GB',{timeZone:body.timezone});
     const result = await deps.discover(body.workspaceId,body.connectionId,userId,body.timezone);
     if (result.connectionId !== body.connectionId || result.connectionStatus !== 'connected' || !Number.isSafeInteger(result.calendarCount) || result.calendarCount < 1 || result.calendarCount > 1000) throw new Error('Invalid discovery result');
     return reply(200,result);
-  } catch { return reply(403, { error: 'Calendar connection unavailable.' }); }
+  } catch (error) {
+    if(error instanceof CalendarDiscoveryFailure)report(deps,error.stage,error.code);
+    return reply(403, { error: 'Calendar connection unavailable.' });
+  }
+}
+function report(deps:CalendarDiscoveryDependencies,stage:CalendarDiscoveryStage,code:CalendarDiscoveryErrorCode):void{
+  try{deps.reportFailure?.(stage,code);}catch{/* Diagnostics must not change the public result. */}
 }
