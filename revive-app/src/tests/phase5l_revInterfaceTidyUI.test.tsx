@@ -213,6 +213,7 @@ describe('mounted REV layout and action feedback', () => {
     expect(container.querySelector('article details')).not.toHaveAttribute('open');
     expect(screen.getAllByText(/The customer requested an update/)[0]).toBeInTheDocument();
     expect(screen.getByText(fullMessage)).not.toBeVisible();
+    fireEvent.click(screen.getByText('View email history'));
     fireEvent.click(screen.getByText('View conversation (1)'));
     fireEvent.click(screen.getByText('Read full message'));
     expect(screen.getByText(fullMessage)).toBeVisible();

@@ -45,7 +45,9 @@ export interface LivePendingAction extends LiveREVAction {
   meetingProposal?: PreparedMeetingProposal;
   meetingDryRun?: MeetingExecutionResult;
   meetingReminderDraft?: MeetingReminderDraft;
+  meetingReminderUnavailable?: string;
   meetingOutcome?: MeetingOutcome;
+  meetingOutcomeUnavailable?: string;
 }
 
 export interface StoredPreparedFollowUp {
@@ -110,6 +112,23 @@ function requiredClient(): SupabaseClient {
 
 function throwOnError(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
+}
+
+function optionalMeetingStorageUnavailableMessage(
+  error: { message: string; code?: string } | null,
+  tableName: 'meeting_reminder_drafts' | 'meeting_outcomes',
+): string | undefined {
+  if (!error) return undefined;
+  const missingStorage = error.code === 'PGRST205'
+    || (error.message.includes(tableName) && /schema cache/i.test(error.message));
+  if (tableName === 'meeting_reminder_drafts') {
+    return missingStorage
+      ? 'Reminder drafts are unavailable because reminder storage has not been deployed. Other REV information remains available.'
+      : 'Reminder drafts are unavailable because reminder storage could not be loaded. Other REV information remains available.';
+  }
+  return missingStorage
+    ? 'Meeting outcomes are unavailable because outcome storage has not been deployed. Other REV information remains available.'
+    : 'Meeting outcomes are unavailable because outcome storage could not be loaded. Other REV information remains available.';
 }
 
 function mapMembership(row: Record<string, unknown> | null): WorkspaceMemberRecord | undefined {
@@ -310,8 +329,14 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     throwOnError(approvals.error);
     throwOnError(meetingProposals.error);
     throwOnError(meetingExecutions.error);
-    throwOnError(meetingReminderDrafts.error);
-    throwOnError(meetingOutcomes.error);
+    const meetingReminderUnavailable = optionalMeetingStorageUnavailableMessage(
+      meetingReminderDrafts.error,
+      'meeting_reminder_drafts',
+    );
+    const meetingOutcomeUnavailable = optionalMeetingStorageUnavailableMessage(
+      meetingOutcomes.error,
+      'meeting_outcomes',
+    );
 
     const approvalByAction = new Map(
       (approvals.data ?? []).map((row) => [String(row.rev_action_id), row]),
@@ -366,8 +391,14 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         meetingReminderDraft: action.actionType === 'meeting_proposal' && meeting
           ? meetingReminderByProposal.get(meeting.id)
           : undefined,
+        meetingReminderUnavailable: action.actionType === 'meeting_proposal'
+          ? meetingReminderUnavailable
+          : undefined,
         meetingOutcome: action.actionType === 'meeting_proposal' && meeting
           ? meetingOutcomeByProposal.get(meeting.id)
+          : undefined,
+        meetingOutcomeUnavailable: action.actionType === 'meeting_proposal'
+          ? meetingOutcomeUnavailable
           : undefined,
       }];
     });

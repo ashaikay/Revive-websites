@@ -3,15 +3,47 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MeetingProposalReviewCard } from '@/components/MeetingProposalReviewCard';
+import { EmailConversationHistory } from '@/components/REVInterface';
 import {
   mapMeetingReminderDraft,
   validateMeetingReminderDraftAttempt,
   type MeetingReminderDraft,
 } from '@/domain/meetingReminder';
 import { submitMeetingReminderDraft } from '@/services/meetingReminderService';
-import type { LivePendingAction } from '@/data/supabasePreparedWorkRepository';
+import {
+  browserSupabasePreparedWorkGateway,
+  type LivePendingAction,
+} from '@/data/supabasePreparedWorkRepository';
+
+const supabaseQueryState = vi.hoisted(() => ({
+  results: {} as Record<string, {
+    data: Record<string, unknown>[] | null;
+    error: { message: string; code?: string } | null;
+  }>,
+}));
+
+vi.mock('@/data/supabaseClient', () => ({
+  supabaseClient: {
+    functions: { invoke: vi.fn() },
+    from: (table: string) => {
+      const query = {
+        select: () => query,
+        eq: () => query,
+        in: () => query,
+        order: () => query,
+        then: (
+          resolve: (value: unknown) => unknown,
+          reject: (reason: unknown) => unknown,
+        ) => Promise.resolve(
+          supabaseQueryState.results[table] ?? { data: [], error: null },
+        ).then(resolve, reject),
+      };
+      return query;
+    },
+  },
+}));
 
 const workspaceId = '11111111-1111-4111-8111-111111111111';
 const actorId = '22222222-2222-4222-8222-222222222222';
@@ -62,6 +94,68 @@ const reminder: MeetingReminderDraft = {
   createdAt: '2026-10-09T12:00:00.000Z',
   updatedAt: '2026-10-09T12:30:00.000Z',
 };
+
+function pendingActionQueryResults() {
+  return {
+    rev_actions: {
+      data: [{
+        id: action.id,
+        workspace_id: workspaceId,
+        action_type: 'meeting_proposal',
+        title: action.title,
+        description: action.description,
+        requires_approval: true,
+        status: 'completed',
+        execution_status: 'succeeded',
+        proposed_at: action.proposedAt,
+        action_version: 1,
+      }],
+      error: null,
+    },
+    approvals: {
+      data: [{
+        id: action.approvalId,
+        workspace_id: workspaceId,
+        rev_action_id: action.id,
+        action_version: 1,
+        action_fingerprint: 'a'.repeat(64),
+        decision: 'approved',
+      }],
+      error: null,
+    },
+    meeting_proposals: {
+      data: [{
+        id: proposalId,
+        rev_action_id: action.id,
+        proposal_payload: action.meetingProposal,
+      }],
+      error: null,
+    },
+    rev_action_executions: {
+      data: [{
+        id: action.meetingDryRun!.executionId,
+        action_id: action.id,
+        correlation_id: '99999999-9999-4999-8999-999999999999',
+        status: 'succeeded',
+        mode: 'live',
+        provider_outcome: 'accepted_by_provider',
+      }],
+      error: null,
+    },
+    meeting_reminder_drafts: {
+      data: [],
+      error: null,
+    },
+    meeting_outcomes: {
+      data: [],
+      error: null,
+    },
+  };
+}
+
+beforeEach(() => {
+  supabaseQueryState.results = pendingActionQueryResults();
+});
 
 afterEach(() => cleanup());
 
@@ -157,6 +251,207 @@ describe('Phase 5E meeting reminder preparation', () => {
       body: 'Corrected reminder wording.',
       expectedVersion: 2,
     });
+  });
+
+  it('keeps email and meeting data available when reminder storage is missing', async () => {
+    supabaseQueryState.results.meeting_reminder_drafts = {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message: "Could not find the table 'public.meeting_reminder_drafts' in the schema cache",
+      },
+    };
+    supabaseQueryState.results.meeting_outcomes = {
+      data: [{
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        workspace_id: workspaceId,
+        meeting_proposal_id: proposalId,
+        outcome_type: 'held',
+        summary: 'The meeting took place.',
+        occurred_at: '2026-10-09T11:00:00.000Z',
+        recorded_by_user_id: actorId,
+        version: 1,
+        created_at: '2026-10-09T11:05:00.000Z',
+        updated_at: '2026-10-09T11:05:00.000Z',
+      }],
+      error: null,
+    };
+    const emailThreads = [{
+      id: 'thread-1',
+      workspaceId,
+      subject: 'Project update',
+      lastMessageAt: '2026-10-09T12:00:00.000Z',
+      messages: [{
+        id: 'message-1',
+        workspaceId,
+        threadId: 'thread-1',
+        direction: 'inbound' as const,
+        senderEmail: 'customer@example.test',
+        recipientEmails: ['team@example.test'],
+        subject: 'Project update',
+        bodyText: 'The existing email history remains available.',
+        communicationAt: '2026-10-09T12:00:00.000Z',
+      }],
+    }];
+
+    const [pendingActions, loadedEmailThreads] = await Promise.all([
+      browserSupabasePreparedWorkGateway.loadPendingActions!(workspaceId),
+      Promise.resolve(emailThreads),
+    ]);
+
+    expect(pendingActions).toHaveLength(1);
+    expect(pendingActions[0].meetingProposal).toEqual(action.meetingProposal);
+    expect(pendingActions[0].meetingDryRun?.status).toBe('event_created');
+    expect(pendingActions[0].meetingOutcome).toEqual(expect.objectContaining({
+      outcomeType: 'held',
+      summary: 'The meeting took place.',
+    }));
+    expect(pendingActions[0].meetingReminderUnavailable).toMatch(/has not been deployed/);
+    expect(loadedEmailThreads).toEqual(emailThreads);
+
+    render(<>
+      <EmailConversationHistory threads={loadedEmailThreads} contacts={[]} opportunities={[]} />
+      <MeetingProposalReviewCard action={pendingActions[0]} canReview busy={false}
+        onDecision={vi.fn()} onSaveReminder={vi.fn()} />
+    </>);
+    expect(screen.getByText('EMAIL CONVERSATIONS')).toBeVisible();
+    fireEvent.click(screen.getByText('View details and actions'));
+    expect(screen.getByText(/Reminder drafts are unavailable because reminder storage has not been deployed/)).toBeVisible();
+    expect(screen.queryByText('No reminder draft has been prepared.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Prepare reminder draft' })).not.toBeInTheDocument();
+  });
+
+  it('keeps email and proposal data available while outcomes fail closed', async () => {
+    supabaseQueryState.results.meeting_outcomes = {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message: "Could not find the table 'public.meeting_outcomes' in the schema cache",
+      },
+    };
+
+    const [loaded] = await browserSupabasePreparedWorkGateway.loadPendingActions!(workspaceId);
+
+    expect(loaded.meetingProposal).toEqual(action.meetingProposal);
+    expect(loaded.meetingDryRun?.status).toBe('event_created');
+    expect(loaded.meetingReminderUnavailable).toBeUndefined();
+    expect(loaded.meetingOutcomeUnavailable).toMatch(/has not been deployed/);
+
+    render(<>
+      <EmailConversationHistory threads={[]} contacts={[]} opportunities={[]} />
+      <MeetingProposalReviewCard action={loaded} canReview busy={false}
+        onDecision={vi.fn()} onSaveReminder={vi.fn()} onRecordOutcome={vi.fn()} />
+    </>);
+    expect(screen.getByText('EMAIL CONVERSATIONS')).toBeVisible();
+    expect(screen.getByText('Discovery call')).toBeVisible();
+    fireEvent.click(screen.getByText('View details and actions'));
+    expect(screen.getByText(/Meeting outcomes are unavailable because outcome storage has not been deployed/)).toBeVisible();
+    expect(screen.getByText(/Reminder preparation and correction are unavailable until meeting outcome storage can confirm/)).toBeVisible();
+    expect(screen.queryByText('No meeting outcome has been recorded.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Record meeting outcome' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Prepare reminder draft' })).not.toBeInTheDocument();
+
+    cleanup();
+    render(<MeetingProposalReviewCard action={{ ...loaded, meetingReminderDraft: reminder }}
+      canReview busy={false} onDecision={vi.fn()} onSaveReminder={vi.fn()} onRecordOutcome={vi.fn()} />);
+    fireEvent.click(screen.getByText('View details and actions'));
+    expect(screen.getByText(reminder.body)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Correct reminder draft' })).not.toBeInTheDocument();
+  });
+
+  it('reports both optional stores independently when both tables are missing', async () => {
+    supabaseQueryState.results.meeting_reminder_drafts = {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message: "Could not find the table 'public.meeting_reminder_drafts' in the schema cache",
+      },
+    };
+    supabaseQueryState.results.meeting_outcomes = {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message: "Could not find the table 'public.meeting_outcomes' in the schema cache",
+      },
+    };
+
+    const [loaded] = await browserSupabasePreparedWorkGateway.loadPendingActions!(workspaceId);
+
+    expect(loaded.meetingReminderUnavailable).toMatch(/reminder storage has not been deployed/);
+    expect(loaded.meetingOutcomeUnavailable).toMatch(/outcome storage has not been deployed/);
+    render(<MeetingProposalReviewCard action={loaded} canReview busy={false}
+      onDecision={vi.fn()} onSaveReminder={vi.fn()} onRecordOutcome={vi.fn()} />);
+    fireEvent.click(screen.getByText('View details and actions'));
+    expect(screen.getByText(/Reminder drafts are unavailable because reminder storage has not been deployed/)).toBeVisible();
+    expect(screen.getByText(/Meeting outcomes are unavailable because outcome storage has not been deployed/)).toBeVisible();
+    expect(screen.queryByText('No reminder draft has been prepared.')).not.toBeInTheDocument();
+    expect(screen.queryByText('No meeting outcome has been recorded.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /reminder draft/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /meeting outcome/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps email history collapsed but visibly accessible and usable', () => {
+    const { container } = render(<EmailConversationHistory threads={[{
+      id: 'thread-1',
+      workspaceId,
+      subject: 'Project update',
+      lastMessageAt: '2026-10-09T12:00:00.000Z',
+      messages: [{
+        id: 'message-1',
+        workspaceId,
+        threadId: 'thread-1',
+        direction: 'inbound',
+        senderEmail: 'customer@example.test',
+        recipientEmails: ['team@example.test'],
+        subject: 'Project update',
+        bodyText: 'The customer confirmed the next step.',
+        communicationAt: '2026-10-09T12:00:00.000Z',
+      }],
+    }]} contacts={[]} opportunities={[]} />);
+
+    const emailDisclosure = screen.getByText('EMAIL CONVERSATIONS').closest('details');
+    expect(emailDisclosure).not.toHaveAttribute('open');
+    expect(screen.getByText('READ-ONLY HISTORY')).toBeVisible();
+    expect(container.querySelector('article h3')).not.toBeVisible();
+
+    fireEvent.click(screen.getByText('View email history'));
+    expect(emailDisclosure).toHaveAttribute('open');
+    expect(container.querySelector('article h3')).toBeVisible();
+    fireEvent.click(screen.getByText('View conversation (1)'));
+    expect(screen.getByText('INBOUND')).toBeVisible();
+  });
+
+  it('loads saved reminder drafts when reminder storage is available', async () => {
+    supabaseQueryState.results.meeting_reminder_drafts = {
+      data: [{
+        id: reminder.id,
+        workspace_id: workspaceId,
+        meeting_proposal_id: proposalId,
+        body: reminder.body,
+        prepared_by_user_id: actorId,
+        version: reminder.version,
+        created_at: reminder.createdAt,
+        updated_at: reminder.updatedAt,
+      }],
+      error: null,
+    };
+
+    const [loaded] = await browserSupabasePreparedWorkGateway.loadPendingActions!(workspaceId);
+
+    expect(loaded.meetingReminderDraft).toEqual(reminder);
+    expect(loaded.meetingReminderUnavailable).toBeUndefined();
+    expect(loaded.meetingOutcomeUnavailable).toBeUndefined();
+  });
+
+  it('retains accurate errors for unrelated pending-action query failures', async () => {
+    supabaseQueryState.results.rev_actions = {
+      data: null,
+      error: { message: 'REV actions could not be loaded.' },
+    };
+
+    await expect(
+      browserSupabasePreparedWorkGateway.loadPendingActions!(workspaceId),
+    ).rejects.toThrow('REV actions could not be loaded.');
   });
 
   it('keeps an existing draft readable but disables editing after start or outcome', () => {

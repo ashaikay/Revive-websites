@@ -138,7 +138,9 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   const proposal = action.meetingProposal;
   const displayedExecution = executionResult ?? action.meetingDryRun;
   const presentation = displayedExecution ? executionPresentation(displayedExecution) : undefined;
-  const reminderEditingAvailable = displayedExecution?.status === 'event_created'
+  const reminderEditingAvailable = !action.meetingReminderUnavailable
+    && !action.meetingOutcomeUnavailable
+    && displayedExecution?.status === 'event_created'
     && Date.parse(proposal?.startAt ?? '') > Date.now()
     && !action.meetingOutcome;
 
@@ -196,7 +198,11 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
 
       <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Meeting reminder draft">
         <p className="text-sm font-medium text-neutral-900">Meeting reminder draft</p>
-        {action.meetingReminderDraft ? (
+        {action.meetingReminderUnavailable ? (
+          <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+            {action.meetingReminderUnavailable}
+          </p>
+        ) : action.meetingReminderDraft ? (
           <div className="mt-2 rounded border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
             <p className="whitespace-pre-wrap break-words">{action.meetingReminderDraft.body}</p>
             <p className="mt-2 text-xs font-medium text-neutral-600">Reminder draft saved. Delivery is not enabled.</p>
@@ -209,8 +215,14 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
             {action.meetingReminderDraft ? 'Correct reminder draft' : 'Prepare reminder draft'}
           </button>
         )}
-        {action.meetingReminderDraft && !reminderEditingAvailable && (
+        {!action.meetingReminderUnavailable && !action.meetingOutcomeUnavailable
+          && action.meetingReminderDraft && !reminderEditingAvailable && (
           <p className="mt-2 text-xs text-neutral-500">Editing is unavailable after the meeting starts or an explicit outcome is recorded.</p>
+        )}
+        {!action.meetingReminderUnavailable && action.meetingOutcomeUnavailable && (
+          <p className="mt-2 text-xs text-amber-800">
+            Reminder preparation and correction are unavailable until meeting outcome storage can confirm that no outcome exists.
+          </p>
         )}
         {showReminderForm && (
           <form className="mt-3 grid gap-3 rounded border border-neutral-200 bg-neutral-50 p-3" onSubmit={(event) => {
@@ -240,7 +252,11 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
 
       <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Meeting outcome">
         <p className="text-sm font-medium text-neutral-900">Meeting outcome</p>
-        {action.meetingOutcome ? (
+        {action.meetingOutcomeUnavailable ? (
+          <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+            {action.meetingOutcomeUnavailable}
+          </p>
+        ) : action.meetingOutcome ? (
           <div className="mt-2 rounded border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
             <p><strong>{MEETING_OUTCOME_LABELS[action.meetingOutcome.outcomeType]}</strong> — recorded {new Date(action.meetingOutcome.occurredAt).toLocaleString('en-GB')}</p>
             <p className="mt-1 whitespace-pre-wrap break-words">{action.meetingOutcome.summary}</p>
@@ -249,12 +265,13 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         ) : (
           <p className="mt-1 text-sm text-neutral-600">No meeting outcome has been recorded.</p>
         )}
-        {canReview && action.meetingProposalId && ['approved', 'completed'].includes(action.status) && onRecordOutcome && !showOutcomeForm && (
+        {!action.meetingOutcomeUnavailable && canReview && action.meetingProposalId
+          && ['approved', 'completed'].includes(action.status) && onRecordOutcome && !showOutcomeForm && (
           <button type="button" className="btn-secondary mt-3 text-sm" disabled={outcomeBusy} onClick={() => setShowOutcomeForm(true)}>
             {action.meetingOutcome ? 'Correct meeting outcome' : 'Record meeting outcome'}
           </button>
         )}
-        {showOutcomeForm && (
+        {!action.meetingOutcomeUnavailable && showOutcomeForm && (
           <form className="mt-3 grid gap-3 rounded border border-neutral-200 bg-neutral-50 p-3" onSubmit={(event) => {
             event.preventDefault();
             void onRecordOutcome?.({

@@ -399,48 +399,55 @@ export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> =
 
   return (
     <section aria-labelledby="email-conversations-heading" className="rev-motion-in">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h2 id="email-conversations-heading" className="text-xl font-bold text-neutral-900">
-          EMAIL CONVERSATIONS
-        </h2>
-        <span className="badge-neutral">READ-ONLY HISTORY</span>
-      </div>
-      {threads.length === 0 ? (
-        <div className="card p-6 text-center text-neutral-600">
-          No email conversation history is recorded for this workspace.
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          <section aria-labelledby="customer-conversations-heading">
-            <h3 id="customer-conversations-heading" className="text-lg font-semibold text-neutral-900 mb-3">
-              CUSTOMER CONVERSATIONS
-            </h3>
-            {triage.customer.length > 0 ? (
-              <EmailThreadList threads={triage.customer} contacts={contacts} opportunities={opportunities} />
-            ) : (
-              <p className="text-sm text-neutral-600">No customer conversations are recorded for this workspace.</p>
-            )}
-          </section>
-          <section aria-labelledby="needs-review-heading">
-            <h3 id="needs-review-heading" className="text-lg font-semibold text-neutral-900 mb-3">NEEDS REVIEW</h3>
-            {triage.needs_review.length > 0 ? (
-              <EmailThreadList threads={triage.needs_review} contacts={contacts} opportunities={opportunities} />
-            ) : (
-              <p className="text-sm text-neutral-600">No unlinked conversations need review.</p>
-            )}
-          </section>
-          {triage.automated.length > 0 && (
-            <details>
-              <summary className="cursor-pointer text-lg font-semibold text-neutral-900">
-                AUTOMATED MAIL ({triage.automated.length})
-              </summary>
-              <div className="mt-3">
-                <EmailThreadList threads={triage.automated} contacts={contacts} opportunities={opportunities} />
-              </div>
-            </details>
+      <details className="card overflow-hidden">
+        <summary className="cursor-pointer p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500">
+          <div className="inline-flex w-full flex-wrap items-center justify-between gap-2">
+            <h2 id="email-conversations-heading" className="text-xl font-bold text-neutral-900">
+              EMAIL CONVERSATIONS
+            </h2>
+            <span className="badge-neutral">READ-ONLY HISTORY</span>
+          </div>
+          <span className="mt-2 inline-block text-xs font-medium text-primary-700">View email history</span>
+        </summary>
+        <div className="border-t border-neutral-200 p-4">
+          {threads.length === 0 ? (
+            <div className="p-2 text-center text-neutral-600">
+              No email conversation history is recorded for this workspace.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              <section aria-labelledby="customer-conversations-heading">
+                <h3 id="customer-conversations-heading" className="text-lg font-semibold text-neutral-900 mb-3">
+                  CUSTOMER CONVERSATIONS
+                </h3>
+                {triage.customer.length > 0 ? (
+                  <EmailThreadList threads={triage.customer} contacts={contacts} opportunities={opportunities} />
+                ) : (
+                  <p className="text-sm text-neutral-600">No customer conversations are recorded for this workspace.</p>
+                )}
+              </section>
+              <section aria-labelledby="needs-review-heading">
+                <h3 id="needs-review-heading" className="text-lg font-semibold text-neutral-900 mb-3">NEEDS REVIEW</h3>
+                {triage.needs_review.length > 0 ? (
+                  <EmailThreadList threads={triage.needs_review} contacts={contacts} opportunities={opportunities} />
+                ) : (
+                  <p className="text-sm text-neutral-600">No unlinked conversations need review.</p>
+                )}
+              </section>
+              {triage.automated.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer text-lg font-semibold text-neutral-900">
+                    AUTOMATED MAIL ({triage.automated.length})
+                  </summary>
+                  <div className="mt-3">
+                    <EmailThreadList threads={triage.automated} contacts={contacts} opportunities={opportunities} />
+                  </div>
+                </details>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </details>
     </section>
   );
 };
