@@ -113,7 +113,7 @@ describe('Phase 5J durable supervised meeting proposal submission', () => {
   it('keeps the new proposal form owner/admin-scoped and reloads only after successful submission', async () => {
     const workspace = readFileSync(new URL('../components/REVInterface.tsx', import.meta.url), 'utf8');
     expect(workspace).toContain('canSubmitProposal={canReview}');
-    expect(workspace).toContain('onProposalSubmitted={reload}');
+    expect(workspace).toContain('onProposalSubmitted={async () => { await reload(); }}');
 
     const calls: string[] = [];
     const submit = vi.fn().mockImplementation(async () => {

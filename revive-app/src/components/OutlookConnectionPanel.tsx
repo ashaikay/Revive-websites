@@ -123,9 +123,9 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
       setMessage('Disconnect could not be confirmed. Check the connection status before trying again.');
     }finally{setBusy(false);locked.current=false;}
   };
-  return <section className="max-w-4xl mx-auto card p-6 my-6">
-    <h2 className="text-lg font-semibold">{callback?'Complete Outlook authorization':'Outlook calendar connection'}</h2>
-    <p className="text-sm text-neutral-600 my-3">Connect calendar read access. This does not enable bookings or send invitations.</p>
+  return <section aria-labelledby="outlook-connection-heading" className="max-w-5xl mx-auto card border border-neutral-200 p-5 sm:p-6 my-6">
+    <h2 id="outlook-connection-heading" className="text-lg font-semibold">{callback?'Complete Outlook authorization':'OUTLOOK CONNECTION'}</h2>
+    <p className="text-sm text-neutral-600 my-3">Connect a business Outlook calendar for read-only availability. Calendar-change permission is requested separately when needed; bookings remain disabled.</p>
     {callback&&message&&<p role="status" className="my-3">{message}</p>}
     {callback&&!done&&<button className="btn-secondary" disabled={busy} onClick={()=>void execute()}>{busy?'Please wait...':'SAVE OUTLOOK AUTHORIZATION'}</button>}
     {callback?<a className="block mt-4" href="/#rev">Return to REV</a>:metadataStatus==='loading'?<p className="my-3" role="status">Loading Outlook connections...</p>:metadataStatus==='error'?<div className="my-3"><p role="alert">{message}</p><button className="btn-secondary mt-3" onClick={()=>void reloadMetadata()}>RETRY LOADING CONNECTIONS</button></div>:<>

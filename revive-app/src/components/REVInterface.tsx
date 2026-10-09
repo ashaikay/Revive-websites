@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { GoalService } from '@/services/goalService';
@@ -19,7 +19,12 @@ import { requestLiveEmailExecution, type LiveEmailExecutionResult } from '@/serv
 import { requestInboundEmailRead, type InboundEmailReadResult } from '@/services/inboundEmailClient';
 import { MeetingProposalReviewCard } from '@/components/MeetingProposalReviewCard';
 import { CalendarAvailabilityPanel } from '@/components/CalendarAvailabilityPanel';
-import { requestMeetingExecution, type MeetingExecutionResult } from '@/services/meetingExecutionClient';
+import {
+  meetingExecutionFailureMessage,
+  requestMeetingExecution,
+  type MeetingExecutionIntent,
+  type MeetingExecutionResult,
+} from '@/services/meetingExecutionClient';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -295,7 +300,7 @@ const EmailThreadList: React.FC<EmailThreadListProps> = ({ threads, contacts, op
         : undefined;
       return (
         <article key={thread.id} className="card divide-y divide-neutral-100 overflow-hidden">
-          <header className="p-5">
+          <header className="p-3 sm:p-4">
             <h3 className="font-semibold text-neutral-900">
               {thread.subject ?? 'Email conversation'}
             </h3>
@@ -311,21 +316,24 @@ const EmailThreadList: React.FC<EmailThreadListProps> = ({ threads, contacts, op
           </header>
           <div className="divide-y divide-neutral-100">
             {thread.messages.map((message) => (
-              <div key={message.id} className="p-5 text-sm text-neutral-700">
-                <p className="font-semibold text-neutral-900">
+              <div key={message.id} className="p-3 sm:p-4 text-sm text-neutral-700">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <p className="font-semibold text-neutral-900">
                   {message.direction === 'inbound' ? 'INBOUND' : 'OUTBOUND'}
+                  </p>
+                  <p className="text-xs text-neutral-500">{formatEmailTimestamp(message.communicationAt)}</p>
+                </div>
+                <p className="mt-1 text-xs text-neutral-600">
+                  {message.senderEmail} {'→'} {message.recipientEmails.join(', ') || 'No recipients recorded'}
                 </p>
-                <p className="mt-2">From: {message.senderEmail}</p>
-                <p>To: {message.recipientEmails.join(', ') || 'No recipients recorded'}</p>
-                <p>Date: {formatEmailTimestamp(message.communicationAt)}</p>
-                {message.subject && <p className="mt-2 font-medium">Subject: {message.subject}</p>}
+                {message.subject && <p className="mt-2 font-medium">{message.subject}</p>}
                 {message.bodyText && (
                   <>
                     <p className="mt-2">{emailBodyPreview(message.bodyText)}</p>
                     {message.bodyText.replace(/\s+/g, ' ').trim().length > 240 && (
-                      <details className="mt-3">
-                        <summary className="cursor-pointer font-medium text-primary-700">
-                          View full message
+                      <details className="mt-2">
+                        <summary className="cursor-pointer font-medium text-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+                          Read full message
                         </summary>
                         <p className="mt-2 max-h-80 overflow-y-auto break-words whitespace-pre-wrap rounded border border-neutral-200 bg-neutral-50 p-3">
                           {message.bodyText}
@@ -358,6 +366,7 @@ export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> =
         </h2>
         <span className="badge-neutral">READ-ONLY HISTORY</span>
       </div>
+      <p className="text-sm text-neutral-600 -mt-2 mb-3">Read a short preview or expand a message. This history cannot send or reply to email.</p>
       {threads.length === 0 ? (
         <div className="card p-6 text-center text-neutral-600">
           No email conversation history is recorded for this workspace.
@@ -877,7 +886,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [inboundResult, setInboundResult] = useState<InboundEmailReadResult | null>(null);
   const [inboundError, setInboundError] = useState<string | null>(null);
   const [checkingInbox, setCheckingInbox] = useState(false);
-  const [meetingDecisionNotice, setMeetingDecisionNotice] = useState<{ title: string; decision: 'approved' | 'rejected' } | null>(null);
+  const [meetingDecisionFeedback, setMeetingDecisionFeedback] = useState<Record<string, 'approved' | 'rejected'>>({});
+  const [meetingDecisionErrors, setMeetingDecisionErrors] = useState<Record<string, string>>({});
   const [meetingExecutionBusyId, setMeetingExecutionBusyId] = useState<string | null>(null);
   const [meetingExecutionErrors, setMeetingExecutionErrors] = useState<Record<string, string>>({});
   const [meetingExecutionResults, setMeetingExecutionResults] = useState<Record<string, MeetingExecutionResult>>({});
@@ -921,7 +931,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     }
   };
 
-  const reload = async () => {
+  const reload = async (): Promise<LivePendingAction[]> => {
     const [nextContext, nextPrepared, nextPendingActions, nextEmailThreads] = await Promise.all([
       repository.loadContext(workspaceId, currentUser.id),
       repository.list(workspaceId),
@@ -932,6 +942,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     setPreparedFollowUps(nextPrepared);
     setPendingActions(nextPendingActions);
     setEmailThreads(nextEmailThreads);
+    return nextPendingActions;
   };
 
   useEffect(() => {
@@ -969,43 +980,75 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
     discoveryCandidates: [],
   }) : undefined;
   const canReview = context?.membership?.role === 'owner' || context?.membership?.role === 'admin';
+  const meetingActions = pendingActions.filter((action) => action.actionType === 'meeting_proposal');
+  const approvalActions = pendingActions.filter((action) => action.actionType !== 'meeting_proposal');
   const hasPendingActions = pendingActions.some((action) => action.status === 'awaiting_approval');
 
-  const handleMeetingDryRun = async (action: LivePendingAction) => {
-    if (meetingExecutionBusyId || meetingExecutionResults[action.id] || action.meetingDryRun) return;
+  const handleMeetingExecution = async (action: LivePendingAction, intent: MeetingExecutionIntent) => {
+    const currentResult = meetingExecutionResults[action.id] ?? action.meetingDryRun;
+    if (meetingExecutionBusyId
+      || (currentResult && !(intent.intent === 'live' && currentResult.status === 'provider_disabled'))) return;
     setMeetingExecutionBusyId(action.id);
     setMeetingExecutionErrors((current) => ({ ...current, [action.id]: '' }));
     try {
-      const result = await requestMeetingExecution(workspaceId, action.id, { intent: 'dry_run' });
+      const result = await requestMeetingExecution(workspaceId, action.id, intent);
       setMeetingExecutionResults((current) => ({ ...current, [action.id]: result }));
     } catch (executionError) {
-      setMeetingExecutionErrors((current) => ({
-        ...current,
-        [action.id]: executionError instanceof Error ? executionError.message : 'Meeting dry-run reservation failed.',
-      }));
+      let message = meetingExecutionFailureMessage(executionError, intent);
+      try {
+        const refreshedActions = await reload();
+        const durableResult = refreshedActions.find((item) => item.id === action.id)?.meetingDryRun;
+        if (durableResult) {
+          setMeetingExecutionResults((current) => ({ ...current, [action.id]: durableResult }));
+          return;
+        }
+      } catch {
+        message += ' The saved status could not be refreshed; contact an administrator before taking further action.';
+      }
+      setMeetingExecutionErrors((current) => ({ ...current, [action.id]: message }));
     } finally {
       setMeetingExecutionBusyId(null);
     }
   };
+
+  const handleMeetingDryRun = (action: LivePendingAction) =>
+    handleMeetingExecution(action, { intent: 'dry_run' });
 
   const handleMeetingLiveExecution = async (action: LivePendingAction) => {
     const currentResult = meetingExecutionResults[action.id];
     if (meetingExecutionBusyId || (currentResult && currentResult.status !== 'provider_disabled')) return;
-    setMeetingExecutionBusyId(action.id);
+    if (action.meetingDryRun && action.meetingDryRun.status !== 'provider_disabled') return;
     setMeetingExecutionErrors((current) => ({ ...current, [action.id]: '' }));
+    await handleMeetingExecution(action, { intent: 'live', confirmLiveBooking: true });
+  };
+
+  const handleMeetingDecision = async (action: LivePendingAction, decision: 'approved' | 'rejected') => {
+    if (busyId) return;
+    setBusyId(action.id);
+    setMeetingDecisionErrors((current) => ({ ...current, [action.id]: '' }));
     try {
-      const result = await requestMeetingExecution(workspaceId, action.id,
-        { intent: 'live', confirmLiveBooking: true });
-      setMeetingExecutionResults((current) => ({ ...current, [action.id]: result }));
-    } catch (executionError) {
-      setMeetingExecutionErrors((current) => ({
+      await repository.decidePendingAction(action, decision);
+      await reload();
+      setMeetingDecisionFeedback((current) => ({ ...current, [action.id]: decision }));
+      setError(null);
+    } catch {
+      setMeetingDecisionErrors((current) => ({
         ...current,
-        [action.id]: executionError instanceof Error ? executionError.message : 'Live meeting execution failed.',
+        [action.id]: 'REV could not confirm this approval decision. Refresh the page to check its status before trying again.',
       }));
     } finally {
-      setMeetingExecutionBusyId(null);
+      setBusyId(null);
     }
   };
+
+  const clearMeetingDecisionFeedback = useCallback((actionId: string) => {
+    setMeetingDecisionFeedback((current) => {
+      if (!(actionId in current)) return current;
+      const next = { ...current };
+      delete next[actionId];
+      return next;
+    });
+  }, []);
 
   const runChange = async (id: string, operation: () => Promise<unknown>): Promise<boolean> => {
     setBusyId(id);
@@ -1082,29 +1125,13 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
         )}
       </section>
 
-      {!loading && pendingActions.length > 0 && (
+      {!loading && approvalActions.length > 0 && (
         <section aria-labelledby="live-actions-heading" className="rev-motion-in">
           <h2 id="live-actions-heading" className="text-xl font-bold text-neutral-900 mb-4">
-            {hasPendingActions ? 'REV NEEDS YOUR APPROVAL' : 'APPROVED MEETING PROPOSALS'}
+            {hasPendingActions ? 'REV NEEDS YOUR APPROVAL' : 'APPROVALS'}
           </h2>
           <div className="card divide-y divide-neutral-100">
-            {pendingActions.map((action) => action.actionType === 'meeting_proposal' ? (
-              <MeetingProposalReviewCard
-                key={action.id}
-                action={action}
-                canReview={canReview}
-                busy={busyId === action.id}
-                executionBusy={meetingExecutionBusyId === action.id}
-                executionError={meetingExecutionErrors[action.id]}
-                executionResult={meetingExecutionResults[action.id]}
-                onRequestDryRun={() => handleMeetingDryRun(action)}
-                onRequestLive={() => handleMeetingLiveExecution(action)}
-                onDecision={async (decision) => {
-                  const succeeded = await runChange(action.id, () => repository.decidePendingAction(action, decision));
-                  if (succeeded) setMeetingDecisionNotice({ title: action.title, decision });
-                }}
-              />
-            ) : (
+            {approvalActions.map((action) => (
               <div key={action.id} className="p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -1154,14 +1181,6 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
         </section>
       )}
 
-      {meetingDecisionNotice && (
-        <div className="card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="status">
-          <p className="font-semibold">{meetingDecisionNotice.decision === 'approved' ? 'APPROVED — NOT BOOKED' : 'REJECTED — NOT BOOKED'}</p>
-          <p className="mt-1">{meetingDecisionNotice.title}</p>
-          <p>No calendar event, invitation, email or provider action has occurred.</p>
-        </div>
-      )}
-
       {error && <div role="alert" className="card p-4 border border-red-200 bg-red-50 text-sm text-red-800">{error}</div>}
       {loading && <LiveEmptySection title="PREPARED WORK" message="Loading workspace-scoped REV work..." />}
 
@@ -1181,8 +1200,36 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
           <CalendarAvailabilityPanel
             workspaceId={workspaceId}
             canSubmitProposal={canReview}
-            onProposalSubmitted={reload}
+            onProposalSubmitted={async () => { await reload(); }}
           />
+
+          {meetingActions.length > 0 && (
+            <section aria-labelledby="meeting-proposals-heading" className="rev-motion-in">
+              <div className="mb-4">
+                <h2 id="meeting-proposals-heading" className="text-xl font-bold text-neutral-900">MEETING PROPOSALS &amp; RESULTS</h2>
+                <p className="text-sm text-neutral-600 mt-1">Review each proposal here. Approval is not a booking; any saved Outlook result remains visible on its proposal.</p>
+              </div>
+              <div className="card divide-y divide-neutral-100">
+                {meetingActions.map((action) => (
+                  <MeetingProposalReviewCard
+                    key={action.id}
+                    action={action}
+                    canReview={canReview}
+                    busy={busyId === action.id}
+                    executionBusy={meetingExecutionBusyId === action.id}
+                    executionError={meetingExecutionErrors[action.id]}
+                    executionResult={meetingExecutionResults[action.id]}
+                    decisionError={meetingDecisionErrors[action.id]}
+                    decisionFeedback={meetingDecisionFeedback[action.id]}
+                    onClearDecisionFeedback={clearMeetingDecisionFeedback}
+                    onRequestDryRun={() => handleMeetingDryRun(action)}
+                    onRequestLive={() => handleMeetingLiveExecution(action)}
+                    onDecision={(decision) => handleMeetingDecision(action, decision)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           <section aria-labelledby="live-recovery-heading" className="rev-motion-in">
             <h2 id="live-recovery-heading" className="text-xl font-bold text-neutral-900 mb-4">RECOVERY OPPORTUNITIES</h2>

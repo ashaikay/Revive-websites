@@ -1,22 +1,33 @@
 # Current Handover — Customer Outlook Verified (2026-10-09)
 
+## Controlled booking and invitation receipt (user-verified, 2026-10-09)
+
+- “REV customer Outlook booking test” was created in `info@revivementors.com` → Calendar for 13:30–14:00 Europe/London.
+- Action: `bce04db3-73c4-49e4-8f29-c74cf49a9fd0`; execution: `88f82d82-91b3-420a-bb58-b0b0c55e4314`.
+- REV recorded success and provider acceptance; the user opened the event. The invitation was found in `mike.blackwood11@gmail.com` Spam, received at 02:58.
+- This verifies event creation and recipient receipt for this controlled test only. Do not generalize invitation delivery to other meetings.
+- The live provider gate is disabled now. No further provider action is authorized by this checkpoint.
+
+The REV layout tidy-up is implemented locally: compact expandable email previews; distinct Outlook connection, availability, proposal and execution-result sections; concise instructions; focused feedback beside meeting actions; and five-second dismissal for routine approval feedback. Durable execution results, errors and uncertain-outcome guidance remain. Booking and retry safeguards were not changed. The mounted regression is registered in `.github/workflows/rev-meeting-verify.yml`.
+
+**Local verification:** Six focused UI suites passed (77/77 tests), including the new mounted regressions. `npm run build` passed; Vite emitted its existing advisory that the generated JavaScript chunk exceeds 500 kB. `git diff --check` passed. No provider call, booking, resend, gate change, hosted change, deployment or commit was made.
+
 **Latest manual check (user-reported):** The new customer Outlook account completed discovery and calendar selection. Availability returned slots for 9 October 2026. Meeting proposal “orbis” was approved but not booked; no event was created. Commit `abf597a` (“Use workspace timezone for calendar availability default date”) is recorded, and CI was reported green.
 
 The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check. Their exact underlying causes were not all proven; do not claim otherwise. The workspace-timezone date fix addresses a demonstrated local-date boundary defect but does not prove that it caused every earlier empty result or credential-load failure.
 
 **Safety/release state:** Live calendar booking remains disabled. “Approved but not booked” is not permission to create an event. Continue customer Outlook verification, then the remaining Phase 5 calendar MVP roadmap, preserving the feature scope freeze and CI release gates. Worker job-brief uploads and assignment emails remain planned, not implemented: private manager-uploaded briefs; recipient email separate from REV login; confirmed-assignment details and a secure brief link using a separately authorized organization sending account; duplicate-send protection; sent/failed/not-sent status; and assignment-change/cancellation updates. Calendar-read consent does not grant email-sending authority.
 
-## REV layout tidy-up — queued after booking logic passes CI (2026-10-09)
+## REV layout tidy-up — implemented locally (2026-10-09)
 
-Once the selected-calendar booking logic and its safeguards pass CI, tidy the REV layout without changing booking behavior:
+- Email conversation cards show compact previews with an accessible disclosure for full messages.
+- Outlook connection, availability, meeting proposals and execution results are visually distinct and grouped in workflow order.
+- Meeting actions have concise, business-facing instructions and immediate progress labels.
+- Approval feedback is focused beside the proposal and clears after five seconds; errors, uncertain outcomes and durable execution results remain visible.
+- Transport, malformed-response and definite pre-execution refusal outcomes are distinguished without exposing raw Edge Function errors. Uncertain live outcomes direct the user to check Outlook and do not offer another booking action.
+- The mounted regression is registered in `.github/workflows/rev-meeting-verify.yml`.
 
-- Keep email previews compact and let users expand to read full messages.
-- Make calendar and proposal sections clearer.
-- Give each action a short, plain-language instruction.
-- Place accessible progress and success feedback beside the control the user activated.
-- Dismiss routine success notes after a few seconds; keep errors, unconfirmed outcomes and retry controls visible until resolved.
-
-This is planned UI work, not implemented in the current binding slice. Live booking remains disabled; the current change does not authorize provider calls, hosted migration or deployment.
+No booking behavior or server safeguard was changed. Live booking remains disabled; this UI change does not authorize provider calls, hosted migration or deployment.
 
 ## Selected Outlook calendar binding — local slice (2026-10-09)
 

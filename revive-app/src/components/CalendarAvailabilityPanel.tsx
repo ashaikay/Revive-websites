@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  CalendarAvailabilityClientError,
   DEFAULT_AVAILABILITY_TIMEZONE,
   requestCalendarAvailability,
   type CalendarAvailabilityResult,
@@ -14,6 +15,7 @@ import {
 } from '@/services/meetingProposalService';
 import { submitMeetingProposal, type MeetingProposalSubmitter } from '@/services/meetingProposalSubmissionClient';
 import { businessDateAt, businessDateToUtcRange, formatAvailabilitySlot } from '@/utils/calendarAvailabilityTime';
+import { focusFeedback } from '@/utils/focusFeedback';
 
 export interface CalendarAvailabilityPanelProps {
   workspaceId: string;
@@ -73,6 +75,16 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
   const [submitting, setSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submittedProposal, setSubmittedProposal] = useState<SubmittedMeetingProposalState | null>(null);
+  const availabilityErrorRef = useRef<HTMLParagraphElement>(null);
+  const submissionFeedbackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (error) focusFeedback(availabilityErrorRef.current);
+  }, [error]);
+
+  useEffect(() => {
+    if (submissionError || submittedProposal) focusFeedback(submissionFeedbackRef.current);
+  }, [submissionError, submittedProposal]);
 
   const clearProposal = () => {
     setPreparedProposal(null);
@@ -112,7 +124,9 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
       setSubmittedProposal(submitted);
       setSubmissionConfirmation(false);
     } catch (submissionFailure) {
-      setSubmissionError(submissionFailure instanceof Error ? submissionFailure.message : 'Meeting proposal submission is unavailable. Your prepared proposal has been retained.');
+      setSubmissionError(submissionFailure instanceof Error && submissionFailure.name === 'MeetingProposalSubmissionClientError'
+        ? submissionFailure.message
+        : 'Proposal submission could not be confirmed. Refresh the proposal list before submitting again. Your prepared details remain here.');
     } finally {
       setSubmitting(false);
     }
@@ -136,7 +150,9 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
       }
     } catch (requestError) {
       clearSelection();
-      setError(requestError instanceof Error ? requestError.message : 'Calendar availability could not be checked safely.');
+      setError(requestError instanceof CalendarAvailabilityClientError
+        ? requestError.message
+        : 'Calendar availability could not be checked. Confirm the Outlook connection and try again. No booking was made.');
     } finally {
       setChecking(false);
     }
@@ -148,8 +164,8 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
         <h2 id="calendar-availability-heading" className="text-xl font-bold text-neutral-900">CALENDAR AVAILABILITY</h2>
         <span className="badge-neutral">READ-ONLY</span>
       </div>
-      <div className="card p-5">
-        <p className="text-sm text-neutral-700">Checks the connected business calendar for available times. No event will be created.</p>
+      <div className="card border border-neutral-200 p-4 sm:p-5">
+        <p className="text-sm text-neutral-700">Choose a date and duration to check the connected Outlook calendar. This is read-only and will not create an event.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
           <label className="grid gap-1 text-sm font-medium text-neutral-800" htmlFor="calendar-availability-date">
             Date
@@ -167,7 +183,7 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
           </button>
         </div>
         <p className="mt-3 text-xs text-neutral-500">Workspace timezone: {timezone}</p>
-        {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
+        {error && <p ref={availabilityErrorRef} className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert" tabIndex={-1}>{error}</p>}
         {checking && <p className="mt-4 text-sm text-neutral-600" role="status">Checking calendar availability...</p>}
         {result?.code === 'outside_business_hours' && <p className="mt-4 text-sm text-neutral-700" role="status">No business hours are configured for this date. Please choose a working day.</p>}
         {result?.status === 'unavailable' && result.code !== 'outside_business_hours' && <p className="mt-4 text-sm text-neutral-700" role="status">No availability can be confirmed for this request.</p>}
@@ -182,8 +198,9 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
           </div>
         )}
         {canSubmitProposal && selectedSlot && !preparedProposal && (
-          <form className="mt-4 grid gap-3 border border-neutral-200 p-4" onSubmit={handlePrepareProposal} noValidate>
+          <form className="mt-4 grid gap-3 rounded border border-neutral-200 bg-white p-4" onSubmit={handlePrepareProposal} noValidate>
             <h3 className="text-base font-semibold text-neutral-900">NEW MEETING PROPOSAL</h3>
+            <p className="text-sm text-neutral-600">Prepare these details for owner approval. Submitting does not book the meeting.</p>
             <label className="grid gap-1 text-sm font-medium text-neutral-800" htmlFor="meeting-proposal-title">
               Meeting title
               <input id="meeting-proposal-title" className="input-field" value={proposalInput.title} onChange={(event) => updateProposalInput('title', event.target.value)} aria-invalid={Boolean(proposalErrors.title)} aria-describedby={proposalErrors.title ? 'meeting-proposal-title-error' : undefined} />
@@ -217,7 +234,7 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
           </form>
         )}
         {canSubmitProposal && preparedProposal && !submittedProposal && (
-          <div className="mt-4 border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900" role="status">
+          <div ref={submissionFeedbackRef} className="mt-4 rounded border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-900" role="status" tabIndex={-1}>
             <p className="font-semibold">PREPARED — NOT BOOKED</p>
             <p className="mt-1">{preparedProposal.title}</p>
             <p>{preparedProposal.attendeeEmail}</p>
@@ -232,11 +249,11 @@ export const CalendarAvailabilityPanel: React.FC<CalendarAvailabilityPanelProps>
               <button className="btn-ghost text-sm" type="button" onClick={clearProposal}>DISCARD PROPOSAL</button>
               <button className="btn-primary text-sm" type="button" disabled={submitting} onClick={() => setSubmissionConfirmation(true)}>SUBMIT FOR OWNER APPROVAL</button>
             </div>
-            {submissionConfirmation && <div className="mt-3 border border-neutral-200 bg-white p-3 text-neutral-800"><p>Submit this meeting proposal for owner approval? No calendar event or invitation will be created.</p><button className="btn-primary mt-3 text-sm" type="button" disabled={submitting} onClick={handleConfirmSubmission}>{submitting ? 'SUBMITTING...' : 'CONFIRM SUBMISSION'}</button></div>}
-            {submissionError && <p className="mt-3 text-sm text-red-700" role="alert">{submissionError}</p>}
+            {submissionConfirmation && <div className="mt-3 rounded border border-neutral-200 bg-white p-3 text-neutral-800"><p>Submit this meeting proposal for owner approval? No calendar event or invitation will be created.</p><button className="btn-primary mt-3 text-sm" type="button" disabled={submitting} aria-busy={submitting || undefined} onClick={handleConfirmSubmission}>{submitting ? 'SUBMITTING PROPOSAL…' : 'CONFIRM SUBMISSION'}</button>{submitting&&<p className="mt-2 text-sm" role="status">Submitting proposal for owner approval…</p>}</div>}
+            {submissionError && <div ref={submissionFeedbackRef} className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert" tabIndex={-1}><p>{submissionError}</p></div>}
           </div>
         )}
-        {canSubmitProposal && submittedProposal && <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status"><p className="font-semibold">{submittedProposal.actionStatus === 'awaiting_approval' ? 'AWAITING OWNER APPROVAL — NOT BOOKED' : 'MEETING PROPOSAL STATUS — NOT BOOKED'}</p><p className="mt-1">Action state: {submittedProposal.actionStatus.replace(/_/g, ' ')}.</p><p>Execution state: {submittedProposal.executionStatus.replace(/_/g, ' ')}.</p><p className="mt-1">No calendar event or invitation has been created.</p></div>}
+        {canSubmitProposal && submittedProposal && <div ref={submissionFeedbackRef} className="mt-4 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status" tabIndex={-1}><p className="font-semibold">{submittedProposal.actionStatus === 'awaiting_approval' ? 'AWAITING OWNER APPROVAL — NOT BOOKED' : 'MEETING PROPOSAL STATUS — NOT BOOKED'}</p><p className="mt-1">The proposal has been saved for review. No calendar event or invitation has been created.</p></div>}
         {result?.slots.length ? (
           <ul className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Available times">
             {result.slots.map((slot) => {

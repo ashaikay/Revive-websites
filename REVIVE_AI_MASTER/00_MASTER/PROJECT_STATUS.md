@@ -1,5 +1,13 @@
 ## Current Checkpoint — Customer Outlook Verified (2026-10-09)
 
+## Controlled Outlook booking and invitation receipt (user-verified)
+
+On 9 October 2026, the user verified that “REV customer Outlook booking test” was created in `info@revivementors.com` → Calendar for 13:30–14:00 Europe/London. The related action was `bce04db3-73c4-49e4-8f29-c74cf49a9fd0` and execution was `88f82d82-91b3-420a-bb58-b0b0c55e4314`. REV recorded successful execution and Microsoft acceptance; the user opened the Outlook event. The invitation was found in `mike.blackwood11@gmail.com` Spam, received at 02:58.
+
+This is evidence only for that controlled test. It does not establish invitation delivery for other meetings. The live provider gate is disabled now; this checkpoint does not authorize another booking, resend, provider call, deployment or gate change.
+
+The planned REV layout tidy-up is now implemented locally: compact expandable email previews, clearer Outlook/availability/proposal/result grouping, plain-language action guidance, and focused adjacent progress/results. Routine approval feedback dismisses after five seconds; uncertain booking guidance and durable execution results remain visible. The booking gate and execution safeguards were not changed.
+
 **User-reported manual verification:** The new Outlook account successfully completed discovery and calendar selection; availability returned slots for 9 October 2026. Meeting proposal “orbis” is approved but not booked, and no event was created. Commit `abf597a` (“Use workspace timezone for calendar availability default date”) is recorded; CI was reported green.
 
 The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check, but their exact causes were not all proven. The timezone date fix addresses a demonstrated local-date boundary defect; it does not establish that this defect explains every earlier failure.

@@ -24,7 +24,7 @@ function statusOf(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 export async function submitMeetingProposal(proposal: PreparedMeetingProposal, workspaceId: string): Promise<MeetingProposalSubmissionResult> {
-  if (!supabaseClient) throw clientError('Meeting proposal submission is not configured.');
+  if (!supabaseClient) throw clientError('Meeting proposal submission is unavailable in this workspace.');
   const { data, error } = await supabaseClient.functions.invoke('rev-meeting-proposal-submit', {
     body: { workspaceId, title: proposal.title, attendeeEmail: proposal.attendeeEmail, startAt: proposal.startAt, endAt: proposal.endAt, timezone: proposal.timezone, meetingMethod: proposal.meetingMethod, locationDetails: proposal.locationDetails, notes: proposal.notes },
   });

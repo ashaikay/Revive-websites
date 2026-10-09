@@ -1,12 +1,18 @@
 # Phase 5L — Controlled Calendar Event Creation Preflight
 
-**Status:** Architecture and permission preflight only. Event creation remains disabled.
+**Status:** Architecture and permission preflight. The current live provider gate is disabled. One separately controlled booking test was user-verified on 9 October 2026 (recorded below); this preflight is not standing authorization for further event creation.
 
 ## Objective
 
 Define the only acceptable future path from an approved `meeting_proposal` to one Microsoft Graph calendar event.
 
 Phase 5L does not grant provider permissions, enable a capability, deploy code, create an event, send an invitation or alter production data.
+
+### Controlled booking evidence (user-verified, 2026-10-09)
+
+The user reported that “REV customer Outlook booking test” was created in `info@revivementors.com` → Calendar for 13:30–14:00 Europe/London. The associated action was `bce04db3-73c4-49e4-8f29-c74cf49a9fd0`; execution was `88f82d82-91b3-420a-bb58-b0b0c55e4314`. REV recorded successful execution and provider acceptance, and the user opened the Outlook event. The invitation was found in `mike.blackwood11@gmail.com` Spam, received at 02:58.
+
+This is controlled-test evidence only; it does not establish delivery for other meetings. The live provider gate is disabled now. No further provider call, event, invitation resend, gate change, hosted change or deployment is authorized by this record.
 
 ## Non-negotiable safety state
 

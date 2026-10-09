@@ -44,9 +44,9 @@ function safeErrorMessage(status: number | undefined): string {
     case 401: return 'Sign in is required to check calendar availability.';
     case 403: return 'You do not have access to this workspace calendar.';
     case 429: return 'Calendar availability is temporarily rate limited. Try again later.';
-    case 502: return 'Calendar provider authentication or availability is unavailable.';
-    case 503: return 'Calendar availability is currently disabled or unavailable. No event will be created.';
-    default: return 'Calendar availability could not be checked safely.';
+    case 502: return 'REV could not connect to Outlook to check availability. Confirm the connection and try again.';
+    case 503: return 'Outlook availability is temporarily unavailable. No booking was made.';
+    default: return 'REV could not check Outlook availability. Confirm the connection and try again. No booking was made.';
   }
 }
 
@@ -68,32 +68,32 @@ function validTimezone(value: unknown): value is string {
 
 function parseResult(data: unknown): CalendarAvailabilityResult {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+    throw new CalendarAvailabilityClientError('The available times could not be confirmed. Please check again.');
   }
   const value = data as Record<string, unknown>;
   if ((value.status !== 'available' && value.status !== 'unavailable') || !validTimezone(value.timezone) || !Array.isArray(value.slots)) {
-    throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+    throw new CalendarAvailabilityClientError('The available times could not be confirmed. Please check again.');
   }
   if (value.code !== undefined && value.code !== 'outside_business_hours') {
-    throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+    throw new CalendarAvailabilityClientError('The available times could not be confirmed. Please check again.');
   }
   const slots = value.slots.map((slot): CalendarAvailabilitySlot => {
-    if (!slot || typeof slot !== 'object') throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+    if (!slot || typeof slot !== 'object') throw new CalendarAvailabilityClientError('The available times could not be confirmed. Please check again.');
     const item = slot as Record<string, unknown>;
     if (!validUtcInstant(item.startAt) || !validUtcInstant(item.endAt)
       || Date.parse(item.startAt) >= Date.parse(item.endAt)) {
-      throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+      throw new CalendarAvailabilityClientError('The available times could not be confirmed. Please check again.');
     }
     return { startAt: item.startAt, endAt: item.endAt };
   });
   if (value.code === 'outside_business_hours' && (value.status !== 'unavailable' || slots.length !== 0)) {
-    throw new CalendarAvailabilityClientError('Calendar availability returned an invalid response.');
+    throw new CalendarAvailabilityClientError('The available times could not be confirmed. Please check again.');
   }
   return { status: value.status, slots, ...(value.code === 'outside_business_hours' ? { code: value.code } : {}), timezone: value.timezone };
 }
 
 async function invokeCalendarAvailability(body: CalendarAvailabilityRequest): Promise<InvokeResult> {
-  if (!supabaseClient) throw new CalendarAvailabilityClientError('Calendar availability is not configured.');
+  if (!supabaseClient) throw new CalendarAvailabilityClientError('REV calendar availability is not set up in this workspace. Contact an administrator.');
   return supabaseClient.functions.invoke('rev-calendar-availability', { body });
 }
 
@@ -105,7 +105,7 @@ export async function requestCalendarAvailability(
     || Date.parse(request.searchStartAt) >= Date.parse(request.searchEndAt)
     || Date.parse(request.searchEndAt) - Date.parse(request.searchStartAt) > 7 * 24 * 60 * 60 * 1000
     || (request.requestedDurationMinutes !== 30 && request.requestedDurationMinutes !== 60) || !validTimezone(request.timezone)) {
-    throw new CalendarAvailabilityClientError('Calendar availability request is invalid.');
+    throw new CalendarAvailabilityClientError('Choose a valid date and duration to check availability.');
   }
   const body: CalendarAvailabilityRequest = {
     workspaceId: request.workspaceId,

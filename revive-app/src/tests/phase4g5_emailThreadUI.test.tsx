@@ -47,7 +47,7 @@ describe('Phase 4G.5 email conversation history UI', () => {
     expect(markup).toContain('Website redesign');
     expect(markup).toContain('INBOUND');
     expect(markup).toContain('First line Second line');
-    expect(markup).not.toContain('View full message');
+    expect(markup).not.toContain('Read full message');
     expect(markup).not.toMatch(/<button[^>]*>(?:[^<]*(?:Reply|Send|Execute|Compose|Provider)[^<]*)<\/button>/i);
   });
 
@@ -67,7 +67,7 @@ describe('Phase 4G.5 email conversation history UI', () => {
     expect(emailBodyPreview(longBody)).toHaveLength(243);
     expect(emailBodyPreview(longBody)).toMatch(/\.\.\.$/);
     expect(markup).toContain(emailBodyPreview(longBody));
-    expect(markup).toContain('View full message');
+    expect(markup).toContain('Read full message');
     expect(markup).toContain('max-h-80');
     expect(markup).toContain('overflow-y-auto');
     expect(markup).toContain('break-words');

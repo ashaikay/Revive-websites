@@ -9,6 +9,8 @@ import {
   type LivePreparedWorkGateway,
 } from '@/data/supabasePreparedWorkRepository';
 import {
+  MeetingExecutionClientError,
+  meetingExecutionFailureMessage,
   requestMeetingExecution,
   type MeetingDryRunResult,
   type MeetingProviderResult,
@@ -43,14 +45,14 @@ const providerResults: MeetingProviderResult[] = [
 describe('Phase 5K supervised meeting proposal review', () => {
   it('renders the exact proposal snapshot without internal markers or mutation claims', () => {
     const markup = renderToStaticMarkup(<MeetingProposalReviewCard action={action} canReview busy={false} onDecision={vi.fn()} />);
-    expect(markup).toContain('MEETING PROPOSAL — NOT BOOKED');
+    expect(markup).toContain('NOT BOOKED — APPROVAL NEEDED');
     expect(markup).toContain('customer@example.test');
     expect(markup).toContain('Europe/London');
     expect(markup).toContain('Online');
     expect(markup).toContain('Discuss requirements.');
     expect(markup).toContain('APPROVE PROPOSAL');
     expect(markup).toContain('REJECT PROPOSAL');
-    expect(markup).toContain('Approval alone does not book an event or prove invitation delivery.');
+    expect(markup).toContain('Approval alone does not book the meeting.');
     expect(markup).not.toContain('secret-internal-fingerprint');
     expect(markup).not.toMatch(/BOOK MEETING|CREATE EVENT|SEND INVITATION/i);
   });
@@ -86,20 +88,20 @@ describe('Phase 5K supervised meeting proposal review', () => {
     const memberMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview={false} busy={false} onDecision={vi.fn()} onRequestDryRun={vi.fn()} />);
     const completedMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview busy={false} onDecision={vi.fn()} executionResult={disabledResult} onRequestDryRun={vi.fn()} />);
 
-    expect(ownerMarkup).toContain('RECORD DRY-RUN RESERVATION');
+    expect(ownerMarkup).toContain('CHECK BOOKING SETUP');
     expect(ownerMarkup).not.toContain('CREATE LIVE CALENDAR EVENT');
     expect(ownerMarkup).not.toContain('APPROVE PROPOSAL');
-    expect(busyMarkup).toMatch(/<button[^>]*disabled=""[^>]*>RECORDING\.\.\.<\/button>/);
-    expect(memberMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
+    expect(busyMarkup).toMatch(/<button[^>]*disabled=""[^>]*>CHECKING BOOKING SETUP…<\/button>/);
+    expect(memberMarkup).not.toContain('CHECK BOOKING SETUP');
     expect(memberMarkup).not.toContain('CREATE LIVE CALENDAR EVENT');
-    expect(completedMarkup).toContain('DRY RUN — NOTHING BOOKED');
+    expect(completedMarkup).toContain('BOOKING CHECK — NOTHING BOOKED');
     expect(completedMarkup).toContain('no invitation was sent');
-    expect(completedMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
+    expect(completedMarkup).not.toContain('CHECK BOOKING SETUP');
 
     const refreshedMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={{ ...approved, meetingDryRun: disabledResult }} canReview busy={false} onDecision={vi.fn()} onRequestDryRun={vi.fn()} />);
-    expect(refreshedMarkup).toContain('DRY RUN — NOTHING BOOKED');
+    expect(refreshedMarkup).toContain('BOOKING CHECK — NOTHING BOOKED');
     expect(refreshedMarkup).toContain('no invitation was sent');
-    expect(refreshedMarkup).not.toContain('RECORD DRY-RUN RESERVATION');
+    expect(refreshedMarkup).not.toContain('CHECK BOOKING SETUP');
     vi.unstubAllEnvs();
   });
 
@@ -111,7 +113,7 @@ describe('Phase 5K supervised meeting proposal review', () => {
     const memberMarkup = renderToStaticMarkup(<MeetingProposalReviewCard action={approved} canReview={false} busy={false}
       onDecision={vi.fn()} onRequestDryRun={vi.fn()} onRequestLive={vi.fn()} />);
 
-    expect(ownerMarkup).toContain('RECORD DRY-RUN RESERVATION');
+    expect(ownerMarkup).toContain('CHECK BOOKING SETUP');
     expect(ownerMarkup).toContain('CREATE LIVE CALENDAR EVENT');
     expect(memberMarkup).not.toContain('CREATE LIVE CALENDAR EVENT');
     vi.unstubAllEnvs();
@@ -146,7 +148,50 @@ describe('Phase 5K supervised meeting proposal review', () => {
       requestId, workspaceId: 'workspace-1', actionId: 'action-1', intent: 'live', confirmLiveBooking: true,
     } });
     await expect(requestMeetingExecution('workspace-1', 'action-1',
-      { intent: 'dry_run' }, liveInvoke)).rejects.toThrow(/unsafe response/);
+      { intent: 'dry_run' }, liveInvoke)).rejects.toMatchObject({ kind: 'malformed_success' });
+    vi.restoreAllMocks();
+  });
+
+  it('distinguishes a definite server refusal, transport failure and malformed success without exposing technical errors', async () => {
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
+    const refused = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({
+      data: null, error: { message: 'private server detail', context: { status: 401 } },
+    });
+    await expect(requestMeetingExecution('workspace-1', 'action-1',
+      { intent: 'live', confirmLiveBooking: true }, refused)).rejects.toMatchObject({
+      kind: 'server_refusal', status: 401,
+    });
+
+    const disconnected = vi.fn<MeetingExecutionInvoker>().mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(requestMeetingExecution('workspace-1', 'action-1',
+      { intent: 'live', confirmLiveBooking: true }, disconnected)).rejects.toMatchObject({
+      kind: 'transport_failure',
+    });
+
+    const malformed = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({ data: { status: 'event_created' }, error: null });
+    await expect(requestMeetingExecution('workspace-1', 'action-1',
+      { intent: 'live', confirmLiveBooking: true }, malformed)).rejects.toMatchObject({
+      kind: 'malformed_success',
+    });
+    expect(meetingExecutionFailureMessage(new MeetingExecutionClientError('server_refusal', 401),
+      { intent: 'live', confirmLiveBooking: true })).toContain('No booking request was accepted.');
+    expect(meetingExecutionFailureMessage(new MeetingExecutionClientError('transport_failure'),
+      { intent: 'live', confirmLiveBooking: true })).toContain('Do not retry this attempt.');
+    expect(meetingExecutionFailureMessage(new MeetingExecutionClientError('malformed_success'),
+      { intent: 'live', confirmLiveBooking: true })).toContain('The event may have been created.');
+    expect(meetingExecutionFailureMessage(new MeetingExecutionClientError('server_outcome_unknown', 403),
+      { intent: 'live', confirmLiveBooking: true })).toContain('The server could not confirm the booking result.');
+    vi.restoreAllMocks();
+  });
+
+  it('accepts a validated provider rejection from the server refusal response', async () => {
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
+    const invoke = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({
+      data: null,
+      error: { context: new Response(JSON.stringify(providerResults[1]), { status: 409 }) },
+    });
+    await expect(requestMeetingExecution('workspace-1', 'action-1',
+      { intent: 'live', confirmLiveBooking: true }, invoke)).resolves.toEqual(providerResults[1]);
     vi.restoreAllMocks();
   });
 
@@ -171,7 +216,8 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(rejectedMarkup).toContain('no invitation was sent');
     expect(unknownMarkup).toContain('OUTCOME UNKNOWN — CHECK CALENDAR');
     expect(unknownMarkup).toContain('Event creation and invitation delivery could not be confirmed.');
-    expect(unknownMarkup).toContain('Check the calendar before retrying.');
+    expect(unknownMarkup).toContain('Check the selected Outlook calendar');
+    expect(unknownMarkup).toContain('Do not retry this attempt.');
   });
 
   it('keeps a completed accepted meeting visible after refresh with no booking control', async () => {
@@ -189,7 +235,7 @@ describe('Phase 5K supervised meeting proposal review', () => {
 
     expect(markup).toContain('EVENT CREATED');
     expect(markup).toContain('Invitation delivery was not confirmed');
-    expect(markup).not.toContain('RECORD DRY-RUN RESERVATION');
+    expect(markup).not.toContain('CHECK BOOKING SETUP');
     expect(markup).not.toContain('CREATE LIVE CALENDAR EVENT');
   });
 
@@ -204,7 +250,9 @@ describe('Phase 5K supervised meeting proposal review', () => {
   ])('rejects an unsafe meeting execution response: %o', async (override) => {
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(requestId);
     const invoke = vi.fn<MeetingExecutionInvoker>().mockResolvedValue({ data: { ...disabledResult, ...override }, error: null });
-    await expect(requestMeetingExecution('workspace-1', 'action-1', { intent: 'dry_run' }, invoke)).rejects.toThrow(/unsafe response/);
+    await expect(requestMeetingExecution('workspace-1', 'action-1', { intent: 'dry_run' }, invoke)).rejects.toMatchObject({
+      kind: 'malformed_success',
+    });
     vi.restoreAllMocks();
   });
 
@@ -217,8 +265,8 @@ describe('Phase 5K supervised meeting proposal review', () => {
     expect(repository).toContain(".from('meeting_proposals')");
     expect(migration).toContain("array['owner', 'admin']");
     expect(migration).toContain('stale approval review');
-    expect(workspace).toContain('APPROVED — NOT BOOKED');
-    expect(workspace).toContain('REJECTED — NOT BOOKED');
+    expect(card).toContain('APPROVED — NOT BOOKED');
+    expect(card).toContain('REJECTED — NOT BOOKED');
     expect(`${workspace}\n${card}`).not.toMatch(/functions\.invoke\([^)]*(event|calendar)|Calendars\.ReadWrite|\/events|createEvent|sendMail/i);
   });
 });

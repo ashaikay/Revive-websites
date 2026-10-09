@@ -29,7 +29,7 @@ describe('Phase 5G read-only calendar availability UI and client', () => {
     expect(requestAvailability).not.toHaveBeenCalled();
     expect(markup).toContain('CALENDAR AVAILABILITY');
     expect(markup).toContain('READ-ONLY');
-    expect(markup).toContain('Checks the connected business calendar for available times. No event will be created.');
+    expect(markup).toContain('Choose a date and duration to check the connected Outlook calendar. This is read-only and will not create an event.');
     expect(markup).toContain('CHECK AVAILABILITY');
     expect(markup).not.toMatch(/<button[^>]*>[^<]*(?:Book|Schedule|Create|Send|Execute|Event)[^<]*<\/button>/i);
     const source = readFileSync(new URL('../components/CalendarAvailabilityPanel.tsx', import.meta.url), 'utf8');
@@ -67,8 +67,8 @@ describe('Phase 5G read-only calendar availability UI and client', () => {
     [401, 'Sign in is required to check calendar availability.'],
     [403, 'You do not have access to this workspace calendar.'],
     [429, 'Calendar availability is temporarily rate limited. Try again later.'],
-    [502, 'Calendar provider authentication or availability is unavailable.'],
-    [503, 'Calendar availability is currently disabled or unavailable. No event will be created.'],
+    [502, 'REV could not connect to Outlook to check availability. Confirm the connection and try again.'],
+    [503, 'Outlook availability is temporarily unavailable. No booking was made.'],
   ])('maps HTTP %s to a safe message', async (status, message) => {
     await expect(requestCalendarAvailability(request, vi.fn().mockResolvedValue({ data: null, error: { context: { status } } }))).rejects.toMatchObject({
       name: 'CalendarAvailabilityClientError', message, status,
