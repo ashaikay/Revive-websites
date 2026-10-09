@@ -41,7 +41,7 @@ function reasonLabel(planner:PlannerData,job:PlannerJob,worker:PlannerWorker,rea
   const similar=missing.some(skill=>worker.skills.some(tag=>looseTag(tag)===looseTag(skill)));
   return `Required skill${missing.length===1?'':'s'} not listed: ${missing.join(', ')}${similar?'. A similar skill is saved with different spelling or spacing; edit the worker’s skills to match exactly.':''}`;
  }
- if(reason==='worker_unavailable')return planner.leave.some(period=>period.status==='active'&&period.category==='leave'&&period.workerId===worker.id&&period.startAt<job.endAt&&job.startAt<period.endAt)?'On annual leave':'Marked as unavailable';
+ if(reason==='worker_unavailable'){const period=planner.leave.find(value=>value.status==='active'&&value.workerId===worker.id&&value.startAt<job.endAt&&job.startAt<value.endAt);return period?.category==='leave'?'On annual leave':period?.category==='sickness'?'Recorded sickness':'Marked as unavailable';}
  return fixedReasons[reason]??'Not available';
 }
 

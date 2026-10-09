@@ -91,7 +91,7 @@ try {
  check('FOREIGN_WORKER_SAVE_DENIED',(await save({target_request_id:randomUUID(),target_workspace_id:other,initiating_user_id:outsider.id})).status>=400);
  check('REQUEST_TENANT_COLLISION_DENIED',(await save({target_workspace_id:other,initiating_user_id:outsider.id})).status>=400);
  for(const token of [anonKey,owner.token])check('BROWSER_UNAVAILABILITY_RPC_DENIED',(await save({},token)).status>=400);
- for(const patch of [{target_start_at:null},{target_start_at:'infinity'},{target_end_at:'infinity'},{target_end_at:input.target_start_at},{target_end_at:'2026-10-07T09:00:00Z'},{target_category:'leave'},{target_category:'medical-notes'},{target_category:null},{target_status:'cancelled'},{expected_version:1}])check('INVALID_UNAVAILABILITY_DENIED',(await save({...patch,target_request_id:randomUUID()})).status>=400);
+ for(const patch of [{target_start_at:null},{target_start_at:'infinity'},{target_end_at:'infinity'},{target_end_at:input.target_start_at},{target_end_at:'2026-10-07T09:00:00Z'},{target_category:'leave'},{target_category:'medical-notes'},{target_category:null},{target_category:'sickness',target_start_at:'2026-10-08T09:00:00Z',target_end_at:'2026-10-09T09:00:00Z'},{target_status:'cancelled'},{expected_version:1}])check('INVALID_UNAVAILABILITY_DENIED',(await save({...patch,target_request_id:randomUUID()})).status>=400);
  const update={target_unavailability_id:recordId,expected_version:1};
  const edits=await Promise.all([save({...update,target_request_id:randomUUID(),target_end_at:'2026-10-08T13:00:00Z'}),save({...update,target_request_id:randomUUID(),target_end_at:'2026-10-08T14:00:00Z'})]);check('CONCURRENT_UNAVAILABILITY_UPDATE_ONCE',edits.filter(r=>r.status===200).length===1&&edits.filter(r=>r.status>=400).length===1);
  check('STALE_VERSION_DENIED',(await save({...update,target_request_id:randomUUID()})).status>=400);
@@ -104,13 +104,44 @@ try {
  check('CANCELLATION_RETRY_SAFE',(await save(winning)).status===200);
  check('CANCELLED_RECORD_RETAINED',(await read()).rows[0]?.status==='cancelled'&&(await read()).rows[0]?.version===3);
  check('CANCELLED_RECORD_CANNOT_REACTIVATE',(await save({...update,expected_version:3,target_request_id:randomUUID()})).status>=400);
+ const makeWorker=async name=>{const response=await rpc(serviceKey,'save_rev_scheduling_worker',{...workerInput,target_request_id:randomUUID(),target_worker_id:null,target_display_name:name});if(response.status!==200)throw Error('Conflict worker fixture failed');return id(response.payload.worker_id);};
+ const makePattern=async targetWorker=>{const response=await rpc(serviceKey,'save_rev_worker_working_pattern',{target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),target_worker_id:targetWorker,target_timezone:'Europe/London',target_working_days:[1,2,3,4,5],target_start_local:'09:00',target_end_local:'17:00',target_effective_from:'2026-10-01',target_effective_until:'2026-12-31',expected_version:0});if(response.status!==200)throw Error('Conflict pattern fixture failed');};
+ const makeJob=async(title,start,end)=>{const response=await rpc(serviceKey,'save_rev_scheduling_job',{target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),target_job_id:null,target_title:title,target_start_at:start,target_end_at:end,target_timezone:'Europe/London',target_location:'Local test site',target_required_skills:[],target_staffing_count:1,target_status:'open',expected_version:0});if(response.status!==200)throw Error('Conflict job fixture failed');return id(response.payload.job_id);};
+ const assign=async(targetWorker,targetJob)=>rpc(serviceKey,'save_rev_scheduling_assignment',{target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),target_assignment_id:null,target_worker_id:targetWorker,target_job_id:targetJob,target_status:'active',expected_version:0,expected_worker_version:1,expected_job_version:1,expected_pattern_version:1});
+ const assignedWorker=await makeWorker('Assigned sickness conflict'),sickWorker=await makeWorker('Sickness assignment conflict');
+ await makePattern(assignedWorker);await makePattern(sickWorker);
+ const assignedJob=await makeJob('Assigned before sickness','2026-10-12T09:00:00Z','2026-10-12T10:00:00Z');
+ check('ASSIGNMENT_FIXTURE_CREATED',(await assign(assignedWorker,assignedJob)).status===200);
+ const sicknessDates={target_start_at:'2026-10-11T23:00:00.000Z',target_end_at:'2026-10-12T23:00:00.000Z',target_category:'sickness'};
+ check('SICKNESS_OVER_ASSIGNED_WORK_DENIED',(await save({...sicknessDates,target_worker_id:assignedWorker,target_request_id:randomUUID()})).status>=400);
+ const sicknessRequest=randomUUID(),sicknessInput={...sicknessDates,target_worker_id:sickWorker,target_request_id:sicknessRequest};
+ const sickness=await save(sicknessInput);check('OWNER_SICKNESS_SAVE_ALLOWED',sickness.status===200&&sickness.payload?.category==='sickness'&&Date.parse(sickness.payload?.start_at)===Date.parse(sicknessDates.target_start_at)&&Date.parse(sickness.payload?.end_at)===Date.parse(sicknessDates.target_end_at));
+ check('SICKNESS_REPLAY_RETURNS_SAME_RESULT',JSON.stringify((await save(sicknessInput)).payload)===JSON.stringify(sickness.payload));
+ const sickJob=await makeJob('Assignment after sickness','2026-10-12T10:00:00Z','2026-10-12T11:00:00Z');
+ check('ASSIGNMENT_OVER_SICKNESS_DENIED',(await assign(sickWorker,sickJob)).status>=400);
+ const sicknessId=id(sickness.payload?.unavailability_id),correctedDates={target_start_at:sicknessDates.target_start_at,target_end_at:'2026-10-13T23:00:00.000Z'};
+ const correction={...sicknessInput,...correctedDates,target_unavailability_id:sicknessId,target_request_id:randomUUID(),expected_version:1};
+ const corrected=await save(correction);check('SICKNESS_CORRECTION_SAVED',corrected.status===200&&corrected.payload?.version===2&&Date.parse(corrected.payload?.end_at)===Date.parse(correctedDates.target_end_at));
+ check('SICKNESS_CORRECTION_REPLAY_SAFE',JSON.stringify((await save(correction)).payload)===JSON.stringify(corrected.payload));
+ check('SICKNESS_STALE_CORRECTION_DENIED',(await save({...correction,target_request_id:randomUUID(),expected_version:1})).status>=400);
+ const sicknessCancel={...correction,target_request_id:randomUUID(),target_status:'cancelled',expected_version:2};
+ const cancelledSickness=await save(sicknessCancel);check('SICKNESS_CANCELLATION_RETAINED',cancelledSickness.status===200&&cancelledSickness.payload?.status==='cancelled'&&cancelledSickness.payload?.version===3&&Date.parse(cancelledSickness.payload?.end_at)===Date.parse(correctedDates.target_end_at));
+ check('SICKNESS_CANCELLATION_REPLAY_SAFE',JSON.stringify((await save(sicknessCancel)).payload)===JSON.stringify(cancelledSickness.payload));
+ check('ASSIGNMENT_AFTER_SICKNESS_CANCELLATION_ALLOWED',(await assign(sickWorker,sickJob)).status===200);
+ check('SICKNESS_DOES_NOT_TOUCH_ANNUAL_LEAVE',sql(`select case when
+  not exists(select 1 from public.annual_leave_absences where workspace_id='${id(ws)}')
+  and not exists(select 1 from public.annual_leave_accounts where workspace_id='${id(ws)}')
+  and not exists(select 1 from public.annual_leave_postings where workspace_id='${id(ws)}')
+  then 't' else 'f' end;`)==='t');
+ check('MEMBER_SICKNESS_SAVE_DENIED',(await save({...sicknessDates,target_worker_id:sickWorker,target_request_id:randomUUID(),initiating_user_id:member.id})).status>=400);
+ check('CROSS_TENANT_SICKNESS_SAVE_DENIED',(await save({...sicknessDates,target_workspace_id:other,target_worker_id:sickWorker,target_request_id:randomUUID(),initiating_user_id:outsider.id})).status>=400);
  await request(serviceKey,'PATCH',`/rest/v1/workspace_members?workspace_id=eq.${ws}&user_id=eq.${member.id}`,{role:'admin'});
- check('ADMIN_READ_ALLOWED',(await read(member.token)).rows.length===1);
+ check('ADMIN_READ_ALLOWED',(await read(member.token)).rows.length===2);
  check('OTHER_ACTOR_REQUEST_COLLISION_DENIED',(await save({initiating_user_id:member.id})).status>=400);
- const second=await save({target_request_id:randomUUID(),initiating_user_id:member.id,target_category:'unavailable'});check('ADMIN_SAVE_ALLOWED',second.status===200);
+ const second=await save({target_request_id:randomUUID(),initiating_user_id:member.id,target_start_at:'2026-10-07T23:00:00.000Z',target_end_at:'2026-10-08T23:00:00.000Z',target_category:'sickness'});check('ADMIN_SICKNESS_SAVE_ALLOWED',second.status===200&&second.payload?.category==='sickness');
  const secondId=id(second.payload?.unavailability_id);
  await request(serviceKey,'PATCH',`/rest/v1/workspace_members?workspace_id=eq.${ws}&user_id=eq.${member.id}`,{status:'suspended'});
- check('SUSPENDED_ADMIN_DENIED',(await read(member.token)).rows.length===0&&(await save({target_request_id:randomUUID(),initiating_user_id:member.id})).status>=400);
+ check('SUSPENDED_ADMIN_DENIED',(await read(member.token)).rows.length===0&&(await save({target_request_id:randomUUID(),initiating_user_id:member.id,target_start_at:'2026-10-09T23:00:00.000Z',target_end_at:'2026-10-10T23:00:00.000Z',target_category:'sickness'})).status>=400);
  const endpoint=`/rest/v1/scheduling_worker_unavailability?workspace_id=eq.${ws}`;
  const inserted=await request(owner.token,'POST','/rest/v1/scheduling_worker_unavailability',{workspace_id:ws,worker_id:workerId});check('DIRECT_BROWSER_WRITES_DENIED',inserted.status>=400&&(await request(owner.token,'PATCH',endpoint,{status:'cancelled'})).status>=400&&(await request(owner.token,'DELETE',endpoint)).status>=400);
  const foreign=await request(serviceKey,'POST','/rest/v1/scheduling_worker_unavailability',{workspace_id:other,worker_id:workerId,start_at:input.target_start_at,end_at:input.target_end_at,category:'unavailable',created_by_user_id:outsider.id,updated_by_user_id:outsider.id});check('COMPOSITE_WORKER_FK_DENIED',foreign.status>=400);
@@ -123,9 +154,9 @@ try {
  rollback;`);check('AUDIT_FAILURE_ROLLS_BACK_CANCELLATION',atomic.includes('UNAVAILABILITY_ATOMIC_PASS'));
  const archived=await rpc(serviceKey,'save_rev_scheduling_worker',{...workerInput,target_request_id:randomUUID(),target_worker_id:workerId,target_active:false,expected_version:1});check('WORKER_ARCHIVED',archived.status===200);
  check('INACTIVE_WORKER_NEW_PERIOD_DENIED',(await save({target_request_id:randomUUID()})).status>=400);
- check('INACTIVE_WORKER_CANCELLATION_ALLOWED',(await save({target_request_id:randomUUID(),target_unavailability_id:secondId,target_category:'unavailable',target_status:'cancelled',expected_version:1})).status===200);
- check('AUDIT_EXACTLY_ONCE_PER_MUTATION',sql(`select count(*) from public.audit_log where workspace_id='${id(ws)}' and resource_type='scheduling_worker_unavailability';`)==='5');
- check('HISTORY_PRESERVED',(await read()).rows.length===2&&(await read()).rows.every(r=>r.status==='cancelled'));
+ check('INACTIVE_WORKER_SICKNESS_CANCELLATION_ALLOWED',(await save({target_request_id:randomUUID(),target_unavailability_id:secondId,target_start_at:'2026-10-07T23:00:00.000Z',target_end_at:'2026-10-08T23:00:00.000Z',target_category:'sickness',target_status:'cancelled',expected_version:1})).status===200);
+ check('AUDIT_EXACTLY_ONCE_PER_MUTATION',sql(`select count(*) from public.audit_log where workspace_id='${id(ws)}' and resource_type='scheduling_worker_unavailability';`)==='8');
+ check('HISTORY_PRESERVED',(await read()).rows.length===3&&(await read()).rows.filter(r=>r.worker_id===workerId).every(r=>r.status==='cancelled'));
 } catch {check('LOCAL_WORKER_UNAVAILABILITY_VALIDATION',false);}
 finally {await retireFixtures(workspaces,identities);}
 console.log('EXTERNAL_PROVIDER_REQUESTS=0');check('WORKER_UNAVAILABILITY_LOCAL',failures===0);if(failures)process.exitCode=1;

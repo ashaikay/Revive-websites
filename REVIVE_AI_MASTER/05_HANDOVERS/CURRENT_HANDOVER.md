@@ -125,6 +125,26 @@ Do not retrieve secret contents, start or replay OAuth, invoke a provider, retry
 
 Private manager-uploaded job briefs and worker assignment emails remain planned only. Each worker's recipient email must be separate from REV login identity; confirmed assignments may send shift details and a secure brief link through a separately authorized organization sending account. The future capability must prevent duplicate sends, retain `sent` / `failed` / `not_sent` status, and handle assignment changes and cancellations. Calendar-read consent is not email-sending authority. No upload, worker-recipient, brief-delivery or assignment-email execution capability is implemented or authorized.
 
+### Scheduling month planner and sickness recording — implemented and locally tested, not released
+
+- Week remains the default. A **Week / Month** planner toggle now preserves the shared selected date, display timezone, worker filter and location filter.
+- The month view must use the full available Scheduling page content width, not a small widget or sidebar.
+- The month view provides **Previous month**, **Next month** and **Today** controls, a clear month/year heading and readable Monday-first day cells.
+- Jobs, assignments, leave, generic unavailability and sickness reuse the existing workspace-scoped scheduling planner data, refresh and stale-view behavior.
+- Active workspace owners/admins can record sickness days through the existing worker-unavailability infrastructure with its tenant authority, service-only writes, restrictive RLS, idempotency, versions, cancellation, audit and assignment-conflict safeguards.
+- Display sickness with a distinct colour and the explicit text label **“Sickness”**; colour alone must not carry meaning.
+- Day details use a native keyboard-accessible disclosure when entries exceed the visible cell space.
+- Smaller screens use contained planner overflow so the page itself does not gain horizontal overflow.
+- Inclusive first/last sickness dates use the durable workspace timezone and are stored as a half-open UTC interval from local midnight on the first date to local midnight after the last date. Browser, trusted boundary and database validation handle DST without assuming a 24-hour day.
+- Assignment conflicts are listed and the sickness save is refused. REV does not silently cancel or reassign work.
+- Only the sickness category and required worker/date/audit fields are stored. Diagnoses, symptoms, medical notes and other free-text health details are not accepted. Annual Leave records, postings and balances are not changed.
+
+**Local verification:** focused Scheduling UI tests passed 20/20; scheduling boundary/browser regressions passed 57/57; the complete mounted CI UI selection passed 176/176; Deno entry-point check, local-validator syntax, TypeScript production build and `git diff --check` passed. The existing build chunk-size advisory remains. Local isolated database execution is pending because Docker Desktop returned an engine API 500 while Supabase inspected the existing database container.
+
+**Release state:** implemented and locally tested only. The changes are not committed, pushed, CI-verified, hosted-migrated, deployed, manually verified or released. The additive migration and updated trusted function have not been applied to hosted Supabase. No notification, provider call or execution-gate change occurred.
+
+Separate unresolved deployment work remains for the hosted `meeting_outcomes` and `meeting_reminder_drafts` storage and their trusted functions. The REV resilience fix at `5b51ef3339cab0805d02bd499114291ce8030ee7` keeps existing sections visible when those stores are unavailable; GitHub Actions run [#117](https://github.com/ashaikay/Revive-websites/actions/runs/37940342939) passed. That resilience does not make either hosted meeting feature operational and is not part of the Scheduling enhancements above.
+
 ---
 
 # Phase 2D.2 / 2D.2A handover \u2014 CLOSED (PASS)

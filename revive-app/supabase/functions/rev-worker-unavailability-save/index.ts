@@ -7,6 +7,7 @@ Deno.serve((request) => handleWorkerUnavailabilitySave(request,{
   allowedOrigin:Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
   getUserId:async(authorization)=>{const {data,error}=await caller(authorization).auth.getUser();return error?null:data.user?.id??null;},
   canManage:async(authorization,workspaceId,userId)=>{const {data,error}=await caller(authorization).from('workspace_members').select('role,status').eq('workspace_id',workspaceId).eq('user_id',userId).maybeSingle();return !error&&data?.status==='active'&&['owner','admin'].includes(data.role);},
+  getWorkspaceTimezone:async(authorization,workspaceId)=>{const {data,error}=await caller(authorization).from('workspace_calendar_business_hours').select('timezone').eq('workspace_id',workspaceId).maybeSingle();if(error)return null;return data?.timezone??'Europe/London';},
   save:async(input)=>{
     const service=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
     const {data,error}=await service.rpc('save_rev_worker_unavailability',input);const row=data;

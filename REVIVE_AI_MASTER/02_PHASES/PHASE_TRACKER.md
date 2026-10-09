@@ -801,6 +801,22 @@
 
 **Release boundary and next controlled checkpoint:** reminder preparation is committed and verified in isolated CI, but its migration and Edge Function have not been deployed to hosted Supabase. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished and require separate contracts and authorization. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
 
+### Scheduling enhancement — full-width month planner and sickness recording (locally implemented; database verification pending)
+
+- Preserved Week as the default and added a full-width Week/Month toggle with shared date, display timezone, worker and location state.
+- Added Previous month, Next month and Today controls, a Monday-first grid, month/year heading, responsive contained horizontal overflow and native keyboard-accessible day overflow details.
+- Reused the existing workspace-scoped five-table planner read, refresh interval, change-event refresh and stale-view warning.
+- Added explicit, separately coloured Sickness entries beside jobs, assignments, leave and generic unavailability.
+- Extended the existing unavailability category through additive migration `20261009150000_rev_scheduling_sickness.sql`.
+- Sickness uses inclusive workspace-local first/last dates stored as a half-open UTC interval from local midnight to local midnight after the final date. Browser, trusted boundary and database checks cover DST-short and DST-long days.
+- Preserved active owner/admin authority, restrictive RLS, service-only writes, exact request idempotency, optimistic versions, terminal cancellation, append-only audit evidence and both directions of assignment-overlap enforcement.
+- The UI lists overlapping assignments and refuses the sickness save; it never cancels or reassigns work.
+- No diagnoses, symptoms, medical notes or free-text health details are accepted. Annual Leave records, accounts, postings and balances are not changed.
+
+**Local verification:** focused Scheduling UI 20/20; relevant boundary/browser regressions 57/57; complete mounted CI UI selection 176/176; Deno Edge Function check, validator syntax, TypeScript production build and whitespace check passed. The existing build chunk-size advisory remains. The isolated database validator is registered in the existing fail-fast database command but could not run locally because Docker Desktop returned an engine API 500 while Supabase inspected the local container.
+
+**State:** implemented and locally tested, but uncommitted, not pushed, not CI-verified, not hosted-migrated, not deployed, not manually verified and not released. No provider call, notification or execution-gate change occurred. Hosted meeting-outcome/reminder deployment remains a separate unresolved task.
+
 **Objective:** Integrate calendar and enable meeting booking
 
 **Estimated Duration:** 3 weeks

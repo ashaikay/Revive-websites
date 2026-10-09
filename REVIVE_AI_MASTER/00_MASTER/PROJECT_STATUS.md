@@ -97,6 +97,21 @@ Product priority:
 - Customer-calendar booking, reminders, RSVP and meeting outcomes remain unfinished; this priority change does not mark Phase 5 complete.
 - Earlier historical status and next-task entries are superseded by this checkpoint where they conflict.
 
+### Scheduling month planner and sickness recording — locally implemented, database verification pending
+
+- Added a full-width Month view beside the preserved default Week view, with shared selected date, display timezone, worker/location filters, existing planner reads, automatic refresh and stale-result behavior.
+- Added Previous month, Next month and Today navigation, a clear month/year heading, Monday-first day cells and keyboard-accessible overflow details.
+- Jobs, assignments, leave, unavailability and sickness use explicit text labels; sickness also has a distinct colour.
+- Sickness recording is owner/admin only and reuses the existing tenant-scoped, service-write-only unavailability path, idempotent request ledger, optimistic versions, cancellation history, audit records and assignment-overlap guards.
+- Inclusive first/last sickness dates are converted to half-open UTC intervals at workspace-local midnight. DST-short and DST-long days are tested without treating a day as 24 hours.
+- The trusted boundary and database require sickness endpoints to align to the durable workspace timezone. The UI fails closed if that timezone or assigned-work check cannot be confirmed.
+- Conflicting assignments are listed with a clear refusal; no assignment is silently cancelled or moved.
+- No diagnosis, symptom, medical note or free-text health detail is accepted or stored. Annual Leave absences, accounts, postings and balances remain on their existing separate path.
+
+**Local verification:** focused Scheduling UI tests passed 20/20; scheduling boundary/browser regressions passed 57/57; the complete mounted CI UI selection passed 176/176; the worker-unavailability Edge Function Deno check, validator syntax check, TypeScript production build and `git diff --check` passed. The existing Vite large-chunk advisory remains. Local isolated database execution is pending because Docker Desktop returned an engine API 500 while Supabase inspected the existing local database container.
+
+**Release state:** implemented and locally tested only. Not committed, pushed, CI-verified, hosted-migrated, deployed, manually verified or released. No provider call, notification, assignment mutation, Annual Leave mutation or execution-gate change occurred.
+
 ---
 
 ## Verified hosted Outlook disconnect and reconnect

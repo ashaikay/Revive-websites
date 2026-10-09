@@ -31,7 +31,7 @@
 | 4C | Durable Execution Control Plane | Additive execution/usage persistence and hardened live integration | ✅ Production migration applied + verified; execution disabled |
 | 4D | First Real REV Capability: Prepare Follow-Up | Evidence-based internal draft, existing REV Action/Approval workflow, owner/admin review | ✅ Complete (PASS; no sending/provider/migration) |
 | Future | Email & Replies | Email integration, reply detection, follow-up workflow | ⏳ Deferred; not enabled by Phase 4A |
-| 5 | Calendar & Meetings | Calendar integration, meeting booking, scheduling | 🔄 In Progress — controlled Outlook booking verified; Phase 5E.1 outcomes isolated-CI verified; reminder preparation implemented locally; neither deployed |
+| 5 | Calendar & Meetings | Calendar integration, meeting booking, scheduling | 🔄 In Progress — controlled Outlook booking verified; Phase 5E.1 outcomes and reminder preparation isolated-CI verified; neither deployed |
 | 6 | Daily Brief & Analytics | Daily summary, dashboards, measurable results | ⏳ Not Started |
 | 7 | Website Lead Agent | Chatbot for Revive Websites, lead qualification | ⏳ Not Started |
 | 8 | Voice & Missed Calls | Phone system integration, call recovery | ⏳ Not Started |
@@ -47,7 +47,15 @@ Future worker scheduling scope: managers may upload a private job brief; each wo
 
 ### Current Phase 5 boundary
 
-The controlled customer Outlook booking and Gmail invitation receipt on 9 October 2026 are verified for that exact test only. They do not establish general booking availability. Phase 5E.1 explicit meeting outcomes are committed and verified in isolated CI but not deployed. Manual channel-neutral reminder-draft preparation is implemented locally with no delivery behavior; it is not committed, CI-verified, deployed or available in hosted workspaces. Live booking and email-sending gates remain disabled. Reminder timing/delivery and RSVP/response ingestion remain unfinished.
+The controlled customer Outlook booking and Gmail invitation receipt on 9 October 2026 are verified for that exact test only. They do not establish general booking availability. Phase 5E.1 explicit meeting outcomes and manual channel-neutral reminder-draft preparation are committed and verified in isolated CI but not deployed. Reminder preparation has no delivery behavior. Live booking and email-sending gates remain disabled. Reminder timing/delivery and RSVP/response ingestion remain unfinished.
+
+### Scheduling month planner and sickness recording — implemented and locally tested, not released
+
+The existing Scheduling domain now has a full-width Week/Month planner toggle. Week remains the default. Month navigation uses Previous month, Next month and Today controls, a Monday-first grid, the existing workspace-scoped planner reads and refresh/stale behavior, shared date/timezone/worker/location controls, labelled job/assignment/leave/unavailable/sickness entries, and keyboard-accessible overflow details.
+
+Sickness reuses the existing workspace-scoped worker-unavailability record, restrictive RLS, service-only trusted write, request idempotency, optimistic versions, terminal cancellation, assignment-overlap guards and append-only audit path. Owners/admins record inclusive first/last sickness dates in the durable workspace timezone; the browser, trusted boundary and database enforce half-open workspace-local-midnight UTC intervals without assuming 24-hour days. No diagnosis, symptom, medical note or other health detail is accepted. Annual Leave records, postings and balances stay separate.
+
+This enhancement is implemented and locally tested only. It is not committed, CI-verified, migrated to hosted Supabase, deployed, manually verified or released. The additive sickness migration and updated Edge Function remain unapplied to hosted environments. No notification, provider call or execution-gate change is included.
 
 ### REV Business Guide and Video Walkthroughs — planned, not created
 

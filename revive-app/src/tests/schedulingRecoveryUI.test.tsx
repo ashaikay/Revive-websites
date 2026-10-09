@@ -39,7 +39,7 @@ describe('Scheduling parent recovery lock',()=>{
   expect(mocks.invoke).toHaveBeenCalledWith('rev-worker-pattern-save',{body:patternRequest});
 
   mocks.invoke.mockClear();mocks.states=leaveStates(leaveRequest);const leaveTree=WorkerUnavailabilityPanel({workspaceId,userId,workerId,active:true,disabled:parent.editsBlocked,retryDisabled:parent.retriesBlocked,parentDisabledReason:parent.reason});
-  const leaveMarkup=renderToStaticMarkup(leaveTree);expect(leaveMarkup).toContain('ADD UNAVAILABLE PERIOD</button>');expect(leaveMarkup).toMatch(/<button[^>]*disabled=""[^>]*>ADD UNAVAILABLE PERIOD/);const leaveRetry=button(leaveTree,'RETRY SAME LEAVE SAVE');expect(leaveRetry.props.disabled).toBe(false);leaveRetry.props.onClick?.();
+  const leaveMarkup=renderToStaticMarkup(leaveTree);expect(leaveMarkup).toContain('ADD UNAVAILABLE / SICKNESS</button>');expect(leaveMarkup).toMatch(/<button[^>]*disabled=""[^>]*>ADD UNAVAILABLE \/ SICKNESS/);const leaveRetry=button(leaveTree,'RETRY SAME PERIOD SAVE');expect(leaveRetry.props.disabled).toBe(false);leaveRetry.props.onClick?.();
   expect(mocks.invoke).toHaveBeenCalledWith('rev-worker-unavailability-save',{body:leaveRequest});
  });
 
@@ -50,7 +50,7 @@ describe('Scheduling parent recovery lock',()=>{
  ])('parent %s state disables pattern and leave retries',(_label,state)=>{
   const parent=schedulingParentLock(state);
   mocks.states=patternStates(patternRequest);const patternTree=WorkerWorkingPatternPanel({workspaceId,userId,workerId,active:true,disabled:parent.editsBlocked,retryDisabled:parent.retriesBlocked,parentDisabledReason:parent.reason});expect(button(patternTree,'RETRY SAME PATTERN SAVE').props.disabled).toBe(true);
-  mocks.states=leaveStates(leaveRequest);const leaveTree=WorkerUnavailabilityPanel({workspaceId,userId,workerId,active:true,disabled:parent.editsBlocked,retryDisabled:parent.retriesBlocked,parentDisabledReason:parent.reason});expect(button(leaveTree,'RETRY SAME LEAVE SAVE').props.disabled).toBe(true);
+  mocks.states=leaveStates(leaveRequest);const leaveTree=WorkerUnavailabilityPanel({workspaceId,userId,workerId,active:true,disabled:parent.editsBlocked,retryDisabled:parent.retriesBlocked,parentDisabledReason:parent.reason});expect(button(leaveTree,'RETRY SAME PERIOD SAVE').props.disabled).toBe(true);
   expect(mocks.invoke).not.toHaveBeenCalled();
  });
 
