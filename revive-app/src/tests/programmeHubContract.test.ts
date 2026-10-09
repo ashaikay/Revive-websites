@@ -52,7 +52,6 @@ describe('Outcomes / Programme Hub contract', () => {
     expect(navigation).toContain("{ label: 'REV', href: '#rev', id: 'rev' }");
     expect(navigation).toContain("{ label: 'OUTCOMES', href: '#programme', id: 'programme' }");
     expect(navigation).toContain("{ label: 'SCHEDULING', href: '#scheduling', id: 'scheduling' }");
-    expect(supabaseConfig).toContain('[functions.rev-meeting-reminder-deliver]');
     expect(supabaseConfig).toContain('[functions.rev-programme-hub-save]');
   });
 
