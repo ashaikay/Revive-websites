@@ -41,6 +41,26 @@
 | 12 | Industry Playbooks | REV Trades, REV Property, REV Beauty, etc. | ⏳ Future |
 | 13 | API & Integrations | Third-party integrations, API ecosystem | ⏳ Future |
 
+### Outcomes / Programme Hub — Employer Engagement / IPS foundation
+
+Employer Engagement for employment-support and Individual Placement and Support (IPS) organisations is the pre-existing employment-support plan from 21 September 2026, clarified on 8 October 2026. It is not a new product module and must be delivered inside **Outcomes / Programme Hub**.
+
+This capability remains distinct from:
+
+- commercial GROWTH contacts, leads, opportunities, revenue and attribution;
+- worker Scheduling jobs, assignments, availability, sickness and Annual Leave;
+- outbound email execution and autonomous provider actions.
+
+The foundation covers tenant-scoped employers, employer contacts, vacancies, minimal participant employment profiles, explicit adviser assignment and caseload access, deterministic evidence-based matching, version-bound adviser review of outreach drafts that remain **Approved — not sent**, explicit employment outcomes and traceable programme reporting.
+
+Participant residency eligibility, vacancy-search geography and service-delivery geography are separate contracts. Matching postcode areas are never proof of residency or programme eligibility. Programme rules are versioned and effective-dated, exceptions are explicit and audited, and missing evidence produces `needs_review`.
+
+Tenant spreadsheet columns, import templates and employment-outcome vocabularies remain configurable. They must be confirmed from the organisation's actual materials before implementation rather than invented by REV. Future voice updates may propose structured changes, but an adviser must review and confirm them before any durable write.
+
+The canonical architecture and decision boundary are documented in `REVIVE_AI_MASTER/01_ARCHITECTURE/OUTCOMES_PROGRAMME_HUB_EMPLOYER_ENGAGEMENT_IPS.md`.
+
+**Local implementation state:** the first tenant-neutral foundation is implemented in an isolated branch/worktree with programme configuration, employers, employer contacts, vacancies, minimal participant employment profiles, explicit advisers and caseload assignments. Writes are version-bound, service-only, idempotent and audited; RLS gives owners/admins programme-wide access and advisers only their assigned participant caseloads. Required tenant contracts remain unconfigured and show **Needs review**. Matching, outreach drafts, outcomes, reporting, spreadsheet import and voice capture are not implemented. Nothing is deployed and no outreach/provider gate is enabled.
+
 ### Planned worker briefs and assignment communications — not implemented
 
 Future worker scheduling scope: managers may upload a private job brief; each worker has a recipient email separate from a REV login; confirmed assignments may send shift details and a secure brief link using the organisation's separately authorised sending account. The capability must prevent duplicate sends, track `sent` / `failed` / `not_sent`, and send appropriate updates when an assignment changes or is cancelled. Calendar read consent is not email-sending authority. This requirement is planned only: it is not implemented, enabled or authorised, and must receive its own security, permission, delivery and idempotency review before execution work.

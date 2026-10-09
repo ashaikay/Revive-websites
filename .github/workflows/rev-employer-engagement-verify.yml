@@ -1,0 +1,62 @@
+name: REV employer engagement verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  programme-hub:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - name: Test Programme Hub boundary
+        run: node --experimental-strip-types --test supabase/functions/rev-programme-hub-save/*.test.ts
+      - name: Test Programme Hub mounted UI
+        run: npm test -- src/tests/programmeHubContract.test.ts src/tests/programmeHubUI.test.tsx
+      - name: Check Programme Hub Edge Function
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/rev-programme-hub-save/index.ts
+      - run: npm run build
+
+  programme-hub-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - name: Start isolated local Supabase and apply migrations
+        run: npx --yes supabase@2.117.0 start --exclude studio
+      - name: Test Programme Hub tenant and caseload authorization
+        shell: bash
+        run: |
+          while IFS='=' read -r key value; do
+            value="${value%\"}"
+            value="${value#\"}"
+            case "$key" in
+              ANON_KEY) export REV_LOCAL_SUPABASE_ANON_KEY="$value" ;;
+              SERVICE_ROLE_KEY) export REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY="$value" ;;
+            esac
+          done < <(npx --yes supabase@2.117.0 status -o env)
+          test -n "${REV_LOCAL_SUPABASE_ANON_KEY:-}"
+          test -n "${REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY:-}"
+          node src/tests/programme_hub_local_validation.mjs

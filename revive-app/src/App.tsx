@@ -14,8 +14,9 @@ import '@/styles/index.css';
 import { OutlookConnectionPanel } from '@/components/OutlookConnectionPanel';
 import { AppFooter } from '@/components/AppFooter';
 import { calendarOAuthReturn } from '@/services/calendarOAuthBrowser';
+import { ProgrammeHubModule } from '@/components/ProgrammeHubModule';
 
-type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business' | 'scheduling';
+type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business' | 'scheduling' | 'programme';
 type LoginError = 'invalid_credentials' | 'configuration' | 'network' | 'workspace';
 
 function App() {
@@ -87,7 +88,7 @@ function App() {
   React.useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1) || 'home';
-      if (['home', 'rev', 'customers', 'growth', 'business', 'scheduling'].includes(hash)) {
+      if (['home', 'rev', 'customers', 'growth', 'business', 'scheduling', 'programme'].includes(hash)) {
         setCurrentPage(hash as Page);
       }
     };
@@ -140,6 +141,9 @@ function App() {
         {currentPage === 'scheduling' && (dataProviderMode === 'supabase' && liveSession
           ? <SchedulingModule key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} />
           : <div className="p-6">Scheduling requires a signed-in business workspace.</div>)}
+        {currentPage === 'programme' && (dataProviderMode === 'supabase' && liveSession
+          ? <ProgrammeHubModule key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} />
+          : <div className="p-6">Outcomes / Programme Hub requires a signed-in workspace.</div>)}
       </main>
 
       <AppFooter />

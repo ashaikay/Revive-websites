@@ -419,3 +419,6 @@ enabled = true
 
 [functions.rev-email-execute]
 verify_jwt = true
+
+[functions.rev-programme-hub-save]
+verify_jwt = true
