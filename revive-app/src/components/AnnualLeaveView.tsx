@@ -162,6 +162,9 @@ export function AnnualLeaveHistory({
   onCancelLegacy: (leave: LegacyAnnualLeave) => void;
   disabled: boolean;
 }) {
+  const [cancelTarget, setCancelTarget] = useState<
+    {kind: 'annual'; absence: AnnualLeaveAbsence} | {kind: 'legacy'; leave: LegacyAnnualLeave} | null
+  >(null);
   if (absences.length === 0 && legacy.length === 0) return <p>No leave has been recorded for this worker.</p>;
   return (
     <ul className="grid gap-3">
@@ -177,9 +180,18 @@ export function AnnualLeaveHistory({
             <p>{formatLeaveMinutes(absence.totalDeductionMinutes)} in the original leave record.</p>
           </details>
           {absence.status === 'confirmed' && (
-            <button className="btn-secondary mt-2" disabled={disabled} onClick={() => onCancel(absence)}>
+            <button className="btn-secondary mt-2" disabled={disabled || cancelTarget !== null} onClick={() => setCancelTarget({kind: 'annual', absence})}>
               Cancel leave
             </button>
+          )}
+          {cancelTarget?.kind === 'annual' && cancelTarget.absence.absenceId === absence.absenceId && (
+            <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3" role="group" aria-label="Confirm annual leave cancellation">
+              <p>Cancel this Annual Leave? It will leave the active planner, remain in history, and its exact recorded balance deduction will be reversed.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button className="btn-secondary" type="button" onClick={() => { onCancel(absence); setCancelTarget(null); }}>Confirm cancellation</button>
+                <button className="btn-ghost" type="button" onClick={() => setCancelTarget(null)}>Keep leave</button>
+              </div>
+            </div>
           )}
         </li>
       ))}
@@ -193,9 +205,18 @@ export function AnnualLeaveHistory({
           </p>
           <p>Status: {leave.status === 'active' ? 'Recorded' : 'Cancelled'}</p>
           {leave.status === 'active' && (
-            <button className="btn-secondary mt-2" disabled={disabled} onClick={() => onCancelLegacy(leave)}>
+            <button className="btn-secondary mt-2" disabled={disabled || cancelTarget !== null} onClick={() => setCancelTarget({kind: 'legacy', leave})}>
               Cancel older leave
             </button>
+          )}
+          {cancelTarget?.kind === 'legacy' && cancelTarget.leave.unavailabilityId === leave.unavailabilityId && (
+            <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3" role="group" aria-label="Confirm older leave cancellation">
+              <p>Cancel this older leave? It will leave the active planner and remain in history. Annual Leave balances will not change because this record was never included in them.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button className="btn-secondary" type="button" onClick={() => { onCancelLegacy(leave); setCancelTarget(null); }}>Confirm cancellation</button>
+                <button className="btn-ghost" type="button" onClick={() => setCancelTarget(null)}>Keep leave</button>
+              </div>
+            </div>
           )}
         </li>
       ))}

@@ -156,7 +156,7 @@ describe('mounted REV layout and action feedback', () => {
     render(<PreparedFollowUpReview artifact={{ ...followUp, approvalState: 'pending' }} canReview executionMode="live"
       onEdit={onEdit} onApprove={onApprove} onReject={vi.fn()} onRefreshContext={onRefresh} />);
     expect(screen.getByRole('button', { name: 'Edit' })).not.toBeVisible();
-    fireEvent.click(screen.getByText('View draft and actions'));
+    fireEvent.click(screen.getByText('View draft, approve or discard'));
     fireEvent.click(screen.getByRole('button', { name: 'Refresh context' }));
     expect(onRefresh).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -165,6 +165,20 @@ describe('mounted REV layout and action feedback', () => {
     expect(onEdit).toHaveBeenCalledWith(followUp.subject, 'Updated draft');
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     expect(onApprove).toHaveBeenCalledOnce();
+  });
+
+  it('discards a pending follow-up only after confirming that it remains in history and is not sent', () => {
+    const onReject = vi.fn();
+    render(<PreparedFollowUpReview artifact={{ ...followUp, approvalState: 'pending' }} canReview executionMode="live"
+      onEdit={vi.fn()} onApprove={vi.fn()} onReject={onReject} />);
+    fireEvent.click(screen.getByText('View draft, approve or discard'));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard draft — not sent' }));
+    const confirmation = screen.getByRole('group', { name: 'Confirm prepared follow-up discard' });
+    expect(confirmation).toHaveTextContent('remain in durable history');
+    expect(confirmation).toHaveTextContent('nothing will be sent');
+    expect(onReject).not.toHaveBeenCalled();
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Confirm discard — not sent' }));
+    expect(onReject).toHaveBeenCalledOnce();
   });
 
   it('does not hide follow-up errors or unknown outcomes or claim nothing was sent for an uncertain request', () => {

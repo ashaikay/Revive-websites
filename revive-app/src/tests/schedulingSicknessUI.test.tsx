@@ -123,7 +123,7 @@ describe('Sickness recording UI',()=>{
   expect(screen.getByText(/workspace timezone could not be confirmed/)).toBeInTheDocument();
  });
 
- it('retains generic unavailable time fields, visible validation, and explicit cancellation',async()=>{
+ it('retains generic unavailable time fields, visible validation, and explicit discard',async()=>{
   renderPanel();
   const summary=screen.getByText('Leave, sickness and unavailable periods');
   fireEvent.click(summary);
@@ -136,9 +136,9 @@ describe('Sickness recording UI',()=>{
   fireEvent.click(screen.getByRole('button',{name:'SAVE'}));
   expect(await screen.findByRole('status')).toHaveTextContent('Enter both the unavailable start and end times.');
   expect(mocks.invoke).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button',{name:'CANCEL'}));
+  fireEvent.click(screen.getByRole('button',{name:'DISCARD CHANGES'}));
   expect(screen.queryByRole('form',{name:'Record unavailable or sickness period'})).not.toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent('Period entry cancelled. No changes were saved.');
+  expect(screen.getByRole('status')).toHaveTextContent('Changes discarded. No unavailable or sickness period was changed.');
  });
 
  it('preserves Ricki and Karol unconfirmed payloads and exposes only their retry controls',async()=>{

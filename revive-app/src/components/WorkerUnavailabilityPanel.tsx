@@ -282,7 +282,7 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
      <label className="block my-2 font-medium">End ({timezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="datetime-local" value={draft.end} onChange={event=>{setMessage('');setDraft({...draft,end:event.target.value});}}/></label>
     </>}
     <div className="mt-3 flex flex-wrap gap-2"><button className="btn-primary" type="submit">{busy?'SAVING...':'SAVE'}</button>
-    <button className="btn-secondary" type="button" onClick={()=>{setDraft(blank());setEditing(false);setMessage('Period entry cancelled. No changes were saved.');}}>CANCEL</button></div>
+    <button className="btn-secondary" type="button" onClick={()=>{setDraft(blank());setEditing(false);setMessage('Changes discarded. No unavailable or sickness period was changed.');}}>DISCARD CHANGES</button></div>
    </fieldset>
   </form>}
   <ul className="space-y-3 mt-3">{list.map(period=>{

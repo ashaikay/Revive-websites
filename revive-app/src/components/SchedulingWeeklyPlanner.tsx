@@ -18,6 +18,16 @@ import {
  type PlannerLeave,
 } from '@/services/schedulingPlanner';
 import {formatSchedulingDate,formatSchedulingInstant,formatSchedulingTime} from '@/services/schedulingDisplay';
+import {
+ clearLeaveAttempt,
+ LeaveSaveRefused,
+ LeaveSaveRejected,
+ localLeaveToUtc,
+ rememberLeaveAttempt,
+ restoreLeaveAttempt,
+ submitLeaveAttempt,
+ type LeaveAttempt,
+} from '@/services/workerUnavailability';
 
 function openWorker(workerId:string){
  const card=document.getElementById(`scheduling-worker-${workerId}`);
@@ -36,7 +46,7 @@ function periodPresentation(period:PlannerLeave){
  return{label:'Unavailable',className:'bg-slate-100 text-slate-800 border-slate-300'};
 }
 
-export function SchedulingWeeklyPlanner({workspaceId}:{workspaceId:string}){
+export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{workspaceId:string;userId:string;workspaceTimezone:string|null}){
  const initialDate=localPlannerDate(new Date().toISOString(),'Europe/London');
  const [data,setData]=useState<PlannerData|null>(null);
  const [busy,setBusy]=useState(false);
@@ -48,6 +58,11 @@ export function SchedulingWeeklyPlanner({workspaceId}:{workspaceId:string}){
  const [viewMode,setViewMode]=useState<'week'|'month'>('week');
  const [workerFilter,setWorkerFilter]=useState('');
  const [locationFilter,setLocationFilter]=useState('');
+ const [bookOffDay,setBookOffDay]=useState<string|null>(null);
+ const [bookOffWorkerId,setBookOffWorkerId]=useState('');
+ const [bookOffPending,setBookOffPending]=useState<LeaveAttempt|null>(null);
+ const [bookOffBusy,setBookOffBusy]=useState(false);
+ const [bookOffMessage,setBookOffMessage]=useState('');
  const mounted=useRef(true),sequence=useRef(0),running=useRef(false),refreshAgain=useRef(false);
 
  const reload=useCallback(async()=>{
@@ -120,6 +135,102 @@ export function SchedulingWeeklyPlanner({workspaceId}:{workspaceId:string}){
  const visibleWorkerIds=new Set(visibleWorkers.map(worker=>worker.id));
  const workerName=(workerId:string)=>data?.workers.find(worker=>worker.id===workerId)?.name??'Unknown worker';
  const time=(value:string)=>formatSchedulingTime(value,timezone);
+ const activeWorkers=data?.workers.filter(worker=>worker.active).sort((first,second)=>first.name.localeCompare(second.name))??[];
+ const bookOffConflicts=(attempt:Pick<LeaveAttempt,'workerId'|'startAt'|'endAt'>)=>{
+  if(!data)return[];
+  return activeAssignments
+   .filter(assignment=>assignment.workerId===attempt.workerId&&assignment.startAt<attempt.endAt&&assignment.endAt>attempt.startAt)
+   .map(assignment=>data.jobs.find(job=>job.id===assignment.jobId))
+   .filter((job):job is PlannerJob=>Boolean(job));
+ };
+
+ const openBookOff=(day:string)=>{
+  if(stale||bookOffPending)return;
+  setBookOffDay(day);
+  setBookOffWorkerId(activeWorkers.some(worker=>worker.id===workerFilter)?workerFilter:activeWorkers[0]?.id??'');
+  setBookOffMessage('');
+ };
+
+ const saveBookOff=async(retry=false)=>{
+  if(bookOffBusy)return;
+  let attempt=retry?bookOffPending:null;
+  if(!attempt){
+   if(!bookOffDay||!bookOffWorkerId){setBookOffMessage('Choose an active worker before saving.');return;}
+   if(!workspaceTimezone){setBookOffMessage('Worker time off was not saved because the workspace timezone could not be confirmed. Refresh Scheduling and try again.');return;}
+   try{
+    if(restoreLeaveAttempt(window.sessionStorage,workspaceId,userId,bookOffWorkerId)){
+     setBookOffMessage(`Not saved. ${workerName(bookOffWorkerId)} already has an unconfirmed unavailable or sickness request. Use that record's retry control so its exact request ID and payload are preserved.`);
+     return;
+    }
+   }catch{
+    setBookOffMessage('Worker time off was not saved because retained-request storage could not be checked safely.');
+    return;
+   }
+   try{
+    attempt={
+     workspaceId,
+     workerId:bookOffWorkerId,
+     requestId:crypto.randomUUID(),
+     unavailabilityId:null,
+     startAt:localLeaveToUtc(`${bookOffDay}T00:00`,workspaceTimezone),
+     endAt:localLeaveToUtc(`${addPlannerDays(bookOffDay,1)}T00:00`,workspaceTimezone),
+     category:'unavailable',
+     status:'active',
+     expectedVersion:0,
+    };
+   }catch{
+    setBookOffMessage('Worker time off was not saved because the selected local day could not be converted safely.');
+    return;
+   }
+   const conflicts=bookOffConflicts(attempt);
+   if(conflicts.length){
+    setBookOffMessage(`Not saved. ${workerName(attempt.workerId)} is assigned to ${conflicts.map(job=>`“${job.title}”`).join(', ')} during this day. Nothing was cancelled or reassigned.`);
+    return;
+   }
+   try{rememberLeaveAttempt(window.sessionStorage,userId,attempt);}
+   catch{
+    setBookOffMessage('Worker time off was not saved because the exact request could not be retained safely for retry.');
+    return;
+   }
+   setBookOffPending(attempt);
+  }
+  if(!attempt)return;
+  setBookOffBusy(true);
+  setBookOffMessage(retry?'Retrying the same retained request...':'Saving Generic Unavailable...');
+  try{
+   await submitLeaveAttempt(attempt,async(name,body)=>{
+    if(!supabaseClient)throw Error('Unavailable');
+    const {data:response,error}=await supabaseClient.functions.invoke(name,{body});
+    if(error){
+     const context=(error as {context?:unknown}).context;
+     if(context instanceof Response)return{status:context.status,data:await context.clone().json().catch(()=>null)};
+     throw Error('Uncertain result');
+    }
+    return{status:200,data:response};
+   });
+   clearLeaveAttempt(window.sessionStorage,workspaceId,userId,attempt.workerId);
+   setBookOffPending(null);
+   setBookOffDay(null);
+   setBookOffWorkerId('');
+   setBookOffMessage(`${workerName(attempt.workerId)} is booked off as Generic Unavailable. Planner refresh requested; Annual Leave balances were not changed and no notification was sent.`);
+   window.dispatchEvent(new Event('rev-scheduling-changed'));
+  }catch(error){
+   if(error instanceof LeaveSaveRefused){
+    clearLeaveAttempt(window.sessionStorage,workspaceId,userId,attempt.workerId);
+    setBookOffPending(null);
+    const conflicts=bookOffConflicts(attempt);
+    setBookOffMessage(conflicts.length
+     ?`Not saved. ${workerName(attempt.workerId)} is assigned to ${conflicts.map(job=>`“${job.title}”`).join(', ')} during this day. Nothing was cancelled or reassigned.`
+     :`${error.message} Nothing was cancelled or reassigned; refresh the planner to review the affected work.`);
+   }else if(error instanceof LeaveSaveRejected){
+    setBookOffMessage(`${error.message} No period was recorded. The same request ID and payload remain retained; retry only after the save boundary is confirmed.`);
+   }else{
+    setBookOffMessage('Save outcome is unconfirmed. The exact request ID and payload remain retained. Check current records before retrying this same request.');
+   }
+  }finally{
+   setBookOffBusy(false);
+  }
+ };
 
  const jobCard=(job:PlannerJob,label:string,conflict=false)=>(
   <button type="button" onClick={()=>openJob(job.id)} disabled={stale} className={`block w-full text-left rounded-lg border p-2 mb-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${conflict?'bg-red-50 border-red-300 text-red-900':label==='Assigned'?'bg-blue-50 border-blue-200 text-blue-950':'bg-amber-50 border-amber-300 text-amber-950'}`}>
@@ -208,12 +319,26 @@ export function SchedulingWeeklyPlanner({workspaceId}:{workspaceId:string}){
     <span className="rounded px-2 py-1 bg-slate-100 text-slate-800 border border-slate-300">Unavailable</span>
     <span className="rounded px-2 py-1 bg-red-50 text-red-950 border border-red-300">Review needed</span>
    </div>
+   {viewMode==='week'&&bookOffDay&&!bookOffPending&&<fieldset className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-4" disabled={bookOffBusy}>
+    <legend className="px-1 font-semibold">Book worker off — {formatSchedulingDate(bookOffDay)}</legend>
+    <p className="text-sm text-slate-700">Creates a Generic Unavailable period from workspace-local midnight to the next local midnight. It does not use Annual Leave balance, cancel assigned work or send a notification.</p>
+    <div className="mt-3 flex flex-wrap items-end gap-3">
+     <label className="text-sm font-medium">Active worker<select aria-label="Worker to book off" className="block border rounded p-2 min-w-56" value={bookOffWorkerId} onChange={event=>setBookOffWorkerId(event.target.value)}><option value="">Choose worker</option>{activeWorkers.map(worker=><option key={worker.id} value={worker.id}>{worker.name}</option>)}</select></label>
+     <button type="button" className="btn-primary" onClick={()=>void saveBookOff()}>{bookOffBusy?'SAVING…':'SAVE UNAVAILABLE DAY'}</button>
+     <button type="button" className="btn-secondary" onClick={()=>{setBookOffDay(null);setBookOffWorkerId('');setBookOffMessage('Changes discarded. No unavailable period was created.');}}>DISCARD CHANGES</button>
+    </div>
+   </fieldset>}
+   {bookOffPending&&<div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4" role="alert">
+    <p>{bookOffMessage||'This Book worker off request has an unconfirmed outcome. Its exact request ID and payload are retained.'}</p>
+    <button type="button" className="btn-primary mt-3" disabled={bookOffBusy} onClick={()=>void saveBookOff(true)}>{bookOffBusy?'RETRYING…':'RETRY SAME BOOK-OFF REQUEST'}</button>
+   </div>}
+   {bookOffMessage&&!bookOffPending&&<p className="text-sm mt-3" role="status">{bookOffMessage}</p>}
   </div>
 
   {data&&viewMode==='week'&&<div className="max-w-full overflow-x-auto">
    <table className="w-full border-collapse text-sm" style={{minWidth:1100}}>
     <caption className="sr-only">Weekly schedule in {timezone}, week beginning {formatSchedulingDate(week)}</caption>
-    <thead><tr className="bg-slate-50"><th scope="col" className="text-left p-3 border-b w-44">Worker / work</th>{days.map(day=><th key={day} scope="col" className="text-left p-3 border-b">{formatSchedulingDate(day)}</th>)}</tr></thead>
+    <thead><tr className="bg-slate-50"><th scope="col" className="text-left p-3 border-b w-44">Worker / work</th>{days.map(day=><th key={day} scope="col" className="text-left p-3 border-b"><span className="block">{formatSchedulingDate(day)}</span><button type="button" className="mt-2 text-xs font-semibold underline text-blue-800" disabled={stale||bookOffBusy||Boolean(bookOffPending)||!workspaceTimezone||activeWorkers.length===0} onClick={()=>openBookOff(day)} aria-label={`Book worker off ${formatSchedulingDate(day)}`}>BOOK WORKER OFF</button></th>)}</tr></thead>
     <tbody>
      <tr><th scope="row" className="text-left p-3 border-b align-top text-amber-900">Unfilled work<p className="text-xs font-normal">{visibleJobs.reduce((sum,job)=>sum+jobVacancies(data,job),0)} places still needed</p></th>{days.map(day=><td key={day} className="p-2 border-b border-l align-top">{visibleJobs.filter(job=>jobVacancies(data,job)>0&&spansPlannerDay(job.startAt,job.endAt,day,timezone)).map(job=><div key={job.id}>{jobCard(job,`Unfilled: ${jobVacancies(data,job)}`)}</div>)}</td>)}</tr>
      {visibleWorkers.map(worker=><tr key={worker.id}><th scope="row" className="text-left p-3 border-b align-top"><span className="font-semibold text-slate-900">{worker.name}</span>{workerSetupIssue(data,worker.id,rangeStart,rangeEnd)&&<><p className="text-xs text-amber-800 mt-1">{workerSetupIssue(data,worker.id,rangeStart,rangeEnd)}</p><button className="text-xs underline text-blue-800 mt-1" onClick={()=>openWorker(worker.id)}>SET WORKING HOURS</button></>}</th>{days.map(day=><td key={day} className="p-2 border-b border-l align-top">{activeAssignments.filter(assignment=>assignment.workerId===worker.id&&jobs.some(job=>job.id===assignment.jobId)&&spansPlannerDay(assignment.startAt,assignment.endAt,day,timezone)).map(assignment=>{const job=jobs.find(candidate=>candidate.id===assignment.jobId)!;return <div key={assignment.id}>{jobCard(job,'Assigned',assignmentConflict(data,assignment))}</div>;})}{data.leave.filter(period=>period.workerId===worker.id&&period.status==='active'&&spansPlannerDay(period.startAt,period.endAt,day,timezone)).map(period=>{const presentation=periodPresentation(period);return <div key={period.id} className={`rounded-lg border p-2 mb-2 text-xs ${presentation.className}`}><p className="font-semibold">{presentation.label}</p><p>{formatSchedulingInstant(period.startAt,timezone)} to {formatSchedulingInstant(period.endAt,timezone)}</p></div>;})}</td>)}</tr>)}

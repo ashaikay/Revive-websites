@@ -4,6 +4,7 @@ import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-libra
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 
 const workspaceId='11111111-1111-4111-8111-111111111111';
+const userId='99999999-9999-4999-8999-999999999999';
 const workerId='22222222-2222-4222-8222-222222222222';
 const jobId='33333333-3333-4333-8333-333333333333';
 const assignmentId='44444444-4444-4444-8444-444444444444';
@@ -43,7 +44,7 @@ describe('Full-width scheduling month planner',()=>{
  afterEach(()=>{cleanup();vi.restoreAllMocks();});
 
  it('keeps Week as default and shares date, timezone and filters with the accessible month view',async()=>{
-  render(<SchedulingWeeklyPlanner workspaceId={workspaceId}/>);
+  render(<SchedulingWeeklyPlanner workspaceId={workspaceId} userId={userId} workspaceTimezone="Europe/London"/>);
   await screen.findByText('Weekly planner');
   expect(screen.getByRole('button',{name:'WEEK'})).toHaveAttribute('aria-pressed','true');
   fireEvent.change(screen.getByLabelText('Week beginning'),{target:{value:'2026-10-05'}});
@@ -69,7 +70,7 @@ describe('Full-width scheduling month planner',()=>{
  });
 
  it('navigates across month and year boundaries while retaining the selected view',async()=>{
-  render(<SchedulingWeeklyPlanner workspaceId={workspaceId}/>);
+  render(<SchedulingWeeklyPlanner workspaceId={workspaceId} userId={userId} workspaceTimezone="Europe/London"/>);
   await screen.findByText('Weekly planner');
   fireEvent.click(screen.getByRole('button',{name:'MONTH'}));
   fireEvent.change(screen.getByLabelText('Month containing'),{target:{value:'2026-12-15'}});
@@ -83,7 +84,7 @@ describe('Full-width scheduling month planner',()=>{
  });
 
  it('retains the last successful month and reports stale refresh failures',async()=>{
-  render(<SchedulingWeeklyPlanner workspaceId={workspaceId}/>);
+  render(<SchedulingWeeklyPlanner workspaceId={workspaceId} userId={userId} workspaceTimezone="Europe/London"/>);
   await screen.findByText('Weekly planner');
   fireEvent.click(screen.getByRole('button',{name:'MONTH'}));
   fireEvent.change(screen.getByLabelText('Month containing'),{target:{value:'2026-10-09'}});

@@ -243,7 +243,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
               <button type="submit" className="btn-primary text-sm" disabled={reminderBusy || !reminderBody.trim()}>
                 {reminderBusy ? 'SAVING DRAFT…' : action.meetingReminderDraft ? 'SAVE CORRECTION' : 'SAVE REMINDER DRAFT'}
               </button>
-              <button type="button" className="btn-ghost text-sm" disabled={reminderBusy} onClick={() => setShowReminderForm(false)}>CANCEL</button>
+              <button type="button" className="btn-ghost text-sm" disabled={reminderBusy} onClick={() => setShowReminderForm(false)}>DISCARD CHANGES</button>
             </div>
           </form>
         )}
@@ -307,7 +307,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
               <button type="submit" className="btn-primary text-sm" disabled={outcomeBusy || !outcomeSummary.trim() || !outcomeOccurredAt}>
                 {outcomeBusy ? 'SAVING OUTCOME…' : action.meetingOutcome ? 'SAVE CORRECTION' : 'SAVE OUTCOME'}
               </button>
-              <button type="button" className="btn-ghost text-sm" disabled={outcomeBusy} onClick={() => setShowOutcomeForm(false)}>CANCEL</button>
+              <button type="button" className="btn-ghost text-sm" disabled={outcomeBusy} onClick={() => setShowOutcomeForm(false)}>DISCARD CHANGES</button>
             </div>
           </form>
         )}

@@ -105,6 +105,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
   onRequestExecution, executionResult, liveExecutionResult, executionError,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [subject, setSubject] = useState(artifact.subject ?? '');
   const [draftMessage, setDraftMessage] = useState(artifact.draftMessage);
   const pending = artifact.approvalState === 'pending';
@@ -122,7 +123,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
             {pending ? 'Draft — review required' : artifact.approvalState === 'approved_not_sent' ? 'Approved — not sent' : 'Rejected — not sent'}
           </span>
         </div>
-        <span className="mt-2 inline-block text-xs font-medium text-primary-700">View draft and actions</span>
+        <span className="mt-2 inline-block text-xs font-medium text-primary-700">{pending && canReview ? 'View draft, approve or discard' : 'View draft and actions'}</span>
       </summary>
       <div className="border-t border-neutral-200 p-4 grid gap-4">
         <div className="grid sm:grid-cols-2 gap-3 text-sm text-neutral-700">
@@ -138,7 +139,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
             <textarea id={`prepared-draft-${artifact.id}`} className="input-field min-h-48 resize-y" value={draftMessage} onChange={(event) => setDraftMessage(event.target.value)} />
             <div className="flex flex-wrap gap-2">
               <button className="btn-primary text-sm" type="button" onClick={() => { onEdit(subject, draftMessage); setIsEditing(false); }}>Save draft</button>
-              <button className="btn-ghost text-sm" type="button" onClick={() => setIsEditing(false)}>Cancel</button>
+              <button className="btn-ghost text-sm" type="button" onClick={() => setIsEditing(false)}>Discard changes</button>
             </div>
           </div>
         ) : (
@@ -162,12 +163,21 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           </div>
         )}
 
-        {pending && canReview && !isEditing && (
+        {pending && canReview && !isEditing && !confirmDiscard && (
           <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-4">
             <button className="btn-secondary text-sm" type="button" onClick={onRefreshContext}>Refresh context</button>
             <button className="btn-secondary text-sm" type="button" onClick={() => setIsEditing(true)}>Edit</button>
             <button className="btn-primary text-sm" type="button" onClick={onApprove}>Approve</button>
-            <button className="btn-ghost text-sm" type="button" onClick={onReject}>Reject</button>
+            <button className="btn-ghost text-sm" type="button" onClick={() => setConfirmDiscard(true)}>Discard draft — not sent</button>
+          </div>
+        )}
+        {pending && canReview && !isEditing && confirmDiscard && (
+          <div className="rounded border border-amber-300 bg-amber-50 p-4" role="group" aria-label="Confirm prepared follow-up discard">
+            <p className="text-sm text-amber-950">Discard this prepared follow-up draft? It will leave pending review as rejected, remain in durable history, and nothing will be sent.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="btn-secondary text-sm" type="button" onClick={() => { onReject(); setConfirmDiscard(false); }}>Confirm discard — not sent</button>
+              <button className="btn-ghost text-sm" type="button" onClick={() => setConfirmDiscard(false)}>Keep draft</button>
+            </div>
           </div>
         )}
         {pending && !canReview && <p className="text-sm text-amber-800">Owner or admin review is required.</p>}
