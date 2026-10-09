@@ -117,10 +117,10 @@ describe('Phase 5K supervised meeting proposal review', () => {
     vi.unstubAllEnvs();
   });
 
-  it('requires a separate confirmation before live booking and names the mailbox and invitation risk', () => {
+  it('requires a separate confirmation before live booking and describes the selected calendar and invitation risk', () => {
     const card = readFileSync(new URL('../components/MeetingProposalReviewCard.tsx', import.meta.url), 'utf8');
     expect(card).toContain("onClick={() => setConfirmLiveBooking(true)}");
-    expect(card).toContain('This will create a Microsoft calendar event for support@fatherslegacy.net and may send an invitation to the approved attendee.');
+    expect(card).toContain('This will create an event in the workspace’s selected Outlook calendar and may send an invitation to the approved attendee.');
     expect(card).toContain('CONFIRM LIVE BOOKING');
     expect(card).toContain('onClick={onRequestLive}');
   });

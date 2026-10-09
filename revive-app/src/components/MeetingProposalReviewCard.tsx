@@ -160,7 +160,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
       {liveUiEnabled && canReview && action.status === 'approved' && onRequestLive &&
         (!displayedExecution || displayedExecution.status === 'provider_disabled') && confirmLiveBooking && (
         <div className="mt-4 rounded border border-amber-300 bg-amber-50 p-4 text-amber-950">
-          <p className="text-sm">This will create a Microsoft calendar event for support@fatherslegacy.net and may send an invitation to the approved attendee.</p>
+          <p className="text-sm">This will create an event in the workspace’s selected Outlook calendar and may send an invitation to the approved attendee.</p>
           <div className="flex flex-wrap gap-3 mt-3">
             <button type="button" className="btn-primary text-sm" disabled={executionBusy} onClick={onRequestLive}>
               {executionBusy ? 'CREATING EVENT...' : 'CONFIRM LIVE BOOKING'}
