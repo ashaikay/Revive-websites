@@ -15,7 +15,7 @@ async function request(token, method, path, body) {
     method,
     headers: {
       apikey: anonKey,
-      Authorization: `******`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
     },
@@ -25,12 +25,26 @@ async function request(token, method, path, body) {
   return { status: response.status, payload, rows: Array.isArray(payload) ? payload : [] };
 }
 const rpc = (token, name, body) => request(token, 'POST', `/rest/v1/rpc/${name}`, body);
+function authErrorDetails(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return 'code=unavailable message=unavailable';
+  const code = payload.code ?? payload.error_code ?? payload.error;
+  const message = payload.message ?? payload.msg ?? payload.error_description;
+  const safe = (value) => typeof value === 'string'
+    ? value.replace(/[\r\n\t]+/g, ' ').slice(0, 200)
+    : 'unavailable';
+  return `code=${safe(code)} message=${safe(message)}`;
+}
 async function identity(label) {
-  const email = `phase5e1-${Date.now()}-${label}@example.test`;
+  const email = `phase5e1-${Date.now()}-${label}-${randomBytes(4).toString('hex')}@example.test`;
   const password = `Local-${randomBytes(18).toString('base64url')}`;
   const created = await request(serviceKey, 'POST', '/auth/v1/admin/users', { email, password, email_confirm: true });
+  if (created.status !== 200 || typeof created.payload?.id !== 'string') {
+    throw new Error(`Identity user creation failed: ${label}; status=${created.status} ${authErrorDetails(created.payload)}`);
+  }
   const login = await request(anonKey, 'POST', '/auth/v1/token?grant_type=password', { email, password });
-  if (created.status !== 200 || login.status !== 200) throw new Error(`Identity setup failed: ${label}`);
+  if (login.status !== 200 || typeof login.payload?.access_token !== 'string') {
+    throw new Error(`Identity login failed: ${label}; status=${login.status} ${authErrorDetails(login.payload)}`);
+  }
   return { id: created.payload.id, token: login.payload.access_token };
 }
 
