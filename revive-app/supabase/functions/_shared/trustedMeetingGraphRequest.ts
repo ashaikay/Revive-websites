@@ -10,11 +10,11 @@ const fail = () => { throw new Error('Trusted meeting Graph request unavailable.
  * The token must be acquired on the trusted server after the disabled gateway check. */
 export function buildTrustedMeetingGraphRequest(
   durable: TrustedMeetingExecutionSnapshot,
-  trusted: { workspaceId: string; primaryMailboxUserPrincipalName: string; accessToken: string },
+  trusted: { workspaceId: string; providerAccountReference: string; accessToken: string },
 ): MicrosoftGraphCalendarEventRequest {
   const proposal = durable.proposal;
   if (durable.workspaceId !== trusted.workspaceId ||
-    durable.calendarReference !== trusted.primaryMailboxUserPrincipalName ||
+    durable.calendarReference !== trusted.providerAccountReference ||
     !trusted.accessToken?.trim() ||
     typeof proposal.title !== 'string' || !proposal.title.trim() || proposal.title.length > 120 ||
     typeof proposal.attendeeEmail !== 'string' || !email.test(proposal.attendeeEmail.trim()) ||
@@ -43,7 +43,8 @@ export function buildTrustedMeetingGraphRequest(
     workspaceId: durable.workspaceId,
     trustedWorkspaceId: trusted.workspaceId,
     mailboxUserPrincipalName: durable.calendarReference,
-    trustedMailboxUserPrincipalName: trusted.primaryMailboxUserPrincipalName,
+    trustedMailboxUserPrincipalName: trusted.providerAccountReference,
+    providerCalendarReference: durable.providerCalendarReference,
     idempotencyKey: durable.requestFingerprint,
     snapshot,
   };

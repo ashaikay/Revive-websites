@@ -24,7 +24,7 @@ Deno.serve(request => handleMeetingExecutionHttp(request, {
     const trustedClient = createClient(url, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false } });
     const executeDisabled = createMeetingExecutionServerBoundary({
-      callerClient, trustedClient, getEnvironment: key => Deno.env.get(key),
+      callerClient,
     } as unknown as MeetingServerDependencies);
     const providerClient = trustedClient as unknown as TrustedMeetingReadClient & MeetingProviderAttemptClient;
     return createMeetingProviderHttpService({

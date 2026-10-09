@@ -8,6 +8,7 @@ export interface MicrosoftGraphCalendarEventRequest {
   trustedWorkspaceId: string;
   mailboxUserPrincipalName: string;
   trustedMailboxUserPrincipalName: string;
+  providerCalendarReference: string;
   idempotencyKey: string;
   snapshot: ApprovedCalendarEventSnapshot;
 }
@@ -148,6 +149,10 @@ export async function createMicrosoftGraphCalendarEvent(
     request.trustedMailboxUserPrincipalName,
     'Trusted mailbox',
   );
+  const calendarReference = required(
+    request.providerCalendarReference,
+    'Selected calendar',
+  );
 
   const idempotencyKey = required(
     request.idempotencyKey,
@@ -206,9 +211,8 @@ export async function createMicrosoftGraphCalendarEvent(
     transactionId: idempotencyKey,
   };
 
-  const url =
-    `https://graph.microsoft.com/v1.0/users/` +
-    `${encodeURIComponent(mailbox)}/calendar/events`;
+  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}` +
+    `/calendars/${encodeURIComponent(calendarReference)}/events`;
 
   let response: Response;
 

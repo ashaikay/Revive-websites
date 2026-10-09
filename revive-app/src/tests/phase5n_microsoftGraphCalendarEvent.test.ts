@@ -13,6 +13,7 @@ const request: MicrosoftGraphCalendarEventRequest = {
   mailboxUserPrincipalName: 'support@fatherslegacy.net',
   trustedMailboxUserPrincipalName:
     'support@fatherslegacy.net',
+  providerCalendarReference: 'selected-calendar-42',
   idempotencyKey: 'a'.repeat(64),
   snapshot: {
     title: 'Approved discovery call',
@@ -68,7 +69,7 @@ describe(
 
       expect(url).toBe(
         'https://graph.microsoft.com/v1.0/users/' +
-          'support%40fatherslegacy.net/calendar/events',
+          'support%40fatherslegacy.net/calendars/selected-calendar-42/events',
       );
 
       expect(init?.method).toBe('POST');
@@ -133,6 +134,13 @@ describe(
           fetchImpl,
         ),
       ).rejects.toThrow(/trusted workspace/);
+
+      await expect(
+        createMicrosoftGraphCalendarEvent(
+          { ...request, providerCalendarReference: '  ' },
+          fetchImpl,
+        ),
+      ).rejects.toThrow(/Selected calendar is required/);
 
       await expect(
         createMicrosoftGraphCalendarEvent(

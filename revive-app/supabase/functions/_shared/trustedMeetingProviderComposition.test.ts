@@ -42,21 +42,28 @@ test('matching workspace reaches fake Graph after durable claim while mismatch r
       title: 'Approved meeting', attendeeEmail: 'attendee@example.test', startAt: '2040-09-30T09:00:00.000Z',
       endAt: '2040-09-30T09:30:00.000Z', timezone: 'Europe/London', meetingMethod: 'online',
       locationDetails: '', notes: '' } },
-    rev_meeting_calendar_bindings: { workspace_id: workspaceId, enabled: true,
-      calendar_reference: 'owner@example.test', timezone: 'Europe/London', version: 1 },
   };
+  const target = { execution_id: executionId, workspace_id: workspaceId,
+    calendar_id: '77777777-7777-4777-8777-777777777777',
+    connection_id: '88888888-8888-4888-8888-888888888888',
+    credential_reference: '99999999-9999-4999-8999-999999999999', credential_revision: 1,
+    provider_account_reference: 'owner@example.test', provider_calendar_reference: 'calendar-1',
+    timezone: 'Europe/London', consent_version: 1, workspace_binding_version: 1,
+    target_fingerprint: 'b'.repeat(64) };
 
-  for (const [liveWorkspaceId, expectedCalls] of [
-    [workspaceId, ['read:rev_action_executions', 'read:rev_actions', 'read:approvals', 'read:meeting_proposals',
-      'read:rev_meeting_calendar_bindings', 'token', 'claim', 'graph', 'record']],
-    ['66666666-6666-4666-8666-666666666666', []],
-  ] as const) {
+  for (const liveWorkspaceId of [
+    workspaceId,
+    '66666666-6666-4666-8666-666666666666',
+  ]) {
     const calls: string[] = [];
     const client = {
       from: (table: string) => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => {
         calls.push(`read:${table}`); return { data: rows[table], error: null };
       } }) }) }) }),
       rpc: async (name: string) => {
+        if (name === 'load_rev_meeting_execution_calendar_target') {
+          calls.push('target'); return { data: [target], error: null };
+        }
         if (name === 'claim_rev_meeting_provider_attempt') {
           calls.push('claim'); return { data: { id: executionId, correlation_id: correlationId,
             request_fingerprint: fingerprint, capability: 'CREATE_APPROVED_MEETING_EVENT', mode: 'live',
@@ -75,9 +82,11 @@ test('matching workspace reaches fake Graph after durable claim while mismatch r
     });
     if (liveWorkspaceId === workspaceId) {
       assert.deepEqual(await execute(attempt), { executionId, outcome: 'accepted_by_provider', status: 'succeeded' });
+      assert.deepEqual(calls, ['read:rev_action_executions', 'read:rev_actions', 'read:approvals',
+        'read:meeting_proposals', 'target', 'token', 'claim', 'graph', 'record']);
     } else {
       await assert.rejects(execute(attempt), /disabled/);
+      assert.deepEqual(calls, []);
     }
-    assert.deepEqual(calls, expectedCalls);
   }
 });

@@ -84,6 +84,8 @@ Those require a separate reviewed implementation phase and explicit authorizatio
 
 ## Local delegated-consent slice
 
-The repository now contains an additive, undeployed customer-Outlook consent path for an owner or admin to explicitly request `Calendars.ReadWrite` on an already selected calendar. The verified scope is stored as private consent metadata and a service-only authority check validates workspace, selected calendar, active connection and credential revision. Existing read-only credentials are not upgraded, and the write-consent path is not connected to event execution.
+The repository contains an additive customer-Outlook consent path for an owner or admin to explicitly request `Calendars.ReadWrite` on an already selected calendar. The verified scope is stored as private consent metadata; existing read-only credentials are not upgraded.
 
-This local support does not authorize live OAuth/provider calls, deployment, event creation or a change to `CREATE_CALENDAR_EVENT=false`. Booking remains disabled until a separate reviewed phase authorizes and implements the complete execution path.
+The local-only migration `20261009030000_rev_meeting_selected_outlook_binding.sql` binds a durable meeting reservation to the workspace's selected calendar, connection, credential revision, provider account/calendar references, timezone and consent version. Exact retries retain that target and refuse a changed selection; provider claims recheck the selected calendar and consent. The trusted Graph mapping now addresses that calendar rather than the mailbox default calendar.
+
+This is not authorization to apply the migration to a hosted database, make live OAuth/provider calls, deploy, create events or change `CREATE_CALENDAR_EVENT=false`. The customer-delegated credential exchange for a future live event call remains a prerequisite; booking stays disabled until that execution path is separately reviewed and authorized.

@@ -30,7 +30,7 @@ export function createTrustedMeetingProviderComposition(deps: TrustedMeetingProv
         const accessToken = await deps.getAccessToken();
         return buildTrustedMeetingGraphRequest(snapshot, {
           workspaceId: deps.trustedWorkspaceId,
-          primaryMailboxUserPrincipalName: deps.primaryMailboxUserPrincipalName,
+          providerAccountReference: deps.primaryMailboxUserPrincipalName,
           accessToken,
         });
       },

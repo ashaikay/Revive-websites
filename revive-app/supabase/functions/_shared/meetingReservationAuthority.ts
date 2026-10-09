@@ -2,7 +2,7 @@ import type { DurableMeetingEventReservation, MeetingEventExecutionRequest } fro
 
 /** Only a server-created, caller-JWT-scoped client is suitable here. */
 export interface AuthenticatedMeetingReservationClient {
-  rpc(name: 'reserve_rev_meeting_event_execution', args: {
+  rpc(name: 'reserve_rev_meeting_event_execution_selected', args: {
     target_request_id: string;
     target_workspace_id: string;
     target_action_id: string;
@@ -13,7 +13,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export function createMeetingReservationAuthority(client: AuthenticatedMeetingReservationClient) {
   return async (input: MeetingEventExecutionRequest & { actorUserId: string }): Promise<DurableMeetingEventReservation> => {
     // The actor identity is derived afresh by auth.uid() inside the RPC. Never send actorUserId.
-    const { data, error } = await client.rpc('reserve_rev_meeting_event_execution', {
+    const { data, error } = await client.rpc('reserve_rev_meeting_event_execution_selected', {
       target_request_id: input.requestId,
       target_workspace_id: input.workspaceId,
       target_action_id: input.actionId,

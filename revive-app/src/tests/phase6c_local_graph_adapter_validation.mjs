@@ -64,22 +64,44 @@ const decision = await rpc(owner.token, 'decide_rev_action_approval', {
 });
 check('OWNER_APPROVED', decision.status === 200);
 check('OLD_RPC_REVOKED', sql("select has_function_privilege('authenticated','public.reserve_rev_meeting_event_execution(uuid,uuid,uuid)','EXECUTE')") === 'f');
-const args = { target_request_id: randomUUID(), target_workspace_id: workspaceId, target_action_id: actionId, expected_calendar_reference: 'local-test-mailbox@example.test', expected_timezone: 'Europe/London', expected_binding_version: 1 };
-check('NO_POLICY_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args)).status >= 400);
+const args = { target_request_id: randomUUID(), target_workspace_id: workspaceId, target_action_id: actionId };
+check('OLD_BOUND_RPC_REVOKED', sql("select has_function_privilege('authenticated','public.reserve_rev_meeting_event_execution_bound(uuid,uuid,uuid,text,text,bigint)','EXECUTE')") === 'f');
+check('NO_POLICY_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', args)).status >= 400);
 sql("insert into public.workspace_execution_policies (workspace_id, execution_enabled, autonomy_mode, updated_by) values ('" + workspaceId + "'::uuid, true, 'always_ask', '" + owner.id + "'::uuid) on conflict (workspace_id) do update set execution_enabled=true, autonomy_mode='always_ask', updated_by=excluded.updated_by");
-check('NO_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args)).status >= 400);
+check('NO_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', args)).status >= 400);
 sql("insert into public.rev_meeting_calendar_bindings (workspace_id, provider_key, calendar_reference, timezone, enabled) values ('" + workspaceId + "'::uuid, 'microsoft_graph', 'local-test-mailbox@example.test', 'Europe/London', false)");
-check('DISABLED_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args)).status >= 400);
+check('DISABLED_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', args)).status >= 400);
 sql("update public.rev_meeting_calendar_bindings set enabled=true where workspace_id='" + workspaceId + "'::uuid");
-const memberCall = await rpc(member.token, 'reserve_rev_meeting_event_execution_bound', args);
-const outsiderCall = await rpc(outsider.token, 'reserve_rev_meeting_event_execution_bound', args);
-const wrongWorkspace = await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', { ...args, target_workspace_id: otherId });
+const memberCall = await rpc(member.token, 'reserve_rev_meeting_event_execution_selected', args);
+const outsiderCall = await rpc(outsider.token, 'reserve_rev_meeting_event_execution_selected', args);
+const wrongWorkspace = await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', { ...args, target_workspace_id: otherId });
 check('MEMBER_AND_CROSS_TENANT_DENIED', memberCall.status >= 400 && outsiderCall.status >= 400 && wrongWorkspace.status >= 400);
-const accepted = await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args);
+const connectionId = randomUUID();
+const calendarId = randomUUID();
+const credentialId = randomUUID();
+const accountReference = 'local-test-mailbox@example.test';
+const calendarReference = 'local-selected-calendar-' + stamp;
+const secretId = sql("select vault.create_secret('phase6c-local-only-fake-refresh-token')");
+sql("insert into public.workspace_calendar_connections (id,workspace_id,provider_key,connection_status,provider_account_reference,authorized_by_user_id) values ('" +
+  connectionId + "'::uuid,'" + workspaceId + "'::uuid,'microsoft_graph','disconnected','" + accountReference + "','" + owner.id + "'::uuid)");
+sql("insert into rev_calendar_private.credentials (id,workspace_id,connection_id,secret_id,granted_calendar_scopes) values ('" +
+  credentialId + "'::uuid,'" + workspaceId + "'::uuid,'" + connectionId + "'::uuid,'" + secretId +
+  "'::uuid,array['https://graph.microsoft.com/calendars.readwrite'])");
+sql("update public.workspace_calendar_connections set connection_status='connected',credential_reference='" + credentialId +
+  "',calendar_write_consent_at=now(),calendar_write_consent_by_user_id='" + owner.id + "'::uuid where id='" + connectionId + "'::uuid");
+sql("insert into public.workspace_calendars (id,workspace_id,connection_id,provider_calendar_reference,display_name,timezone,is_selected,active) values ('" +
+  calendarId + "'::uuid,'" + workspaceId + "'::uuid,'" + connectionId + "'::uuid,'" + calendarReference + "','Local calendar','Europe/London',true,true)");
+const selectedArgs = { target_request_id: randomUUID(), target_workspace_id: workspaceId, target_action_id: actionId };
+const crossTenantSelected = await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', { ...selectedArgs, target_workspace_id: otherId });
+check('SELECTED_CALENDAR_CROSS_TENANT_DENIED', crossTenantSelected.status >= 400);
+const accepted = await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', selectedArgs);
 const execution = accepted.data;
 check('OWNER_DURABLE_NO_PROVIDER', accepted.status === 200 && execution?.capability === 'CREATE_APPROVED_MEETING_EVENT' && execution?.provider_outcome === 'provider_not_invoked' && execution?.status === 'prepared' && execution?.mode === 'dry_run');
 
-const client = { from: table => ({ select: columns => ({ eq: (first, firstValue) => ({ eq: (second, secondValue) => ({ maybeSingle: async () => {
+const client = { rpc: async (name, parameters) => {
+  const response = await rpc(service, name, parameters);
+  return { data: response.status === 200 ? [response.data] : null, error: response.status === 200 ? null : response.data };
+}, from: table => ({ select: columns => ({ eq: (first, firstValue) => ({ eq: (second, secondValue) => ({ maybeSingle: async () => {
   const path = '/rest/v1/' + table + '?' + new URLSearchParams({ [first]: 'eq.' + firstValue, [second]: 'eq.' + secondValue, select: columns });
   const response = await request(service, 'GET', path);
   return { data: response.status === 200 ? response.data?.[0] ?? null : null, error: response.status === 200 ? null : response.data };
@@ -90,10 +112,13 @@ check('REAL_APPROVED_SNAPSHOT', snapshot.executionId === execution.id && snapsho
   snapshot.actionId === actionId && snapshot.approvalId === approvalId &&
   snapshot.requestFingerprint === execution.request_fingerprint && snapshot.proposal.title === 'Local reservation test');
 check('REAL_BINDING_AND_IDEMPOTENCY', snapshot.bindingVersion === 1 &&
-  snapshot.calendarReference === 'local-test-mailbox@example.test' && snapshot.timezone === 'Europe/London' &&
+  snapshot.calendarReference === accountReference && snapshot.providerCalendarReference === calendarReference &&
+  snapshot.calendarId === calendarId && snapshot.connectionId === connectionId &&
+  snapshot.credentialReference === credentialId && snapshot.credentialRevision === 1 &&
+  snapshot.timezone === 'Europe/London' &&
   snapshot.semanticIdempotencyKey === execution.idempotency_key);
 const graphRequest = buildTrustedMeetingGraphRequest(snapshot, {
-  workspaceId, primaryMailboxUserPrincipalName: 'local-test-mailbox@example.test', accessToken: 'mapping-only-no-Graph-call',
+  workspaceId, providerAccountReference: accountReference, accessToken: 'mapping-only-no-Graph-call',
 });
 check('REAL_GRAPH_SNAPSHOT_MAPPING',
   graphRequest.idempotencyKey === execution.request_fingerprint &&
@@ -108,11 +133,15 @@ check('REAL_GRAPH_SNAPSHOT_MAPPING',
   Object.keys(graphRequest.snapshot).length === 8);
 let interceptedCalls = 0;
 let requestedGraphEndpoint = false;
+let requestedSelectedCalendar = false;
 let graphErrorKind = null;
 try {
   await createMicrosoftGraphCalendarEvent(graphRequest, async input => {
     interceptedCalls++;
-    requestedGraphEndpoint = (input instanceof Request ? input.url : String(input)).startsWith('https://graph.microsoft.com/');
+    const url = input instanceof Request ? input.url : String(input);
+    requestedGraphEndpoint = url.startsWith('https://graph.microsoft.com/');
+    requestedSelectedCalendar = url.endsWith('/users/local-test-mailbox%40example.test/calendars/' +
+      encodeURIComponent(calendarReference) + '/events');
     // No network: the injected transport always returns a synthetic rate limit.
     return new Response(null, { status: 429 });
   });
@@ -120,9 +149,9 @@ try {
   graphErrorKind = error?.kind;
 }
 check('REAL_APPROVED_DATA_REACHES_GRAPH_ADAPTER_WITHOUT_NETWORK',
-  interceptedCalls === 1 && requestedGraphEndpoint && graphErrorKind === 'rate_limited');
+  interceptedCalls === 1 && requestedGraphEndpoint && requestedSelectedCalendar && graphErrorKind === 'rate_limited');
 let mismatchDenied = false;
-try { buildTrustedMeetingGraphRequest(snapshot, { workspaceId, primaryMailboxUserPrincipalName: 'other@example.test', accessToken: 'mapping-only' }); } catch { mismatchDenied = true; }
+try { buildTrustedMeetingGraphRequest(snapshot, { workspaceId, providerAccountReference: 'other@example.test', accessToken: 'mapping-only' }); } catch { mismatchDenied = true; }
 check('MISMATCHED_TRUSTED_MAILBOX_DENIED', mismatchDenied);
 sql("update public.rev_meeting_calendar_bindings set enabled=false where workspace_id='" + workspaceId + "'::uuid");
 let disabledDenied = false;

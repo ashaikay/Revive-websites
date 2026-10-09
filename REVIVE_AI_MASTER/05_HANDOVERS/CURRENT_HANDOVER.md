@@ -6,6 +6,24 @@ The earlier additional-account credential-load and empty-availability blockers a
 
 **Safety/release state:** Live calendar booking remains disabled. “Approved but not booked” is not permission to create an event. Continue customer Outlook verification, then the remaining Phase 5 calendar MVP roadmap, preserving the feature scope freeze and CI release gates. Worker job-brief uploads and assignment emails remain planned, not implemented: private manager-uploaded briefs; recipient email separate from REV login; confirmed-assignment details and a secure brief link using a separately authorized organization sending account; duplicate-send protection; sent/failed/not-sent status; and assignment-change/cancellation updates. Calendar-read consent does not grant email-sending authority.
 
+## REV layout tidy-up — queued after booking logic passes CI (2026-10-09)
+
+Once the selected-calendar booking logic and its safeguards pass CI, tidy the REV layout without changing booking behavior:
+
+- Keep email previews compact and let users expand to read full messages.
+- Make calendar and proposal sections clearer.
+- Give each action a short, plain-language instruction.
+- Place accessible progress and success feedback beside the control the user activated.
+- Dismiss routine success notes after a few seconds; keep errors, unconfirmed outcomes and retry controls visible until resolved.
+
+This is planned UI work, not implemented in the current binding slice. Live booking remains disabled; the current change does not authorize provider calls, hosted migration or deployment.
+
+## Selected Outlook calendar binding — local slice (2026-10-09)
+
+The current uncommitted implementation snapshots the workspace-selected calendar, account/connection, credential revision, write-consent version and workspace binding into the durable meeting reservation. Exact retries must retain that identity and refuse changed selection; provider-attempt guards recheck selection and consent. Trusted Graph request mapping targets the selected calendar rather than the mailbox default. The additive migration is local only and has not been applied to a hosted database.
+
+CI registration was verified and completed for all affected regressions: `verify-rev-meeting.mjs` runs the changed server boundary and provider-composition tests; the database job runs `phase6f_local_provider_lifecycle.mjs` and now also `phase6c_local_graph_adapter_validation.mjs` after migrations; the customer-calendar UI test command now includes `phase5n_microsoftGraphCalendarEvent.test.ts`. Local database scripts were not run because local Supabase and local test keys were unavailable. No live provider calls, hosted changes, deployment, commit or push.
+
 The detailed 2026-10-08 checkpoint below is historical and superseded by this manual verification for blocker status. Historical diagnostic uncertainty remains; do not reinterpret earlier failures as having a proven common cause.
 
 # Previous Handover — Customer Outlook Verification (2026-10-08)
