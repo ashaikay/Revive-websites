@@ -1,4 +1,4 @@
-## Current Checkpoint — Phase 5E Reminder Preparation Verified in Isolated CI (2026-10-09)
+## Current Checkpoint — Scheduling Sickness Save Hosted and User-Confirmed (2026-10-09)
 
 ## Controlled Outlook booking and invitation receipt (user-verified)
 
@@ -14,7 +14,7 @@ The earlier additional-account credential-load and empty-availability blockers a
 
 Live calendar booking remains disabled. Phase 5E.1 explicit meeting outcomes are implemented and verified in isolated CI without provider calls, inbox polling or automatic customer/revenue/goal mutation. Worker job-brief uploads and assignment emails remain planned, not implemented, and are not the next roadmap action.
 
-### Phase 5E.1 explicit meeting outcomes — isolated CI verified, not deployed
+### Phase 5E.1 explicit meeting outcomes — isolated CI verified; hosted migration applied; function unverified
 
 An owner/admin can record `held`, `no_show` or `cancelled` against the existing meeting proposal and see that durable result after refresh. Commercial results and next steps stay in the summary. Booking and RSVP status remain separate, and event creation never implies attendance.
 
@@ -23,13 +23,13 @@ An owner/admin can record `held`, `no_show` or `cancelled` against the existing 
 - Corrections require the current version, increment it and append a correction audit record; stale conflicting corrections are refused.
 - The proposal details contain a compact record/correct action, saved state and explicit empty state.
 - Recording `cancelled` clearly states that it does not cancel Outlook or notify anyone.
-- The migration and Edge Function are local only and have not been applied or deployed to hosted Supabase.
+- Migration `20261009123000_rev_meeting_outcomes.sql` was applied to hosted Supabase on 9 October 2026 as an authorised prerequisite of the sickness deployment. Deployment of the meeting-outcome Edge Function remains unverified, so hosted operational availability is not established.
 
 **Verification:** the complete registered 20-file mounted selection passed 157/157; the trusted outcome HTTP-boundary suite passed 6/6; type-check/build passed with the existing chunk advisory. The implementation is commit `458730791cbbdd19e2eb5ce27c0835da13d1dfa7`; validator authentication was corrected in `625cdfea94a06d61415a65e48fef9674493ad633`. GitHub Actions run [#113](https://github.com/ashaikay/Revive-websites/actions/runs/37928235997) passed both the meeting and database jobs at the latter commit. The isolated Phase 5E.1 database validator executed and passed, covering valid persistence, invalid types/times, duplicate requests/saves, version-bound corrections, audit counts, unauthorized/inactive actors, direct writes and cross-workspace reads/writes. A separate local run remained unavailable because Docker Desktop returned an engine API 500 when Supabase inspected the local database container.
 
-The slice is committed and verified in isolated CI, but its migration and Edge Function have not been deployed to hosted Supabase and it is not generally available. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. The earlier controlled 9 October customer Outlook booking and invitation receipt remain verified hosted/manual evidence for that exact test only.
+The slice is committed and verified in isolated CI, and its migration is registered in hosted Supabase. Meeting-outcome function deployment remains unverified, so the feature is not recorded as hosted-operational or generally available. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. The earlier controlled 9 October customer Outlook booking and invitation receipt remain verified hosted/manual evidence for that exact test only.
 
-### Phase 5E meeting-reminder preparation — isolated CI verified, not deployed
+### Phase 5E meeting-reminder preparation — isolated CI verified; hosted migration applied; function unverified
 
 Active workspace owners/admins can prepare one current plain-text reminder draft against a provider-accepted meeting proposal and correct it through version-bound trusted writes. Drafts contain only a trimmed 1–2,000 character body and reference the existing proposal; they do not duplicate attendee PII or contain a subject, channel, recipient or scheduled-send field.
 
@@ -39,7 +39,7 @@ The UI states **“Reminder draft saved. Delivery is not enabled.”** No sent o
 
 **Verification:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; the trusted reminder boundary suite passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. Local-validator syntax, TypeScript, Deno entry-point check, production build and `git diff --check` passed; the build retained the existing large-chunk advisory. The implementation is commit `e2b10acfedd9f52d17a5d56d6f944026b98b0066`. GitHub Actions run [#115](https://github.com/ashaikay/Revive-websites/actions/runs/37931746067) passed both the meeting and database jobs for that exact commit. The reminder validator was an unconditional command in the successful fail-fast database step, establishing that it executed and exited successfully. Raw validator PASS-marker logs were unavailable and were not inspected. A separate local database run remained unavailable because Docker Desktop returned an engine API 500.
 
-**Release state:** reminder preparation is committed and verified in isolated CI. The new migration and Edge Function have not been deployed or applied to hosted Supabase. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
+**Release state:** reminder preparation is committed and verified in isolated CI. Migration `20261009134000_rev_meeting_reminder_preparation.sql` was applied to hosted Supabase on 9 October 2026 as an authorised prerequisite of the sickness deployment. Reminder-function deployment remains unverified, so hosted reminder preparation is not recorded as operational. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
 
 The previous 2026-10-08 blocker investigation below is historical and superseded for the manual check. Do not claim the exact causes of every earlier credential or availability failure were proven.
 
@@ -97,7 +97,7 @@ Product priority:
 - Customer-calendar booking, reminders, RSVP and meeting outcomes remain unfinished; this priority change does not mark Phase 5 complete.
 - Earlier historical status and next-task entries are superseded by this checkpoint where they conflict.
 
-### Scheduling month planner and sickness recording — locally implemented, database verification pending
+### Scheduling month planner and sickness recording — CI verified, hosted and user-confirmed
 
 - Added a full-width Month view beside the preserved default Week view, with shared selected date, display timezone, worker/location filters, existing planner reads, automatic refresh and stale-result behavior.
 - Added Previous month, Next month and Today navigation, a clear month/year heading, Monday-first day cells and keyboard-accessible overflow details.
@@ -108,9 +108,9 @@ Product priority:
 - Conflicting assignments are listed with a clear refusal; no assignment is silently cancelled or moved.
 - No diagnosis, symptom, medical note or free-text health detail is accepted or stored. Annual Leave absences, accounts, postings and balances remain on their existing separate path.
 
-**Local verification:** focused Scheduling UI tests passed 20/20; scheduling boundary/browser regressions passed 57/57; the complete mounted CI UI selection passed 176/176; the worker-unavailability Edge Function Deno check, validator syntax check, TypeScript production build and `git diff --check` passed. The existing Vite large-chunk advisory remains. Local isolated database execution is pending because Docker Desktop returned an engine API 500 while Supabase inspected the existing local database container.
+**Verification:** the implementation was committed at `ea829630c5c07314beba351475369a5fa8382caf`. The visible sickness form and safe retained-retry handling were completed in commit `53d8dbd3ce731d73e10c54ab1286257a9e58b556`; GitHub Actions run [#119](https://github.com/ashaikay/Revive-websites/actions/runs/37948467949) passed both the meeting and isolated-database jobs for that exact commit. Focused sickness UI tests passed 7/7, worker-unavailability browser/service tests passed 18/18, and TypeScript/Vite build and `git diff --check` passed with the existing large-chunk advisory.
 
-**Release state:** implemented and locally tested only. Not committed, pushed, CI-verified, hosted-migrated, deployed, manually verified or released. No provider call, notification, assignment mutation, Annual Leave mutation or execution-gate change occurred.
+**Hosted/manual state:** authorised migrations `20261009123000_rev_meeting_outcomes.sql`, `20261009134000_rev_meeting_reminder_preparation.sql` and `20261009150000_rev_scheduling_sickness.sql` were applied to project `ntbowgutwyyhhnmkadlv`. `rev-worker-unavailability-save` version 6 is ACTIVE with JWT verification enabled, and downloaded hosted source matched the reviewed sickness-aware source. The user then confirmed that sickness saving works and the entries appear in the planner. No retained request was automatically retried, and no provider gate, notification, assignment mutation or Annual Leave mutation occurred. Meeting-outcome and reminder function deployment remains unverified.
 
 ---
 
