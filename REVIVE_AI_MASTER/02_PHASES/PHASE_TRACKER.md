@@ -786,6 +786,21 @@
 
 **Release boundary and next checkpoint:** Phase 5E.1 is committed and verified in isolated CI, but its migration and Edge Function are not deployed to hosted Supabase. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. Any hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain the next unfinished Phase 5E capabilities; neither is implemented or authorized to start by this closeout.
 
+### Phase 5E — meeting-reminder preparation (local implementation)
+
+- Documented the authorized owner/admin-only reminder-draft contract in the calendar architecture.
+- Added one current workspace/proposal-bound plain-text draft with no subject, channel, recipient, schedule or duplicated attendee PII.
+- Added trusted provider-accepted eligibility checks, future-start/no-outcome editing boundaries, exact request replay, semantic no-op handling, optimistic corrections and append-only audit evidence.
+- Added restrictive workspace RLS, service-only writes and denial of direct browser writes/RPC calls.
+- Added compact proposal-detail preparation/correction UI with the durable wording “Reminder draft saved. Delivery is not enabled.”
+- Existing drafts remain readable after the meeting starts or an outcome is recorded; editing is disabled without inferring cancellation or attendance.
+- Added focused UI/domain/client tests, trusted boundary tests and an isolated database validator registered in the meeting CI workflow.
+- No timer, delivery channel, consent-for-sending behavior, provider call, calendar update, email send, RSVP ingestion, commercial mutation or gate change was added.
+
+**Verification state:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; reminder boundary tests passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. TypeScript, local-validator syntax, Deno entry-point check, production build and `git diff --check` passed with the existing large-chunk advisory. The isolated database validator is registered in CI but could not run locally because Docker Desktop returned an engine API 500. This slice is local, uncommitted and undeployed.
+
+**Next controlled checkpoint:** finish local checks and registered isolated CI review for reminder preparation. Reminder timing/delivery and RSVP/response ingestion remain unfinished and require separate contracts and authorization.
+
 **Objective:** Integrate calendar and enable meeting booking
 
 **Estimated Duration:** 3 weeks

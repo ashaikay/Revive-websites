@@ -20,6 +20,7 @@ import { deterministicUuid, fingerprintREVAction } from '@/services/revActionFin
 import type { PreparedMeetingProposal } from '@/services/meetingProposalService';
 import type { MeetingExecutionResult } from '@/services/meetingExecutionClient';
 import { mapMeetingOutcome, type MeetingOutcome } from '@/domain/meetingOutcome';
+import { mapMeetingReminderDraft, type MeetingReminderDraft } from '@/domain/meetingReminder';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
 
@@ -43,6 +44,7 @@ export interface LivePendingAction extends LiveREVAction {
   meetingProposalId?: string;
   meetingProposal?: PreparedMeetingProposal;
   meetingDryRun?: MeetingExecutionResult;
+  meetingReminderDraft?: MeetingReminderDraft;
   meetingOutcome?: MeetingOutcome;
 }
 
@@ -271,7 +273,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
 
   async loadPendingActions(workspaceId) {
     const client = requiredClient();
-    const [actions, approvals, meetingProposals, meetingExecutions, meetingOutcomes] = await Promise.all([
+    const [actions, approvals, meetingProposals, meetingExecutions, meetingReminderDrafts, meetingOutcomes] = await Promise.all([
       client
         .from('rev_actions')
         .select('*')
@@ -295,6 +297,10 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .in('status', ['prepared', 'succeeded', 'failed'])
         .in('provider_outcome', ['provider_not_invoked', 'accepted_by_provider', 'rejected_by_provider', 'provider_outcome_unknown']),
       client
+        .from('meeting_reminder_drafts')
+        .select('id,workspace_id,meeting_proposal_id,body,prepared_by_user_id,version,created_at,updated_at')
+        .eq('workspace_id', workspaceId),
+      client
         .from('meeting_outcomes')
         .select('id,workspace_id,meeting_proposal_id,outcome_type,summary,occurred_at,recorded_by_user_id,version,created_at,updated_at')
         .eq('workspace_id', workspaceId),
@@ -304,6 +310,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     throwOnError(approvals.error);
     throwOnError(meetingProposals.error);
     throwOnError(meetingExecutions.error);
+    throwOnError(meetingReminderDrafts.error);
     throwOnError(meetingOutcomes.error);
 
     const approvalByAction = new Map(
@@ -321,6 +328,12 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
       (meetingOutcomes.data ?? []).map((row) => {
         const outcome = mapMeetingOutcome(row, workspaceId);
         return [outcome.meetingProposalId, outcome] as const;
+      }),
+    );
+    const meetingReminderByProposal = new Map(
+      (meetingReminderDrafts.data ?? []).map((row) => {
+        const draft = mapMeetingReminderDraft(row, workspaceId);
+        return [draft.meetingProposalId, draft] as const;
       }),
     );
     const meetingDryRunByAction = new Map(
@@ -349,6 +362,9 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
           : undefined,
         meetingDryRun: action.actionType === 'meeting_proposal'
           ? meetingDryRunByAction.get(action.id)
+          : undefined,
+        meetingReminderDraft: action.actionType === 'meeting_proposal' && meeting
+          ? meetingReminderByProposal.get(meeting.id)
           : undefined,
         meetingOutcome: action.actionType === 'meeting_proposal' && meeting
           ? meetingOutcomeByProposal.get(meeting.id)

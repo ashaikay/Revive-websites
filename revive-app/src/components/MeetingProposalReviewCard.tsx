@@ -22,6 +22,12 @@ export interface MeetingProposalReviewCardProps {
   onRequestLive?: () => Promise<void>;
   outcomeBusy?: boolean;
   outcomeError?: string;
+  reminderBusy?: boolean;
+  reminderError?: string;
+  onSaveReminder?: (input: {
+    body: string;
+    expectedVersion: number;
+  }) => Promise<void>;
   onRecordOutcome?: (input: {
     outcomeType: MeetingOutcomeType;
     summary: string;
@@ -108,11 +114,16 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   onRequestLive,
   outcomeBusy = false,
   outcomeError,
+  reminderBusy = false,
+  reminderError,
+  onSaveReminder,
   onRecordOutcome,
 }) => {
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
   const [confirmLiveBooking, setConfirmLiveBooking] = useState(false);
   const [showOutcomeForm, setShowOutcomeForm] = useState(false);
+  const [showReminderForm, setShowReminderForm] = useState(false);
+  const [reminderBody, setReminderBody] = useState(action.meetingReminderDraft?.body ?? '');
   const [outcomeType, setOutcomeType] = useState<MeetingOutcomeType>(
     action.meetingOutcome?.outcomeType ?? 'held',
   );
@@ -127,6 +138,9 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   const proposal = action.meetingProposal;
   const displayedExecution = executionResult ?? action.meetingDryRun;
   const presentation = displayedExecution ? executionPresentation(displayedExecution) : undefined;
+  const reminderEditingAvailable = displayedExecution?.status === 'event_created'
+    && Date.parse(proposal?.startAt ?? '') > Date.now()
+    && !action.meetingOutcome;
 
   useEffect(() => {
     if (!decisionFeedback) return;
@@ -179,6 +193,50 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         {proposal.locationDetails && <div><dt className="font-medium text-neutral-900">Location/details</dt><dd className="break-words">{proposal.locationDetails}</dd></div>}
       </dl>
       {proposal.notes && <div className="mt-3 text-sm text-neutral-700"><p className="font-medium text-neutral-900">Notes</p><p className="whitespace-pre-wrap break-words">{proposal.notes}</p></div>}
+
+      <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Meeting reminder draft">
+        <p className="text-sm font-medium text-neutral-900">Meeting reminder draft</p>
+        {action.meetingReminderDraft ? (
+          <div className="mt-2 rounded border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
+            <p className="whitespace-pre-wrap break-words">{action.meetingReminderDraft.body}</p>
+            <p className="mt-2 text-xs font-medium text-neutral-600">Reminder draft saved. Delivery is not enabled.</p>
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-neutral-600">No reminder draft has been prepared.</p>
+        )}
+        {canReview && action.meetingProposalId && reminderEditingAvailable && onSaveReminder && !showReminderForm && (
+          <button type="button" className="btn-secondary mt-3 text-sm" disabled={reminderBusy} onClick={() => setShowReminderForm(true)}>
+            {action.meetingReminderDraft ? 'Correct reminder draft' : 'Prepare reminder draft'}
+          </button>
+        )}
+        {action.meetingReminderDraft && !reminderEditingAvailable && (
+          <p className="mt-2 text-xs text-neutral-500">Editing is unavailable after the meeting starts or an explicit outcome is recorded.</p>
+        )}
+        {showReminderForm && (
+          <form className="mt-3 grid gap-3 rounded border border-neutral-200 bg-neutral-50 p-3" onSubmit={(event) => {
+            event.preventDefault();
+            void onSaveReminder?.({
+              body: reminderBody.trim(),
+              expectedVersion: action.meetingReminderDraft?.version ?? 0,
+            }).then(() => setShowReminderForm(false)).catch(() => undefined);
+          }}>
+            <label className="grid gap-1 text-sm font-medium text-neutral-800">
+              Reminder body
+              <textarea className="input-field min-h-24 resize-y bg-white" required maxLength={2000}
+                value={reminderBody} onChange={(event) => setReminderBody(event.target.value)}
+                placeholder="Prepare plain-text reminder wording. Nothing will be delivered." />
+            </label>
+            <p className="text-xs text-neutral-600">This is a manual, channel-neutral draft. Delivery is not enabled.</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="btn-primary text-sm" disabled={reminderBusy || !reminderBody.trim()}>
+                {reminderBusy ? 'SAVING DRAFT…' : action.meetingReminderDraft ? 'SAVE CORRECTION' : 'SAVE REMINDER DRAFT'}
+              </button>
+              <button type="button" className="btn-ghost text-sm" disabled={reminderBusy} onClick={() => setShowReminderForm(false)}>CANCEL</button>
+            </div>
+          </form>
+        )}
+        {reminderError && <p className="mt-3 text-sm text-red-700" role="alert">{reminderError}</p>}
+      </section>
 
       <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Meeting outcome">
         <p className="text-sm font-medium text-neutral-900">Meeting outcome</p>

@@ -27,6 +27,7 @@ import {
 } from '@/services/meetingExecutionClient';
 import { submitMeetingOutcome } from '@/services/meetingOutcomeService';
 import type { MeetingOutcomeType } from '@/domain/meetingOutcome';
+import { submitMeetingReminderDraft } from '@/services/meetingReminderService';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -928,6 +929,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [meetingExecutionBusyId, setMeetingExecutionBusyId] = useState<string | null>(null);
   const [meetingExecutionErrors, setMeetingExecutionErrors] = useState<Record<string, string>>({});
   const [meetingExecutionResults, setMeetingExecutionResults] = useState<Record<string, MeetingExecutionResult>>({});
+  const [meetingReminderBusyId, setMeetingReminderBusyId] = useState<string | null>(null);
+  const [meetingReminderErrors, setMeetingReminderErrors] = useState<Record<string, string>>({});
   const [meetingOutcomeBusyId, setMeetingOutcomeBusyId] = useState<string | null>(null);
   const [meetingOutcomeErrors, setMeetingOutcomeErrors] = useState<Record<string, string>>({});
 
@@ -1088,6 +1091,35 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
       return next;
     });
   }, []);
+
+  const handleMeetingReminder = async (
+    action: LivePendingAction,
+    input: { body: string; expectedVersion: number },
+  ) => {
+    if (meetingReminderBusyId || !action.meetingProposalId) return;
+    setMeetingReminderBusyId(action.id);
+    setMeetingReminderErrors((current) => ({ ...current, [action.id]: '' }));
+    try {
+      await submitMeetingReminderDraft({
+        workspaceId,
+        requestId: crypto.randomUUID(),
+        meetingProposalId: action.meetingProposalId,
+        body: input.body,
+        expectedVersion: input.expectedVersion,
+      });
+      await reload();
+    } catch (reminderError) {
+      setMeetingReminderErrors((current) => ({
+        ...current,
+        [action.id]: reminderError instanceof Error
+          ? reminderError.message
+          : 'Meeting reminder save is unconfirmed.',
+      }));
+      throw reminderError;
+    } finally {
+      setMeetingReminderBusyId(null);
+    }
+  };
 
   const handleMeetingOutcome = async (
     action: LivePendingAction,
@@ -1289,6 +1321,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                   meetingExecutionErrors[action.id] || meetingDecisionErrors[action.id]
                   || meetingDecisionFeedback[action.id] || busyId === action.id
                   || meetingExecutionBusyId === action.id
+                  || meetingReminderBusyId === action.id
+                  || meetingReminderErrors[action.id]
                   || meetingOutcomeBusyId === action.id
                   || meetingOutcomeErrors[action.id]
                   || meetingExecutionResults[action.id]
@@ -1306,12 +1340,15 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     executionResult={meetingExecutionResults[action.id]}
                     decisionError={meetingDecisionErrors[action.id]}
                     decisionFeedback={meetingDecisionFeedback[action.id]}
+                    reminderBusy={meetingReminderBusyId === action.id}
+                    reminderError={meetingReminderErrors[action.id]}
                     outcomeBusy={meetingOutcomeBusyId === action.id}
                     outcomeError={meetingOutcomeErrors[action.id]}
                     onClearDecisionFeedback={clearMeetingDecisionFeedback}
                     onRequestDryRun={() => handleMeetingDryRun(action)}
                     onRequestLive={() => handleMeetingLiveExecution(action)}
                     onDecision={(decision) => handleMeetingDecision(action, decision)}
+                    onSaveReminder={(input) => handleMeetingReminder(action, input)}
                     onRecordOutcome={(input) => handleMeetingOutcome(action, input)}
                   />
                 )} />

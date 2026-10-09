@@ -189,6 +189,23 @@ Proposed columns/keys:
 
 RLS intent: derive from the workspace proposal only, deny cross-tenant attendee insertion, and limit visibility to the minimum necessary business users. Do not import unrelated provider attendee lists.
 
+### `meeting_reminder_drafts`
+
+Phase 5E authorized reminder-preparation contract (9 October 2026):
+
+- Only an active workspace owner or admin may create or correct a reminder draft.
+- There is one current reminder draft per workspace meeting proposal.
+- The only editable content is one required plain-text body, trimmed and between 1 and 2,000 characters. The draft has no HTML, subject, channel, recipient address or scheduled-send field.
+- Exact request replays are idempotent. A semantically identical save is a no-op. Corrections require the current version, increment that version and append correction audit evidence; stale conflicting corrections are refused.
+- The trusted server must derive eligibility from a provider-accepted meeting execution bound to the same workspace and proposal. Browser-supplied booking evidence is never authoritative.
+- Preparation and correction are allowed only before the proposal's meeting start and while no explicit meeting outcome exists. Existing drafts remain readable after either boundary, but editing is disabled. These boundaries do not infer cancellation or attendance.
+- The UI must state: **“Reminder draft saved. Delivery is not enabled.”** It must not display a sent or scheduled state.
+- The record references the existing meeting proposal and must not duplicate attendee PII.
+
+This is a manual, channel-neutral internal draft. Reminder timing, delivery, sending consent and RSVP/response ingestion remain separate unfinished work. No scheduler, provider call, email send, calendar update or execution-gate change is authorized by this contract.
+
+Storage intent: additive workspace-scoped storage with a unique `(workspace_id, meeting_proposal_id)` current record, composite tenant foreign keys, restrictive RLS, service-only writes, a private exact-request ledger, optimistic version authority and transactional append-only audit evidence.
+
 ### Provider attempt records
 
 Preferred starting point: reuse `rev_action_executions` and `provider_usage_events` from Phase 4C for authorization, idempotency, claim, audit, and terminal outcome control. A later review may add `meeting_provider_attempts` only if it is needed for meeting-specific provider event reference, reconciliation cursor, or outcome metadata not safely represented on the existing execution record.

@@ -1,4 +1,4 @@
-## Current Checkpoint — Phase 5E.1 Isolated CI Verified (2026-10-09)
+## Current Checkpoint — Phase 5E Reminder Preparation Implemented Locally (2026-10-09)
 
 ## Controlled Outlook booking and invitation receipt (user-verified)
 
@@ -28,6 +28,18 @@ An owner/admin can record `held`, `no_show` or `cancelled` against the existing 
 **Verification:** the complete registered 20-file mounted selection passed 157/157; the trusted outcome HTTP-boundary suite passed 6/6; type-check/build passed with the existing chunk advisory. The implementation is commit `458730791cbbdd19e2eb5ce27c0835da13d1dfa7`; validator authentication was corrected in `625cdfea94a06d61415a65e48fef9674493ad633`. GitHub Actions run [#113](https://github.com/ashaikay/Revive-websites/actions/runs/37928235997) passed both the meeting and database jobs at the latter commit. The isolated Phase 5E.1 database validator executed and passed, covering valid persistence, invalid types/times, duplicate requests/saves, version-bound corrections, audit counts, unauthorized/inactive actors, direct writes and cross-workspace reads/writes. A separate local run remained unavailable because Docker Desktop returned an engine API 500 when Supabase inspected the local database container.
 
 The slice is committed and verified in isolated CI, but its migration and Edge Function have not been deployed to hosted Supabase and it is not generally available. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. The earlier controlled 9 October customer Outlook booking and invitation receipt remain verified hosted/manual evidence for that exact test only.
+
+### Phase 5E meeting-reminder preparation — implemented locally, not committed or deployed
+
+Active workspace owners/admins can prepare one current plain-text reminder draft against a provider-accepted meeting proposal and correct it through version-bound trusted writes. Drafts contain only a trimmed 1–2,000 character body and reference the existing proposal; they do not duplicate attendee PII or contain a subject, channel, recipient or scheduled-send field.
+
+The trusted save path requires provider-accepted execution evidence bound to the same workspace/proposal, a future meeting start and no explicit meeting outcome. It uses exact request replay, semantic no-op detection, optimistic corrections, restrictive RLS, service-only writes and transactional append-only audit evidence. Existing drafts remain readable after the meeting starts or an outcome is recorded, while editing becomes unavailable.
+
+The UI states **“Reminder draft saved. Delivery is not enabled.”** No sent or scheduled state exists. This slice adds no timer, delivery consent, provider call, email send, calendar update, RSVP ingestion, commercial mutation or gate change.
+
+**Local verification:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; the trusted reminder boundary suite passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. Local-validator syntax, TypeScript, Deno entry-point check, production build and `git diff --check` passed; the build retained the existing large-chunk advisory. The isolated database validator is registered in CI but could not run locally because Docker Desktop returned an engine API 500.
+
+**Release state:** local implementation only. The new migration and Edge Function are not committed, deployed or applied to hosted Supabase. Reminder timing/delivery and RSVP/response ingestion remain unfinished.
 
 The previous 2026-10-08 blocker investigation below is historical and superseded for the manual check. Do not claim the exact causes of every earlier credential or availability failure were proven.
 
@@ -168,7 +180,7 @@ Remaining work:
 Phase 5 — CALENDAR & MEETINGS CONTROLLED OUTLOOK PILOT VERIFIED; MVP PHASE REMAINS IN PROGRESS.
 
 ## Current Objective
-Preserve the isolated-CI-verified Phase 5E.1 outcome slice while keeping its migration and function undeployed until separately authorized. Preserve the disabled live booking and email-sending gates. Reminders and RSVP/response ingestion remain the next unfinished Phase 5 capabilities.
+Review and verify the local Phase 5E reminder-preparation slice without enabling delivery or provider execution. Keep its migration/function undeployed until separately authorized and preserve the disabled live booking and email-sending gates. Reminder timing/delivery and RSVP/response ingestion remain unfinished.
 
 ## Phase 5 Controlled Meeting Verification — 2026-09-29
 
@@ -192,7 +204,7 @@ Preserve the isolated-CI-verified Phase 5E.1 outcome slice while keeping its mig
 ### Remaining Phase 5 MVP work — not verified complete
 
 - Customer-managed Outlook connection, discovery, selection and availability are implemented and manually verified for the controlled customer account. Google calendar integration is not implemented, and the controlled Outlook evidence does not establish general production rollout.
-- Meeting reminders are not implemented.
+- Manual channel-neutral reminder-draft preparation is implemented locally; timing and delivery are not implemented.
 - RSVP tracking and response detection are not implemented.
 - Meeting outcome recording into the broader customer/opportunity workflow is not complete.
 - Goal-progress updates from booked or completed meetings are not complete.
@@ -200,7 +212,7 @@ Preserve the isolated-CI-verified Phase 5E.1 outcome slice while keeping its mig
 
 ### Next unfinished roadmap task
 
-Phase 5E reminders and RSVP/response ingestion remain unfinished. Phase 5E.1 has completed registered isolated CI, but this does not authorize either next capability to begin automatically.
+The local reminder-preparation slice must complete review and registered isolated CI. Reminder timing/delivery and RSVP/response ingestion remain unfinished and are not authorized to begin automatically.
 
 **Prerequisites:** preserve the rule that booking, RSVP and manually recorded outcome are separate facts; retain tenant isolation and auditable trusted writes; and require separate provider/read-permission design and authorization for any reminder or RSVP integration.
 
