@@ -19,6 +19,7 @@ import { analyzeRecovery } from '@/services/recoveryService';
 import { deterministicUuid, fingerprintREVAction } from '@/services/revActionFingerprint';
 import type { PreparedMeetingProposal } from '@/services/meetingProposalService';
 import type { MeetingExecutionResult } from '@/services/meetingExecutionClient';
+import { mapMeetingOutcome, type MeetingOutcome } from '@/domain/meetingOutcome';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
 
@@ -39,8 +40,10 @@ export interface LivePendingAction extends LiveREVAction {
   approvalId: string;
   approvalActionVersion: number;
   approvalActionFingerprint: string;
+  meetingProposalId?: string;
   meetingProposal?: PreparedMeetingProposal;
   meetingDryRun?: MeetingExecutionResult;
+  meetingOutcome?: MeetingOutcome;
 }
 
 export interface StoredPreparedFollowUp {
@@ -268,7 +271,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
 
   async loadPendingActions(workspaceId) {
     const client = requiredClient();
-    const [actions, approvals, meetingProposals, meetingExecutions] = await Promise.all([
+    const [actions, approvals, meetingProposals, meetingExecutions, meetingOutcomes] = await Promise.all([
       client
         .from('rev_actions')
         .select('*')
@@ -282,7 +285,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .eq('workspace_id', workspaceId),
       client
         .from('meeting_proposals')
-        .select('rev_action_id,proposal_payload')
+        .select('id,rev_action_id,proposal_payload')
         .eq('workspace_id', workspaceId),
       client
         .from('rev_action_executions')
@@ -291,12 +294,17 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .eq('capability', 'CREATE_APPROVED_MEETING_EVENT')
         .in('status', ['prepared', 'succeeded', 'failed'])
         .in('provider_outcome', ['provider_not_invoked', 'accepted_by_provider', 'rejected_by_provider', 'provider_outcome_unknown']),
+      client
+        .from('meeting_outcomes')
+        .select('id,workspace_id,meeting_proposal_id,outcome_type,summary,occurred_at,recorded_by_user_id,version,created_at,updated_at')
+        .eq('workspace_id', workspaceId),
     ]);
 
     throwOnError(actions.error);
     throwOnError(approvals.error);
     throwOnError(meetingProposals.error);
     throwOnError(meetingExecutions.error);
+    throwOnError(meetingOutcomes.error);
 
     const approvalByAction = new Map(
       (approvals.data ?? []).map((row) => [String(row.rev_action_id), row]),
@@ -304,7 +312,15 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     const meetingProposalByAction = new Map(
       (meetingProposals.data ?? []).flatMap((row) => {
         const proposal = mapMeetingProposalPayload(row.proposal_payload);
-        return proposal ? [[String(row.rev_action_id), proposal] as const] : [];
+        return proposal
+          ? [[String(row.rev_action_id), { id: String(row.id), proposal }] as const]
+          : [];
+      }),
+    );
+    const meetingOutcomeByProposal = new Map(
+      (meetingOutcomes.data ?? []).map((row) => {
+        const outcome = mapMeetingOutcome(row, workspaceId);
+        return [outcome.meetingProposalId, outcome] as const;
       }),
     );
     const meetingDryRunByAction = new Map(
@@ -317,6 +333,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     return (actions.data ?? []).flatMap((row) => {
       const action = mapAction(row);
       const approval = approvalByAction.get(action.id);
+      const meeting = meetingProposalByAction.get(action.id);
       if (action.status !== 'awaiting_approval' && action.actionType !== 'meeting_proposal') return [];
       if (!approval || !approval.action_version || !approval.action_fingerprint) return [];
       return [{
@@ -324,11 +341,17 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         approvalId: String(approval.id),
         approvalActionVersion: Number(approval.action_version),
         approvalActionFingerprint: String(approval.action_fingerprint),
+        meetingProposalId: action.actionType === 'meeting_proposal'
+          ? meeting?.id
+          : undefined,
         meetingProposal: action.actionType === 'meeting_proposal'
-          ? meetingProposalByAction.get(action.id)
+          ? meeting?.proposal
           : undefined,
         meetingDryRun: action.actionType === 'meeting_proposal'
           ? meetingDryRunByAction.get(action.id)
+          : undefined,
+        meetingOutcome: action.actionType === 'meeting_proposal' && meeting
+          ? meetingOutcomeByProposal.get(meeting.id)
           : undefined,
       }];
     });

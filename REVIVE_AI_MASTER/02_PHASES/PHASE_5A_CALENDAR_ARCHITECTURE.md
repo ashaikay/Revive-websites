@@ -204,6 +204,16 @@ Proposed columns/keys:
 - `id`, `workspace_id`, `meeting_proposal_id`, `outcome_type`, `summary`, `occurred_at`, `recorded_by_user_id`, `created_at`, `updated_at`
 - `unique (workspace_id, id)` and composite workspace foreign key to the proposal
 
+Phase 5E.1 agreed outcome values (authorized 9 October 2026):
+
+- `held` — the meeting took place.
+- `no_show` — an expected attendee did not attend.
+- `cancelled` — the meeting was cancelled.
+
+Commercial results and next steps belong only in the manually entered `summary`; these values do not infer a sale, revenue or goal progress. Rescheduling is not an outcome in this slice and must not change a calendar event. Recording `cancelled` is an internal outcome record only: it does not cancel the Outlook event or notify anyone.
+
+Phase 5E.1 keeps one current outcome per workspace meeting proposal. Exact duplicate saves are idempotent and do not add another audit event. A correction updates that outcome through optimistic version authority, increments its version and appends a correction audit event; a stale conflicting correction is refused.
+
 RLS intent: workspace-scoped reads; owner/admin or separately authorized recorded-outcome workflow writes; no automatic opportunity/revenue mutation without explicit, evidence-backed later rules.
 
 ---

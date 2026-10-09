@@ -1,4 +1,4 @@
-# Current Handover — Customer Outlook Verified (2026-10-09)
+# Current Handover — Phase 5E.1 Outcomes Implemented Locally (2026-10-09)
 
 ## Controlled booking and invitation receipt (user-verified, 2026-10-09)
 
@@ -8,17 +8,45 @@
 - This verifies event creation and recipient receipt for this controlled test only. Do not generalize invitation delivery to other meetings.
 - The live provider gate is disabled now. No further provider action is authorized by this checkpoint.
 
-The REV layout tidy-up is implemented locally: compact expandable email previews; distinct Outlook connection, availability, proposal and execution-result sections; concise instructions; focused feedback beside meeting actions; and five-second dismissal for routine approval feedback. Durable execution results, errors and uncertain-outcome guidance remain. Booking and retry safeguards were not changed. The mounted regression is registered in `.github/workflows/rev-meeting-verify.yml`.
+The REV layout tidy-up is implemented and committed at `e19f205`: compact expandable email previews; distinct Outlook connection, availability, proposal and execution-result sections; collapsed prepared follow-ups; concise instructions; focused feedback beside meeting actions; a neutral user-facing footer; and five-second dismissal for routine approval feedback. Durable execution results, errors, uncertain-outcome guidance and disabled-email messaging remain. Booking and retry safeguards were not changed. The mounted regression is registered in `.github/workflows/rev-meeting-verify.yml`.
 
-**Local verification:** Six focused UI suites passed (77/77 tests), including the new mounted regressions. `npm run build` passed; Vite emitted its existing advisory that the generated JavaScript chunk exceeds 500 kB. `git diff --check` passed. No provider call, booking, resend, gate change, hosted change, deployment or commit was made.
+**Verification:** The prepared-follow-up/footer focused selection passed 35/35 locally; the complete 19-file mounted selection passed 151/151 on rerun; `npm run build` and `git diff --check` passed. GitHub Actions run [#111](https://github.com/ashaikay/Revive-websites/actions/runs/37922608056) passed both the meeting and isolated-database jobs for exact head `e19f205`. This establishes committed and CI-green status, not deployment. No provider call, booking, resend, gate change, hosted change or deployment was made for the layout work.
 
 **Latest manual check (user-reported):** The new customer Outlook account completed discovery and calendar selection. Availability returned slots for 9 October 2026. Meeting proposal “orbis” was approved but not booked; no event was created. Commit `abf597a` (“Use workspace timezone for calendar availability default date”) is recorded, and CI was reported green.
 
 The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check. Their exact underlying causes were not all proven; do not claim otherwise. The workspace-timezone date fix addresses a demonstrated local-date boundary defect but does not prove that it caused every earlier empty result or credential-load failure.
 
-**Safety/release state:** Live calendar booking remains disabled. “Approved but not booked” is not permission to create an event. Continue customer Outlook verification, then the remaining Phase 5 calendar MVP roadmap, preserving the feature scope freeze and CI release gates. Worker job-brief uploads and assignment emails remain planned, not implemented: private manager-uploaded briefs; recipient email separate from REV login; confirmed-assignment details and a secure brief link using a separately authorized organization sending account; duplicate-send protection; sent/failed/not-sent status; and assignment-change/cancellation updates. Calendar-read consent does not grant email-sending authority.
+**Safety/release state:** Live calendar booking and email sending remain disabled. “Approved but not booked” is not permission to create an event. Worker job-brief uploads and assignment emails remain planned, not implemented, and are not automatically prioritized.
 
-## REV layout tidy-up — implemented locally (2026-10-09)
+## Phase 5E.1 explicit meeting outcomes — implemented locally, not deployed
+
+The agreed `held`, `no_show` and `cancelled` values are enforced in the architecture, database, trusted HTTP boundary, domain and UI. An active owner/admin can record one current outcome linked to the existing workspace meeting proposal and correct it using the current version. Repeated requests are idempotent; exact duplicate saves do not add another audit event; accepted corrections increment the version and append correction audit evidence.
+
+The proposal details show a compact record/correct action, durable saved result and explicit empty state. Booking and RSVP status stay separate. Recording `cancelled` explicitly states that it does not cancel the Outlook event or notify anyone. The slice does not infer sales, revenue, goal progress or attendance; mutate opportunities; poll RSVP; call a provider; or alter booking/email gates.
+
+**Verification:** the complete registered 20-file mounted selection passed 157/157, the trusted HTTP-boundary suite passed 6/6, and type-check/build passed with the existing chunk-size advisory. The new isolated database validator is registered in `.github/workflows/rev-meeting-verify.yml`, but local Supabase could not inspect/start because Docker Desktop returned an engine API 500 for the existing database container. Therefore its database assertions have not run locally in this turn.
+
+**Release state:** all Phase 5E.1 code, migration and function changes are local and uncommitted. No hosted migration, function deployment, provider call, gate change or general release occurred. The recorded 9 October controlled customer Outlook booking and Gmail invitation receipt remain verified for that exact rollout only; this new outcome slice does not alter or supersede that evidence.
+
+**Next checkpoint:** review this diff and run the registered meeting/database CI after a future commit. Hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain unfinished and must not be started automatically as part of this slice.
+
+## REV Business Guide and Video Walkthroughs — planned, not created
+
+This is required product documentation within the existing scope, not a new feature module. Produce the guide and short captioned videos progressively as workflows stabilize, update them when UI or behavior changes, and finalize the complete set before launch. No guide or video has been created, reviewed or released.
+
+Coverage must include all existing planned REV modules: HOME/Daily Brief, goals and analytics; REV workspace, approvals, prepared work, follow-ups and durable results; GROWTH, leads, discovery/verification, outreach preparation and REV RECOVER; Customers, contacts, suppressions, conversations and future email/replies; Business Brain and workspace settings; Calendar and Meetings; worker Scheduling, Annual Leave, bank holidays and planned worker communications; Website Lead Agent; Voice/Missed Calls; Marketing; Website Generator; Advanced Autonomy; Industry Playbooks; and API/Integrations.
+
+For every module, provide:
+
+- What it does and how it benefits a business.
+- Who can use it and its setup, role, consent, connection and permission requirements.
+- Step-by-step instructions with realistic tenant-neutral examples and demo data.
+- Expected results, durable statuses, common errors, uncertain outcomes, safeguards and recovery.
+- A short captioned video walkthrough backed by equivalent written instructions.
+
+Use only tenant-neutral demo data. Do not expose customer information, credentials, tokens, secrets or private environment values. Clearly label capabilities as implemented, verified or planned, and never present a controlled verification as general availability. Keep booking, RSVP, meeting outcomes and external sending distinct.
+
+## REV layout tidy-up — committed and CI-green (2026-10-09)
 
 - Follow-up visual pass: conversations and proposals are collapsed by default. Conversation summaries show subject, linked contact, last-message date and one 120-character preview of the newest message. Meeting summaries show title, attendee, date/time and durable status.
 - Prepared follow-ups are collapsed by default. Their summaries retain the title, suggested channel, durable approval status and disabled-email safeguard; expansion reveals the draft, recovery reason, objective, evidence and existing review actions. The application footer now uses neutral product wording rather than developer diagnostics or blanket no-action claims.
@@ -35,15 +63,15 @@ The earlier additional-account credential-load and empty-availability blockers a
 
 No booking behavior or server safeguard was changed. Live booking remains disabled; this UI change does not authorize provider calls, hosted migration or deployment.
 
-## Selected Outlook calendar binding — local slice (2026-10-09)
+## Selected Outlook calendar binding — committed and CI-tested, deployment not established (2026-10-09)
 
-The current uncommitted implementation snapshots the workspace-selected calendar, account/connection, credential revision, write-consent version and workspace binding into the durable meeting reservation. Exact retries must retain that identity and refuse changed selection; provider-attempt guards recheck selection and consent. Trusted Graph request mapping targets the selected calendar rather than the mailbox default. The additive migration is local only and has not been applied to a hosted database.
+The committed implementation snapshots the workspace-selected calendar, account/connection, credential revision, write-consent version and workspace binding into the durable meeting reservation. Exact retries must retain that identity and refuse changed selection; provider-attempt guards recheck selection and consent. Trusted Graph request mapping targets the selected calendar rather than the mailbox default. The repository and CI evidence do not establish that the additive migrations are applied to a hosted database.
 
-CI registration was verified and completed for all affected regressions: `verify-rev-meeting.mjs` runs the changed server boundary and provider-composition tests; the database job runs `phase6f_local_provider_lifecycle.mjs` and now also `phase6c_local_graph_adapter_validation.mjs` after migrations; the customer-calendar UI test command now includes `phase5n_microsoftGraphCalendarEvent.test.ts`. Local database scripts were not run because local Supabase and local test keys were unavailable. No live provider calls, hosted changes, deployment, commit or push.
+CI registration is complete for all affected regressions: `verify-rev-meeting.mjs` runs the server boundary and provider-composition tests; the database job runs `phase6f_local_provider_lifecycle.mjs`, `phase6c_local_graph_adapter_validation.mjs` and `phase6g_local_delegated_token_validation.mjs` after migrations; the customer-calendar UI test command includes `phase5n_microsoftGraphCalendarEvent.test.ts`. Run #111 passed both jobs at `e19f205`. No live provider calls, hosted changes or deployment were performed by this verification.
 
-The follow-on local delegated-token slice adds `20261009040000_rev_meeting_delegated_token.sql` and a server-only token supplier. It resolves the refresh credential only through the reserved execution target, revalidates the selected calendar, active write consent, credential scope/revision and workspace binding, then uses the existing OAuth refresh exchange and Vault-backed CAS rotation. Rotation advances the revision for matching eligible prepared reservations only, preserving their calendar identity and leaving terminal or differently bound reservations unchanged. Mocked token-exchange tests are registered through `verify-rev-meeting.mjs` and the existing calendar-discovery test path. The focused database validator `phase6g_local_delegated_token_validation.mjs` is registered after migration startup in the pending database CI workflow and covers credential load/rotation, stale revisions, revoked consent, changed selection, cross-workspace reservation denial, duplicate attempts, and prepared-versus-terminal revision updates.
+The committed delegated-token slice adds `20261009040000_rev_meeting_delegated_token.sql` and a server-only token supplier. It resolves the refresh credential only through the reserved execution target, revalidates the selected calendar, active write consent, credential scope/revision and workspace binding, then uses the existing OAuth refresh exchange and Vault-backed CAS rotation. Rotation advances the revision for matching eligible prepared reservations only, preserving their calendar identity and leaving terminal or differently bound reservations unchanged. Mocked token-exchange tests are registered through `verify-rev-meeting.mjs` and the existing calendar-discovery test path. The focused database validator `phase6g_local_delegated_token_validation.mjs` runs after migration startup in the database CI job and covers credential load/rotation, stale revisions, revoked consent, changed selection, cross-workspace reservation denial, duplicate attempts, and prepared-versus-terminal revision updates.
 
-**Verification checkpoint (2026-10-09):** GitHub Actions run #107 (`8380102`) passed both meeting and database jobs. Its committed workflow predates the delegated-token database validator and did not run `phase6g`; therefore it is evidence for the selected-calendar work at that commit, not for the new SQL validator. The pending workflow change includes `phase6g` after Supabase startup/migrations. Locally, `node scripts/verify-rev-meeting.mjs` passed all 50 server-boundary tests and the TypeScript/Vite build, including the mocked delegated-token supplier tests. The local Supabase endpoint and test keys were unavailable, so the `phase6g` database assertions have not been run locally or verified by run #107. Migration `20261009040000` remains unapplied to hosted databases. Live booking remains disabled; no live provider calls, hosted changes, deployment or commit were made.
+**Verification checkpoint (2026-10-09):** GitHub Actions run #111 at `e19f205` passed both meeting and database jobs, including `phase6g` after isolated Supabase startup and migration application. This establishes repository/CI coverage for the delegated-token database assertions. It does not establish hosted migration or function deployment. Live booking remains disabled; no live provider call or hosted change was made by the CI run.
 
 The detailed 2026-10-08 checkpoint below is historical and superseded by this manual verification for blocker status. Historical diagnostic uncertainty remains; do not reinterpret earlier failures as having a proven common cause.
 

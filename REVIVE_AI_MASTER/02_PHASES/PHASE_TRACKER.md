@@ -753,7 +753,7 @@
 
 ---
 
-## Phase 5: Calendar & Meetings — 5A–5K COMPLETE (PASS); EVENT CREATION DISABLED
+## Phase 5: Calendar & Meetings — IN PROGRESS; CONTROLLED OUTLOOK BOOKING VERIFIED; LIVE GATE DISABLED
 
 **Completion checkpoint date:** 2026-09-25
 
@@ -767,11 +767,24 @@
 - Disposable PostgreSQL migration/RLS validation passed, including role authority, tenant isolation, PII visibility, direct-write denial, stale-approval rejection, semantic idempotency and preservation of non-meeting action access.
 - Final Phase 5K regression passed: 57 test files and 434 tests. Production build and whitespace checks passed.
 
-**Current pilot limitation:** Microsoft availability is bound to the authorised FatherLegacy workspace/mailbox. Customer self-service calendar connections and per-tenant provider configuration are not yet implemented.
+**Current controlled evidence:** Customer-managed Outlook connection, calendar selection and availability were manually verified. On 9 October 2026 one separately controlled event was created in the selected customer Outlook calendar and its Gmail invitation was received. This is scoped evidence for that test, not general availability or permission for another booking.
 
-**Safety state:** `Calendars.Read` is used only for controlled availability. Calendar event creation, invitations, reminders, RSVP tracking, provider update/delete operations and autonomous booking remain disabled.
+**Safety state:** The live booking gate is disabled. Reminders, RSVP tracking, provider update/delete operations and autonomous booking remain disabled. Email sending remains disabled.
 
-**Next controlled slice:** Phase 5L — controlled calendar event creation architecture and permission preflight. This checkpoint does not authorize `Calendars.ReadWrite`, provider event creation or production booking.
+### Phase 5E.1 — explicit meeting outcomes (local implementation)
+
+- Added the agreed manually recorded values: `held`, `no_show` and `cancelled`.
+- Added additive workspace-scoped durable storage linked to the existing meeting proposal through composite tenant constraints.
+- Owner/admin saves use a trusted boundary, repeated-request idempotency, optimistic correction versions and append-only create/correction audit records.
+- Direct browser writes, inactive/unauthorized users and cross-workspace access are refused.
+- Proposal details show a compact record/correct action, a durable saved result and an explicit empty state.
+- Booking/RSVP status remains separate. Recording `cancelled` does not cancel Outlook or notify anyone.
+- No opportunity, revenue, goal, calendar or provider mutation is introduced.
+- Implementation is local only: the new migration and Edge Function are not hosted, deployed or generally available.
+
+**Verification:** focused mounted/domain/UI tests passed 40/40 before the final contract assertion and the complete registered 20-file mounted selection passed 157/157. The trusted HTTP-boundary suite passed 6/6. Type-check/build passed with the existing large-chunk advisory. The isolated database validator is registered in CI but could not run locally because Docker Desktop returned an engine API 500 while Supabase inspected the local database container.
+
+**Next controlled checkpoint:** review the Phase 5E.1 diff and run its registered meeting/database CI after a future commit. Any hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain the next unfinished Phase 5E capabilities; neither is implemented by this slice.
 
 **Objective:** Integrate calendar and enable meeting booking
 

@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { LivePendingAction } from '@/data/supabasePreparedWorkRepository';
 import type { MeetingExecutionResult } from '@/services/meetingExecutionClient';
 import { focusFeedback } from '@/utils/focusFeedback';
+import {
+  MEETING_OUTCOME_LABELS,
+  type MeetingOutcomeType,
+} from '@/domain/meetingOutcome';
 
 export interface MeetingProposalReviewCardProps {
   action: LivePendingAction;
@@ -16,6 +20,14 @@ export interface MeetingProposalReviewCardProps {
   onClearDecisionFeedback?: (actionId: string) => void;
   onRequestDryRun?: () => Promise<void>;
   onRequestLive?: () => Promise<void>;
+  outcomeBusy?: boolean;
+  outcomeError?: string;
+  onRecordOutcome?: (input: {
+    outcomeType: MeetingOutcomeType;
+    summary: string;
+    occurredAt: string;
+    expectedVersion: number;
+  }) => Promise<void>;
 }
 
 function formatMeetingDate(value: string, timezone: string): string {
@@ -40,6 +52,12 @@ function formatMeetingTime(value: string, timezone: string): string {
 function meetingMethodLabel(method: 'online' | 'phone' | 'in_person'): string {
   if (method === 'in_person') return 'In person';
   return method === 'phone' ? 'Phone' : 'Online';
+}
+
+function localDateTimeInput(value: string): string {
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function executionPresentation(result: MeetingExecutionResult) {
@@ -88,9 +106,20 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   onClearDecisionFeedback,
   onRequestDryRun,
   onRequestLive,
+  outcomeBusy = false,
+  outcomeError,
+  onRecordOutcome,
 }) => {
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
   const [confirmLiveBooking, setConfirmLiveBooking] = useState(false);
+  const [showOutcomeForm, setShowOutcomeForm] = useState(false);
+  const [outcomeType, setOutcomeType] = useState<MeetingOutcomeType>(
+    action.meetingOutcome?.outcomeType ?? 'held',
+  );
+  const [outcomeSummary, setOutcomeSummary] = useState(action.meetingOutcome?.summary ?? '');
+  const [outcomeOccurredAt, setOutcomeOccurredAt] = useState(
+    localDateTimeInput(action.meetingOutcome?.occurredAt ?? new Date().toISOString()),
+  );
   const decisionFeedbackRef = useRef<HTMLDivElement>(null);
   const decisionErrorRef = useRef<HTMLParagraphElement>(null);
   const executionFeedbackRef = useRef<HTMLDivElement>(null);
@@ -150,6 +179,65 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         {proposal.locationDetails && <div><dt className="font-medium text-neutral-900">Location/details</dt><dd className="break-words">{proposal.locationDetails}</dd></div>}
       </dl>
       {proposal.notes && <div className="mt-3 text-sm text-neutral-700"><p className="font-medium text-neutral-900">Notes</p><p className="whitespace-pre-wrap break-words">{proposal.notes}</p></div>}
+
+      <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Meeting outcome">
+        <p className="text-sm font-medium text-neutral-900">Meeting outcome</p>
+        {action.meetingOutcome ? (
+          <div className="mt-2 rounded border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
+            <p><strong>{MEETING_OUTCOME_LABELS[action.meetingOutcome.outcomeType]}</strong> — recorded {new Date(action.meetingOutcome.occurredAt).toLocaleString('en-GB')}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words">{action.meetingOutcome.summary}</p>
+            <p className="mt-2 text-xs text-neutral-500">This manually recorded outcome is separate from booking and RSVP status.</p>
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-neutral-600">No meeting outcome has been recorded.</p>
+        )}
+        {canReview && action.meetingProposalId && ['approved', 'completed'].includes(action.status) && onRecordOutcome && !showOutcomeForm && (
+          <button type="button" className="btn-secondary mt-3 text-sm" disabled={outcomeBusy} onClick={() => setShowOutcomeForm(true)}>
+            {action.meetingOutcome ? 'Correct meeting outcome' : 'Record meeting outcome'}
+          </button>
+        )}
+        {showOutcomeForm && (
+          <form className="mt-3 grid gap-3 rounded border border-neutral-200 bg-neutral-50 p-3" onSubmit={(event) => {
+            event.preventDefault();
+            void onRecordOutcome?.({
+              outcomeType,
+              summary: outcomeSummary.trim(),
+              occurredAt: new Date(outcomeOccurredAt).toISOString(),
+              expectedVersion: action.meetingOutcome?.version ?? 0,
+            }).then(() => setShowOutcomeForm(false)).catch(() => undefined);
+          }}>
+            <label className="grid gap-1 text-sm font-medium text-neutral-800">
+              Outcome
+              <select className="input-field bg-white" value={outcomeType} onChange={(event) => setOutcomeType(event.target.value as MeetingOutcomeType)}>
+                <option value="held">Held — the meeting took place</option>
+                <option value="no_show">No-show — an expected attendee did not attend</option>
+                <option value="cancelled">Cancelled — the meeting was cancelled</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-neutral-800">
+              When this outcome occurred
+              <input className="input-field bg-white" type="datetime-local" required max={localDateTimeInput(new Date().toISOString())}
+                value={outcomeOccurredAt} onChange={(event) => setOutcomeOccurredAt(event.target.value)} />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-neutral-800">
+              Summary
+              <textarea className="input-field min-h-24 resize-y bg-white" required maxLength={1000}
+                value={outcomeSummary} onChange={(event) => setOutcomeSummary(event.target.value)}
+                placeholder="Record commercial results and next steps without inferring a sale, revenue or goal progress." />
+            </label>
+            {outcomeType === 'cancelled' && (
+              <p className="text-sm text-amber-800">Recording “Cancelled” here does not cancel the Outlook event or notify anyone.</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="btn-primary text-sm" disabled={outcomeBusy || !outcomeSummary.trim() || !outcomeOccurredAt}>
+                {outcomeBusy ? 'SAVING OUTCOME…' : action.meetingOutcome ? 'SAVE CORRECTION' : 'SAVE OUTCOME'}
+              </button>
+              <button type="button" className="btn-ghost text-sm" disabled={outcomeBusy} onClick={() => setShowOutcomeForm(false)}>CANCEL</button>
+            </div>
+          </form>
+        )}
+        {outcomeError && <p className="mt-3 text-sm text-red-700" role="alert">{outcomeError}</p>}
+      </section>
 
       {canReview && action.status === 'awaiting_approval' && !confirmation && (
         <div className="mt-4">

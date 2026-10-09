@@ -25,6 +25,8 @@ import {
   type MeetingExecutionIntent,
   type MeetingExecutionResult,
 } from '@/services/meetingExecutionClient';
+import { submitMeetingOutcome } from '@/services/meetingOutcomeService';
+import type { MeetingOutcomeType } from '@/domain/meetingOutcome';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -926,6 +928,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [meetingExecutionBusyId, setMeetingExecutionBusyId] = useState<string | null>(null);
   const [meetingExecutionErrors, setMeetingExecutionErrors] = useState<Record<string, string>>({});
   const [meetingExecutionResults, setMeetingExecutionResults] = useState<Record<string, MeetingExecutionResult>>({});
+  const [meetingOutcomeBusyId, setMeetingOutcomeBusyId] = useState<string | null>(null);
+  const [meetingOutcomeErrors, setMeetingOutcomeErrors] = useState<Record<string, string>>({});
 
   const handleCheckInbox = async () => {
     setCheckingInbox(true);
@@ -1084,6 +1088,42 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
       return next;
     });
   }, []);
+
+  const handleMeetingOutcome = async (
+    action: LivePendingAction,
+    input: {
+      outcomeType: MeetingOutcomeType;
+      summary: string;
+      occurredAt: string;
+      expectedVersion: number;
+    },
+  ) => {
+    if (meetingOutcomeBusyId || !action.meetingProposalId) return;
+    setMeetingOutcomeBusyId(action.id);
+    setMeetingOutcomeErrors((current) => ({ ...current, [action.id]: '' }));
+    try {
+      await submitMeetingOutcome({
+        workspaceId,
+        requestId: crypto.randomUUID(),
+        meetingProposalId: action.meetingProposalId,
+        outcomeType: input.outcomeType,
+        summary: input.summary,
+        occurredAt: input.occurredAt,
+        expectedVersion: input.expectedVersion,
+      });
+      await reload();
+    } catch (outcomeError) {
+      setMeetingOutcomeErrors((current) => ({
+        ...current,
+        [action.id]: outcomeError instanceof Error
+          ? outcomeError.message
+          : 'Meeting outcome save is unconfirmed.',
+      }));
+      throw outcomeError;
+    } finally {
+      setMeetingOutcomeBusyId(null);
+    }
+  };
 
   const runChange = async (id: string, operation: () => Promise<unknown>): Promise<boolean> => {
     setBusyId(id);
@@ -1249,6 +1289,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                   meetingExecutionErrors[action.id] || meetingDecisionErrors[action.id]
                   || meetingDecisionFeedback[action.id] || busyId === action.id
                   || meetingExecutionBusyId === action.id
+                  || meetingOutcomeBusyId === action.id
+                  || meetingOutcomeErrors[action.id]
                   || meetingExecutionResults[action.id]
                   || ['outcome_unknown', 'provider_rejected'].includes((meetingExecutionResults[action.id] ?? action.meetingDryRun)?.status ?? '')
                   || action.status === 'failed'
@@ -1264,10 +1306,13 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     executionResult={meetingExecutionResults[action.id]}
                     decisionError={meetingDecisionErrors[action.id]}
                     decisionFeedback={meetingDecisionFeedback[action.id]}
+                    outcomeBusy={meetingOutcomeBusyId === action.id}
+                    outcomeError={meetingOutcomeErrors[action.id]}
                     onClearDecisionFeedback={clearMeetingDecisionFeedback}
                     onRequestDryRun={() => handleMeetingDryRun(action)}
                     onRequestLive={() => handleMeetingLiveExecution(action)}
                     onDecision={(decision) => handleMeetingDecision(action, decision)}
+                    onRecordOutcome={(input) => handleMeetingOutcome(action, input)}
                   />
                 )} />
             </section>

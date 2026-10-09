@@ -6,13 +6,28 @@ On 9 October 2026, the user verified that “REV customer Outlook booking test�
 
 This is evidence only for that controlled test. It does not establish invitation delivery for other meetings. The live provider gate is disabled now; this checkpoint does not authorize another booking, resend, provider call, deployment or gate change.
 
-The planned REV layout tidy-up is now implemented locally: compact expandable email previews, clearer Outlook/availability/proposal/result grouping, plain-language action guidance, and focused adjacent progress/results. Routine approval feedback dismisses after five seconds; uncertain booking guidance and durable execution results remain visible. The booking gate and execution safeguards were not changed.
+The REV layout tidy-up is implemented and committed at `e19f205`: compact expandable email previews, clearer Outlook/availability/proposal/result grouping, collapsed prepared follow-ups, plain-language action guidance, focused adjacent progress/results and a neutral user-facing footer. Routine approval feedback dismisses after five seconds; uncertain booking guidance, disabled-email messaging and durable execution results remain visible. GitHub Actions run [#111](https://github.com/ashaikay/Revive-websites/actions/runs/37922608056) passed both the meeting and isolated-database jobs for that exact commit. This is commit/CI evidence, not deployment evidence. The booking and email-sending gates and execution safeguards were not changed.
 
 **User-reported manual verification:** The new Outlook account successfully completed discovery and calendar selection; availability returned slots for 9 October 2026. Meeting proposal “orbis” is approved but not booked, and no event was created. Commit `abf597a` (“Use workspace timezone for calendar availability default date”) is recorded; CI was reported green.
 
 The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check, but their exact causes were not all proven. The timezone date fix addresses a demonstrated local-date boundary defect; it does not establish that this defect explains every earlier failure.
 
-Live calendar booking remains disabled. Continue customer Outlook verification, then the remaining Phase 5 calendar MVP roadmap while preserving the feature scope freeze and CI release gates. Worker job-brief uploads and assignment emails remain planned, not implemented. Keep private manager-uploaded briefs; recipient email separate from REV login; confirmed-assignment shift details and secure brief links through a separately authorized organization sending account; duplicate-send protection; sent/failed/not-sent status; assignment-change/cancellation updates; and the rule that calendar-read consent does not grant email-sending authority.
+Live calendar booking remains disabled. Phase 5E.1 explicit meeting outcomes are now implemented locally without provider calls, inbox polling or automatic customer/revenue/goal mutation. Worker job-brief uploads and assignment emails remain planned, not implemented, and are not the next roadmap action.
+
+### Phase 5E.1 explicit meeting outcomes — implemented locally, not deployed
+
+An owner/admin can record `held`, `no_show` or `cancelled` against the existing meeting proposal and see that durable result after refresh. Commercial results and next steps stay in the summary. Booking and RSVP status remain separate, and event creation never implies attendance.
+
+- Durable storage uses composite workspace/proposal binding, restrictive RLS and active owner/admin authority.
+- Duplicate requests replay the saved result; exact duplicate saves do not create another version or audit record.
+- Corrections require the current version, increment it and append a correction audit record; stale conflicting corrections are refused.
+- The proposal details contain a compact record/correct action, saved state and explicit empty state.
+- Recording `cancelled` clearly states that it does not cancel Outlook or notify anyone.
+- The migration and Edge Function are local only and have not been applied or deployed to hosted Supabase.
+
+**Local verification:** the complete registered 20-file mounted selection passed 157/157; the trusted outcome HTTP-boundary suite passed 6/6; type-check/build passed with the existing chunk advisory. The isolated database validator covers valid persistence, invalid types/times, duplicate requests/saves, version-bound corrections, audit counts, unauthorized/inactive actors, direct writes and cross-workspace reads/writes. It is registered in CI but could not run locally because Docker Desktop returned an engine API 500 when Supabase inspected the local database container.
+
+The new slice is not committed or CI-verified and must not be described as deployed or generally available. The earlier controlled 9 October customer Outlook booking and invitation receipt remain verified hosted/manual evidence for that exact test only.
 
 The previous 2026-10-08 blocker investigation below is historical and superseded for the manual check. Do not claim the exact causes of every earlier credential or availability failure were proven.
 
@@ -153,7 +168,7 @@ Remaining work:
 Phase 5 — CALENDAR & MEETINGS CONTROLLED OUTLOOK PILOT VERIFIED; MVP PHASE REMAINS IN PROGRESS.
 
 ## Current Objective
-Return the controlled meeting pilot to its disabled safety state, preserve its durable evidence, and continue the remaining Phase 5 MVP roadmap without treating one scoped Outlook test as completion of customer calendar integration.
+Review and verify the local Phase 5E.1 outcome slice through its registered meeting/database CI after a future commit. Keep the new migration/function undeployed until separately authorized, and preserve the disabled live booking and email-sending gates.
 
 ## Phase 5 Controlled Meeting Verification — 2026-09-29
 
@@ -176,7 +191,7 @@ Return the controlled meeting pilot to its disabled safety state, preserve its d
 
 ### Remaining Phase 5 MVP work — not verified complete
 
-- Customer self-service calendar account integration for Outlook and Google, including per-tenant provider configuration, is not implemented.
+- Customer-managed Outlook connection, discovery, selection and availability are implemented and manually verified for the controlled customer account. Google calendar integration is not implemented, and the controlled Outlook evidence does not establish general production rollout.
 - Meeting reminders are not implemented.
 - RSVP tracking and response detection are not implemented.
 - Meeting outcome recording into the broader customer/opportunity workflow is not complete.
@@ -185,9 +200,9 @@ Return the controlled meeting pilot to its disabled safety state, preserve its d
 
 ### Next unfinished roadmap task
 
-Implement the Phase 5 calendar-account integration foundation: customer self-service Outlook/Google connection and tenant-scoped provider configuration.
+Phase 5E reminders and RSVP/response ingestion remain unfinished. Do not begin either automatically before the local Phase 5E.1 outcome slice has completed review and registered CI.
 
-**Prerequisites:** Phase 4 durable execution controls remain in force; preserve the Phase 5 approval, trusted-snapshot, semantic-idempotency, tenant-isolation and unknown-outcome protections; define secure tenant-scoped credential/mailbox storage and revocation; review provider permissions and mailbox/calendar scope; and obtain a separate explicit authorization and controlled test plan before re-enabling any live gate or UI.
+**Prerequisites:** preserve the rule that booking, RSVP and manually recorded outcome are separate facts; retain tenant isolation and auditable trusted writes; and require separate provider/read-permission design and authorization for any reminder or RSVP integration.
 
 ## Phase 4G.1 Closeout
 - Added provider-independent request/result/service/provider contracts and the disabled `SEND_APPROVED_EMAIL` capability. No Microsoft, Google, Titan, SMTP, or other provider assumption exists in core execution code.

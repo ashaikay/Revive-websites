@@ -31,7 +31,7 @@
 | 4C | Durable Execution Control Plane | Additive execution/usage persistence and hardened live integration | ✅ Production migration applied + verified; execution disabled |
 | 4D | First Real REV Capability: Prepare Follow-Up | Evidence-based internal draft, existing REV Action/Approval workflow, owner/admin review | ✅ Complete (PASS; no sending/provider/migration) |
 | Future | Email & Replies | Email integration, reply detection, follow-up workflow | ⏳ Deferred; not enabled by Phase 4A |
-| 5 | Calendar & Meetings | Calendar integration, meeting booking, scheduling | ⏳ Not Started |
+| 5 | Calendar & Meetings | Calendar integration, meeting booking, scheduling | 🔄 In Progress — controlled Outlook booking verified; Phase 5E.1 outcomes implemented locally, not deployed |
 | 6 | Daily Brief & Analytics | Daily summary, dashboards, measurable results | ⏳ Not Started |
 | 7 | Website Lead Agent | Chatbot for Revive Websites, lead qualification | ⏳ Not Started |
 | 8 | Voice & Missed Calls | Phone system integration, call recovery | ⏳ Not Started |
@@ -44,6 +44,35 @@
 ### Planned worker briefs and assignment communications — not implemented
 
 Future worker scheduling scope: managers may upload a private job brief; each worker has a recipient email separate from a REV login; confirmed assignments may send shift details and a secure brief link using the organisation's separately authorised sending account. The capability must prevent duplicate sends, track `sent` / `failed` / `not_sent`, and send appropriate updates when an assignment changes or is cancelled. Calendar read consent is not email-sending authority. This requirement is planned only: it is not implemented, enabled or authorised, and must receive its own security, permission, delivery and idempotency review before execution work.
+
+### Current Phase 5 boundary
+
+The controlled customer Outlook booking and Gmail invitation receipt on 9 October 2026 are verified for that exact test only. They do not establish general booking availability. Phase 5E.1 explicit meeting outcomes are implemented and locally tested but uncommitted, undeployed and unavailable in hosted workspaces until separately reviewed and authorized. Live booking and email-sending gates remain disabled. Reminders and RSVP/response ingestion remain unfinished.
+
+### REV Business Guide and Video Walkthroughs — planned, not created
+
+A user-facing REV Business Guide and short captioned video walkthroughs are required product documentation within the existing scope, not a new feature module. Produce them progressively as workflows stabilize, update them whenever the UI or behavior changes, and finalize the complete set before launch. No guide or video has yet been created, reviewed or released.
+
+The documentation set must cover every existing planned REV module:
+
+- HOME and Daily Brief, goals, priorities, activity and analytics.
+- REV workspace, approvals, prepared work, follow-ups and durable action results.
+- GROWTH, leads, opportunity discovery and verification, outreach preparation and REV RECOVER.
+- Customers, contacts, suppressions, conversation history and future email/reply workflows.
+- Business Brain/profile, services, workspace settings and permissions.
+- Calendar and Meetings: connection, selection, availability, proposals, approval, controlled booking status, RSVP/reminders when implemented, and manually recorded meeting outcomes.
+- Scheduling: workers, skills, patterns, availability, jobs, assignments, planner, Annual Leave, bank holidays and the planned worker-brief/assignment-communication capability.
+- Website Lead Agent, Voice and Missed Calls, Marketing Expansion, Website Generator, Advanced Autonomy, Industry Playbooks, and API/Integrations as those planned modules stabilize.
+
+For each module, the guide and matching video must:
+
+1. Explain what the module does and how it benefits a business.
+2. Identify who can use it and the setup, workspace role, consent, connection or other permission required.
+3. Provide step-by-step instructions using realistic tenant-neutral examples and demo data.
+4. Describe expected results, durable status indicators, common errors, uncertainty safeguards and recovery steps.
+5. Include a short captioned video walkthrough supported by equivalent written instructions.
+
+All examples and recordings must use tenant-neutral demo data and expose no customer information, credentials, tokens, private environment values or provider secrets. Every page and video must label capability state accurately as **implemented**, **verified** or **planned**; controlled verification must not be presented as general availability. Booking, RSVP, meeting outcome and external-send status must remain distinct.
 
 ## Core Product Evolution
 
