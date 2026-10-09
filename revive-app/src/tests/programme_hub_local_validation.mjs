@@ -1,5 +1,6 @@
 // Local Supabase only. Synthetic employment-support fixtures; never accepts a remote URL.
 import { randomBytes, randomUUID } from 'node:crypto';
+import { workspaceIdFromCreateResponse } from './programmeHubFixtureResponse.mjs';
 
 const baseUrl = 'http://127.0.0.1:55321';
 const anonKey = process.env.REV_LOCAL_SUPABASE_ANON_KEY;
@@ -37,8 +38,12 @@ async function identity(label) {
 }
 async function workspace(owner, label) {
   const stamp = `${Date.now()}-${randomBytes(4).toString('hex')}`;
-  const created = await rpc(owner.token, 'create_workspace_with_owner', { workspace_name: `${label} ${stamp}`, workspace_slug: `${label}-${stamp}`.toLowerCase() });
-  return id(created.payload?.[0]?.created_workspace_id);
+  const slugPrefix = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const created = await rpc(owner.token, 'create_workspace_with_owner', {
+    workspace_name: `${label} ${stamp}`,
+    workspace_slug: `${slugPrefix}-${stamp}`,
+  });
+  return id(workspaceIdFromCreateResponse(created));
 }
 const save = (actorId, workspaceId, operation, programmeId, recordId, expectedVersion, payload, requestId = randomUUID(), token = serviceKey) =>
   rpc(token, 'save_rev_programme_hub_record', {

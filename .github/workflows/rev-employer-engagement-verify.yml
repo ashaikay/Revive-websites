@@ -20,6 +20,8 @@ jobs:
           node-version: '22'
           package-manager-cache: false
       - run: npm ci
+      - name: Test Programme Hub fixture response handling
+        run: node --test src/tests/programmeHubFixtureResponse.test.mjs
       - name: Test Programme Hub boundary
         run: node --experimental-strip-types --test supabase/functions/rev-programme-hub-save/*.test.ts
       - name: Test Programme Hub mounted UI
