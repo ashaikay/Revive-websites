@@ -8,6 +8,17 @@ const service = process.env.REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY;
 if (!anon || !service) throw new Error('Local Supabase test keys are required.');
 let failures = 0;
 function check(name, ok) { console.log(name + '=' + (ok ? 'PASS' : 'FAIL')); if (!ok) failures++; }
+function sanitizedRefusal(response) {
+  const error = response.data;
+  const message = typeof error?.message === 'string'
+    ? error.message.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]').slice(0, 120)
+    : null;
+  return JSON.stringify({
+    status: response.status,
+    code: typeof error?.code === 'string' ? error.code.slice(0, 16) : null,
+    message,
+  });
+}
 async function request(token, method, path, body) {
   const response = await fetch(base + path, {
     method,
@@ -61,18 +72,46 @@ const decision = await rpc(owner.token, 'decide_rev_action_approval', {
 });
 check('OWNER_APPROVED', decision.status === 200);
 check('OLD_RPC_REVOKED', sql("select has_function_privilege('authenticated','public.reserve_rev_meeting_event_execution(uuid,uuid,uuid)','EXECUTE')") === 'f');
-const args = { target_request_id: randomUUID(), target_workspace_id: workspaceId, target_action_id: actionId, expected_calendar_reference: 'local-test-mailbox@example.test', expected_timezone: 'Europe/London', expected_binding_version: 1 };
-check('NO_POLICY_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args)).status >= 400);
+check('OLD_BOUND_RPC_REVOKED', sql("select has_function_privilege('authenticated','public.reserve_rev_meeting_event_execution_bound(uuid,uuid,uuid,text,text,bigint)','EXECUTE')") === 'f');
+const legacyArgs = {
+  target_request_id: randomUUID(),
+  target_workspace_id: workspaceId,
+  target_action_id: actionId,
+  expected_calendar_reference: 'local-test-mailbox@example.test',
+  expected_timezone: 'Europe/London',
+  expected_binding_version: 1,
+};
+const legacyRefusal = await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', legacyArgs);
+console.log('REVOKED_BOUND_RPC_REFUSAL=' + sanitizedRefusal(legacyRefusal));
+check('REVOKED_BOUND_RPC_DENIED', legacyRefusal.status >= 400);
+const args = { target_request_id: randomUUID(), target_workspace_id: workspaceId, target_action_id: actionId };
+const connectionId = randomUUID();
+const calendarId = randomUUID();
+const credentialId = randomUUID();
+const accountReference = 'local-test-mailbox@example.test';
+const calendarReference = 'local-selected-calendar-' + stamp;
+const secretId = sql("select vault.create_secret('phase5w-local-only-fake-refresh-token')");
+sql("insert into public.workspace_calendar_connections (id,workspace_id,provider_key,connection_status,provider_account_reference,authorized_by_user_id) values ('" +
+  connectionId + "'::uuid,'" + workspaceId + "'::uuid,'microsoft_graph','disconnected','" + accountReference + "','" + owner.id + "'::uuid)");
+sql("insert into rev_calendar_private.credentials (id,workspace_id,connection_id,secret_id,granted_calendar_scopes) values ('" +
+  credentialId + "'::uuid,'" + workspaceId + "'::uuid,'" + connectionId + "'::uuid,'" + secretId +
+  "'::uuid,array['https://graph.microsoft.com/calendars.readwrite'])");
+sql("update public.workspace_calendar_connections set connection_status='connected',credential_reference='" + credentialId +
+  "',calendar_write_consent_at=now(),calendar_write_consent_by_user_id='" + owner.id + "'::uuid where id='" + connectionId + "'::uuid");
+sql("insert into public.workspace_calendars (id,workspace_id,connection_id,provider_calendar_reference,display_name,timezone,is_selected,active) values ('" +
+  calendarId + "'::uuid,'" + workspaceId + "'::uuid,'" + connectionId + "'::uuid,'" + calendarReference +
+  "','Local calendar','Europe/London',true,true)");
+check('NO_POLICY_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', args)).status >= 400);
 sql("insert into public.workspace_execution_policies (workspace_id, execution_enabled, autonomy_mode, updated_by) values ('" + workspaceId + "'::uuid, true, 'always_ask', '" + owner.id + "'::uuid) on conflict (workspace_id) do update set execution_enabled=true, autonomy_mode='always_ask', updated_by=excluded.updated_by");
-check('NO_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args)).status >= 400);
-sql("insert into public.rev_meeting_calendar_bindings (workspace_id, provider_key, calendar_reference, timezone, enabled) values ('" + workspaceId + "'::uuid, 'microsoft_graph', 'local-test-mailbox@example.test', 'Europe/London', false)");
-check('DISABLED_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args)).status >= 400);
+check('NO_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', args)).status >= 400);
+sql("insert into public.rev_meeting_calendar_bindings (workspace_id, provider_key, calendar_reference, timezone, enabled) values ('" + workspaceId + "'::uuid, 'microsoft_graph', '" + accountReference + "', 'Europe/London', false)");
+check('DISABLED_BINDING_DENIED', (await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', args)).status >= 400);
 sql("update public.rev_meeting_calendar_bindings set enabled=true where workspace_id='" + workspaceId + "'::uuid");
-const memberCall = await rpc(member.token, 'reserve_rev_meeting_event_execution_bound', args);
-const outsiderCall = await rpc(outsider.token, 'reserve_rev_meeting_event_execution_bound', args);
-const wrongWorkspace = await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', { ...args, target_workspace_id: otherId });
+const memberCall = await rpc(member.token, 'reserve_rev_meeting_event_execution_selected', args);
+const outsiderCall = await rpc(outsider.token, 'reserve_rev_meeting_event_execution_selected', args);
+const wrongWorkspace = await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', { ...args, target_workspace_id: otherId });
 check('MEMBER_AND_CROSS_TENANT_DENIED', memberCall.status >= 400 && outsiderCall.status >= 400 && wrongWorkspace.status >= 400);
-const accepted = await rpc(owner.token, 'reserve_rev_meeting_event_execution_bound', args);
+const accepted = await rpc(owner.token, 'reserve_rev_meeting_event_execution_selected', args);
 const execution = accepted.data;
 check('OWNER_DURABLE_NO_PROVIDER', accepted.status === 200 && execution?.capability === 'CREATE_APPROVED_MEETING_EVENT' && execution?.provider_outcome === 'provider_not_invoked' && execution?.status === 'prepared' && execution?.mode === 'dry_run');
 
