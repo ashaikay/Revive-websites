@@ -422,3 +422,13 @@ verify_jwt = true
 
 [functions.rev-programme-hub-save]
 verify_jwt = true
+
+
+[functions.rev-scheduling-job-document-upload]
+verify_jwt = true
+
+[functions.rev-scheduling-job-document-analyse]
+verify_jwt = true
+
+[functions.rev-scheduling-job-requirements-confirm]
+verify_jwt = true

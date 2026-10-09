@@ -11,7 +11,7 @@ const workspaceId='11111111-1111-4111-8111-111111111111',userId='22222222-2222-4
 const startAt='2026-10-08T10:00:00.000Z',endAt='2026-10-08T14:30:00.000Z';
 type Row={id:string;workspace_id:string;worker_id:string;job_id:string;start_at:string;end_at:string;status:'active'|'cancelled';version:number};
 const mocks=vi.hoisted(()=>({rows:[] as unknown[],invoke:vi.fn(),readFails:false}));
-vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:mocks.invoke},from:()=>({select:()=>({eq:()=>({eq:async()=>mocks.readFails?{data:null,error:{message:'down'}}:{data:structuredClone(mocks.rows),error:null}})})})}}));
+vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:mocks.invoke},from:(table:string)=>({select:()=>{const result=()=>mocks.readFails?{data:null,error:{message:'down'}}:{data:structuredClone(table==='scheduling_job_requirement_reviews'?[]:mocks.rows),error:null};const query={eq:()=>query,then:(resolve:(value:unknown)=>unknown)=>Promise.resolve(result()).then(resolve)};return query;}})}}));
 const workers:Worker[]=[{workerId:harrison,workspaceId,displayName:'Harrison',roleLabels:[],skillTags:['Admin'],active:true,version:1},{workerId:priya,workspaceId,displayName:'Priya',roleLabels:[],skillTags:['Admin'],active:true,version:1}];
 vi.mock('@/services/schedulingWorkers',()=>({loadSchedulingWorkers:async()=>{if(mocks.readFails)throw Error('down');return workers;}}));
 vi.mock('@/services/workerWorkingPatterns',()=>({loadWorkingPattern:async()=>({version:1})}));

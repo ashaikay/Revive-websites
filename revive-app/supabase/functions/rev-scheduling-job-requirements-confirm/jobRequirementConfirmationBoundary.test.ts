@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {handleJobRequirementConfirmation,RequirementConfirmationRefusal,type ConfirmationDependencies} from './jobRequirementConfirmationBoundary.ts';
+
+const workspaceId='11111111-1111-4111-8111-111111111111',userId='22222222-2222-4222-8222-222222222222',jobId='33333333-3333-4333-8333-333333333333',analysisId='44444444-4444-4444-8444-444444444444',requestId='55555555-5555-4555-8555-555555555555';
+const requirements={tasks:[],requiredSkills:[{value:'First aid',references:[{page:1,section:'Requirements'}]}],qualifications:[],location:null,dates:[],duration:null,missingInformation:[],ambiguities:[]};
+const body={workspaceId,jobId,analysisId,analysisVersion:2,requirements,expectedCurrentReviewId:null,expectedCurrentRevision:0,requestId};
+const result={review_id:requestId,workspace_id:workspaceId,job_id:jobId,analysis_id:analysisId,job_version:4,requirements,revision:1,current:true,created_at:'2026-10-12T10:00:00.000Z'};
+function dependencies(patch:Partial<ConfirmationDependencies>={}):ConfirmationDependencies{return{allowedOrigin:'http://localhost:5180',getUserId:async()=>userId,canManage:async()=>true,confirm:async()=>result,...patch};}
+const request=(value:unknown=body)=>new Request('http://localhost/functions/v1/rev-scheduling-job-requirements-confirm',{method:'POST',headers:{Origin:'http://localhost:5180',Authorization:'Bearer token','Content-Type':'application/json'},body:JSON.stringify(value)});
+
+test('returns the version-bound immutable manager review',async()=>{let sent:Record<string,unknown>|null=null;const response=await handleJobRequirementConfirmation(request(),dependencies({confirm:async input=>{sent=input;return result;}}));assert.equal(response.status,200);assert.equal((await response.json()).jobVersion,4);assert.equal(sent?.expected_analysis_version,2);assert.deepEqual(sent?.target_requirements,requirements);});
+test('rejects requirements without evidence before trusted write',async()=>{let called=false;const response=await handleJobRequirementConfirmation(request({...body,requirements:{...requirements,requiredSkills:[{value:'First aid',references:[]}]}}),dependencies({confirm:async()=>{called=true;return result;}}));assert.equal(response.status,400);assert.equal(called,false);});
+test('reports stale analysis and changed review as explicit refusals',async()=>{for(const code of ['stale','changed'] as const){const response=await handleJobRequirementConfirmation(request(),dependencies({confirm:async()=>{throw new RequirementConfirmationRefusal(code);}}));assert.equal(response.status,409);assert.deepEqual(await response.json(),{status:'refused',code,requestId});}});
+test('denies unauthorized and cross-workspace confirmation before write',async()=>{let called=false;const response=await handleJobRequirementConfirmation(request(),dependencies({canManage:async()=>false,confirm:async()=>{called=true;return result;}}));assert.equal(response.status,403);assert.equal(called,false);});
