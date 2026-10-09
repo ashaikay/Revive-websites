@@ -14,11 +14,11 @@ export function CalendarBusinessHoursPanel({workspaceId,disabled=false}:{workspa
   catch{setReady(false);try{setPolicy(await read()??blank());setReady(true);setMessage('Save could not be confirmed. The latest saved settings have been loaded. Review them before saving again.');}catch{setMessage('Save could not be confirmed. Refresh to load the saved settings before trying again.');}}
   finally{setBusy(false);lock.current=false;}
  };
- return <section className="border rounded p-4 mt-6"><h3 className="font-semibold">BUSINESS HOURS</h3><p className="text-sm my-2">Set this workspace’s working days and opening hours. This does not enable bookings.</p>{message&&<p role="status">{message}</p>}{ready&&policy&&<form onSubmit={event=>{event.preventDefault();void submit();}}><fieldset disabled={busy||disabled}>
+ return <section className="mt-3">{message&&<p role="status" className="my-3 rounded border border-amber-200 bg-amber-50 p-3">{message}</p>}<details className="border rounded-lg"><summary className="cursor-pointer p-3 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500">Business hours setup</summary><div className="border-t p-3 sm:p-4"><p className="text-sm mb-3">Set working days and hours used for availability.</p>{ready&&policy&&<form onSubmit={event=>{event.preventDefault();void submit();}}><fieldset disabled={busy||disabled}>
   <label className="block my-3">Business timezone<input className="block border rounded p-2" required value={policy.timezone} onChange={event=>setPolicy({...policy,timezone:event.target.value})}/></label>
   <fieldset><legend>Working days</legend>{days.map((day,index)=><label key={day} className="inline-flex gap-2 mr-4 my-2"><input type="checkbox" checked={policy.workingDays.includes(index+1)} onChange={event=>setPolicy({...policy,workingDays:event.target.checked?[...policy.workingDays,index+1]:policy.workingDays.filter(d=>d!==index+1)})}/>{day}</label>)}</fieldset>
   <label className="block my-3">Opening time<input className="block border rounded p-2" type="time" required value={policy.startLocal} onChange={event=>setPolicy({...policy,startLocal:event.target.value})}/></label>
   <label className="block my-3">Closing time<input className="block border rounded p-2" type="time" required value={policy.endLocal} onChange={event=>setPolicy({...policy,endLocal:event.target.value})}/></label>
   <p className="text-sm my-2">Opening and closing times must fall on the same day.</p><button className="btn-secondary" type="submit">{busy?'Saving...':'SAVE BUSINESS HOURS'}</button>
- </fieldset></form>}</section>;
+ </fieldset></form>}</div></details></section>;
 }

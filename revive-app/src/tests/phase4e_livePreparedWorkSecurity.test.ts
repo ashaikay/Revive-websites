@@ -28,9 +28,9 @@ describe('Phase 4E live prepared-work security contracts', () => {
   it('keeps execution false and exposes no Send control in live REV', () => {
     const interfaceSource = source('../components/REVInterface.tsx');
     expect(PLATFORM_EXECUTION_ENABLED).toBe(false);
-    expect(interfaceSource).toContain('APPROVED — NOT SENT');
-    expect(interfaceSource).toContain('EMAIL SENDING DISABLED');
-    expect(interfaceSource).toContain('Approved draft retained. Nothing has been sent and no email provider can be invoked.');
+    expect(interfaceSource).toContain('Approved — not sent');
+    expect(interfaceSource).toContain('Email sending disabled — nothing sent');
+    expect(interfaceSource).toContain('Email sending disabled — review the saved outcome below');
     expect(interfaceSource).not.toContain('Live execution is controlled.');
     expect(interfaceSource).not.toContain('Only an approved follow-up can be sent');
     expect(interfaceSource).not.toContain('LIVE EMAIL SEND');

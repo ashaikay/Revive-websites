@@ -12,6 +12,7 @@ import { dataProviderMode } from '@/data/provider';
 import { loadLiveWorkspaceContext } from '@/services/supabaseContextService';
 import '@/styles/index.css';
 import { OutlookConnectionPanel } from '@/components/OutlookConnectionPanel';
+import { AppFooter } from '@/components/AppFooter';
 import { calendarOAuthReturn } from '@/services/calendarOAuthBrowser';
 
 type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business' | 'scheduling';
@@ -22,7 +23,6 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [liveSession, setLiveSession] = useState(authProvider.getSession());
   const [loginError, setLoginError] = useState<LoginError | null>(null);
-  const authMode = authProvider.getSession()?.mode ?? 'signed-out';
 
   React.useEffect(() => {
     if (dataProviderMode !== 'supabase' || !authProvider.initialize) return;
@@ -142,17 +142,7 @@ function App() {
           : <div className="p-6">Scheduling requires a signed-in business workspace.</div>)}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-neutral-900 text-white mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <p className="text-center text-amber-300 text-xs font-semibold uppercase tracking-wide mb-2">
-            Auth: {authMode} {'\u00b7'} Data Provider: {dataProviderMode}
-          </p>
-          <p className="text-center text-neutral-400 text-sm">
-            REV Phase 2B Foundation {'\u00b7'} Mocked AI & Data {'\u00b7'} No external actions executed
-          </p>
-        </div>
-      </footer>
+      <AppFooter />
     </div>
   );
 }

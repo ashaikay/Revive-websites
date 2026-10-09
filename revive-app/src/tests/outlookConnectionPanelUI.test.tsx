@@ -29,6 +29,10 @@ vi.mock('@/services/calendarOAuthBrowser',async importOriginal=>{
 import {OutlookConnectionPanel} from '@/components/OutlookConnectionPanel';
 import {startCalendarOAuth} from '@/services/calendarOAuthBrowser';
 
+async function openConnectionSetup(){
+ fireEvent.click(await screen.findByText('Manage Outlook connections'));
+}
+
 let connectionRows:Record<string,unknown>[];
 let calendarRows:Record<string,unknown>[];
 
@@ -64,6 +68,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   mocks.membership={data:{role,status:'active'},error:null};
   render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
   expect(await screen.findByText('client@example.test')).toBeInTheDocument();
+  await openConnectionSetup();
   expect(screen.getByText('Client calendar')).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'ADD OUTLOOK CONNECTION'})).toBeInTheDocument();
   const metadataReads=mocks.read.mock.calls.filter(call=>call[0]==='workspace_calendar_connections'||call[0]==='workspace_calendars') as [string,string,[string,unknown][]][];
@@ -78,6 +83,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
  it('offers a separately initiated write-consent flow only for the selected calendar',async()=>{
   vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
   render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  await openConnectionSetup();
   expect(await screen.findByRole('button',{name:'AUTHORIZE CALENDAR CHANGES'})).toBeInTheDocument();
   expect(screen.getByText('This separately asks Outlook to allow calendar changes for the selected calendar. It does not enable bookings.')).toBeInTheDocument();
  });
@@ -94,6 +100,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   vi.stubEnv('VITE_REV_CALENDAR_OAUTH_UI_ENABLED','true');
   connectionRows=[{...connectionRows[0],authorized_by_user_id:'55555555-5555-4555-8555-555555555555'}];
   render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  await openConnectionSetup();
   expect(await screen.findByRole('button',{name:'AUTHORIZE CALENDAR CHANGES'})).toBeInTheDocument();
  });
 
@@ -121,6 +128,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   expect(await screen.findByRole('status')).toHaveTextContent('Loading Outlook connections...');
   expect(screen.queryByRole('button',{name:'CONNECT OUTLOOK'})).toBeNull();
   await act(async()=>{readResolvers.forEach(resolve=>resolve());});
+  await openConnectionSetup();
   expect(await screen.findByText('No Outlook connections saved.')).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'CONNECT OUTLOOK'})).toBeInTheDocument();
  });
@@ -144,6 +152,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   });
   render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
   await screen.findByText('client@example.test');
+  await openConnectionSetup();
   const addButton=screen.getByRole('button',{name:'ADD OUTLOOK CONNECTION'});
   fireEvent.click(addButton);
   expect(screen.getByRole('button',{name:'CONNECTING...'})).toBeDisabled();
@@ -167,6 +176,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   });
   render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
   await screen.findByText('client@example.test');
+  await openConnectionSetup();
   fireEvent.click(screen.getByRole('button',{name:'DISCONNECT OUTLOOK'}));
   const confirmation=screen.getByRole('group',{name:'Confirm Outlook disconnect'});
   fireEvent.click(within(confirmation).getByRole('button',{name:'CONFIRM DISCONNECT'}));
@@ -192,6 +202,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   });
   render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
   await screen.findByText('client@example.test');
+  await openConnectionSetup();
   const pending=screen.getByText('Status: disconnected').closest('.border');
   expect(pending).not.toBeNull();
   fireEvent.click(within(pending as HTMLElement).getByRole('button',{name:'DISCOVER CALENDARS'}));
@@ -252,6 +263,7 @@ describe('mounted customer-managed Outlook connection panel',()=>{
   callbackView.unmount();
 
   render(<OutlookConnectionPanel workspaceId={workspaceA} userId={userId}/>);
+  await openConnectionSetup();
   const discoverButton=await screen.findByRole('button',{name:'DISCOVER CALENDARS'});
   expect(mocks.invoke.mock.calls.map(([name])=>name)).not.toContain('rev-calendar-reconnect');
   fireEvent.click(discoverButton);

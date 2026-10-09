@@ -124,35 +124,40 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   }
 
   return (
-    <article className="p-4 sm:p-5" aria-labelledby={`meeting-proposal-${action.id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="rounded-lg border border-neutral-200 bg-white" aria-labelledby={`meeting-proposal-${action.id}`}>
+      <details>
+      <summary className="cursor-pointer p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500">
+      <div className="inline-flex w-full flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p id={`meeting-proposal-${action.id}`} className="font-semibold text-neutral-900">{proposal.title}</p>
-          <p className="text-sm text-neutral-600 mt-1">Attendee: {proposal.attendeeEmail}</p>
-          <p className="text-xs text-neutral-500 mt-2">Review the saved details. Approval alone does not book the meeting.</p>
+          <p className="text-sm text-neutral-600 mt-1 break-words">Attendee: {proposal.attendeeEmail}</p>
+          <p className="text-sm text-neutral-700 mt-1">{formatMeetingDate(proposal.startAt, proposal.timezone)} · {formatMeetingTime(proposal.startAt, proposal.timezone)} - {formatMeetingTime(proposal.endAt, proposal.timezone)} ({proposal.timezone})</p>
         </div>
         <span className={displayedExecution?.status === 'event_created' ? 'badge-success whitespace-nowrap'
           : displayedExecution?.status === 'provider_rejected' ? 'badge-danger whitespace-nowrap'
+          : displayedExecution?.status === 'outcome_unknown' || executionError ? 'badge-warning whitespace-nowrap'
           : action.status === 'rejected' ? 'badge-danger whitespace-nowrap'
           : action.status === 'approved' ? 'badge-success whitespace-nowrap' : 'badge-warning whitespace-nowrap'}>
           {action.status === 'awaiting_approval' ? 'NOT BOOKED — APPROVAL NEEDED' : proposalStatusLabel(displayedExecution, action.status)}
         </span>
       </div>
+      <span className="mt-2 inline-block text-xs font-medium text-primary-700">View details and actions</span>
+      </summary>
+      <div className="border-t border-neutral-200 p-4">
 
-      <dl className="grid gap-2 mt-4 text-sm text-neutral-700 sm:grid-cols-2">
-        <div><dt className="font-medium text-neutral-900">Date</dt><dd>{formatMeetingDate(proposal.startAt, proposal.timezone)}</dd></div>
-        <div><dt className="font-medium text-neutral-900">Time</dt><dd>{formatMeetingTime(proposal.startAt, proposal.timezone)} - {formatMeetingTime(proposal.endAt, proposal.timezone)} ({proposal.timezone})</dd></div>
+      <dl className="grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
         <div><dt className="font-medium text-neutral-900">Method</dt><dd>{meetingMethodLabel(proposal.meetingMethod)}</dd></div>
         {proposal.locationDetails && <div><dt className="font-medium text-neutral-900">Location/details</dt><dd className="break-words">{proposal.locationDetails}</dd></div>}
       </dl>
       {proposal.notes && <div className="mt-3 text-sm text-neutral-700"><p className="font-medium text-neutral-900">Notes</p><p className="whitespace-pre-wrap break-words">{proposal.notes}</p></div>}
 
-      <p className="text-xs text-neutral-500 mt-4">Any saved booking result appears below. Invitation delivery is reported only when confirmed.</p>
-
       {canReview && action.status === 'awaiting_approval' && !confirmation && (
-        <div className="flex flex-wrap gap-3 mt-4">
+        <div className="mt-4">
+          <p className="text-sm text-neutral-600">Approval alone does not book the meeting.</p>
+          <div className="flex flex-wrap gap-3 mt-2">
           <button type="button" className="btn-primary text-sm" disabled={busy} onClick={() => setConfirmation('approved')}>APPROVE PROPOSAL</button>
           <button type="button" className="btn-secondary text-sm" disabled={busy} onClick={() => setConfirmation('rejected')}>REJECT PROPOSAL</button>
+          </div>
         </div>
       )}
 
@@ -171,15 +176,6 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
           </div>
         </div>
       )}
-
-      {decisionFeedback && (
-        <div ref={decisionFeedbackRef} className="mt-4 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-900"
-          role="status" tabIndex={-1}>
-          Proposal {decisionFeedback}. It remains not booked.
-        </div>
-      )}
-
-      {decisionError && <p ref={decisionErrorRef} className="mt-4 text-sm text-red-700" role="alert" tabIndex={-1}>{decisionError}</p>}
 
       {canReview && action.status === 'approved' && onRequestDryRun && !displayedExecution && !confirmLiveBooking && !executionError && (
         <div className="mt-4 rounded border border-neutral-200 bg-neutral-50 p-3">
@@ -200,6 +196,16 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         </div>
       )}
 
+      </div>
+      </details>
+      {decisionFeedback && (
+        <div ref={decisionFeedbackRef} className="m-4 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-900"
+          role="status" tabIndex={-1}>
+          Proposal {decisionFeedback}. It remains not booked.
+        </div>
+      )}
+      {decisionError && <p ref={decisionErrorRef} className="m-4 text-sm text-red-700" role="alert" tabIndex={-1}>{decisionError}</p>}
+
       {liveUiEnabled && canReview && action.status === 'approved' && onRequestLive &&
         (!displayedExecution || displayedExecution.status === 'provider_disabled') && confirmLiveBooking && !executionError && (
         <div className="mt-4 rounded border border-amber-300 bg-amber-50 p-4 text-amber-950" role="group" aria-label="Confirm Outlook calendar booking">
@@ -218,7 +224,7 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
         <p className="mt-1">{executionError}</p>
       </div>}
       {presentation && !executionError && (
-        <div ref={executionFeedbackRef} className={`mt-4 rounded border p-4 ${presentation.tone}`} role="status" tabIndex={-1}>
+        <div ref={executionFeedbackRef} className={`m-4 rounded border p-3 ${presentation.tone}`} role="status" tabIndex={-1}>
           <p className="font-semibold">{presentation.title}</p>
           <p className="text-sm mt-1">{presentation.message}</p>
         </div>

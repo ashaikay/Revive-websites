@@ -107,22 +107,24 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
   const pending = artifact.approvalState === 'pending';
 
   return (
-    <article className="card border-2 border-primary-200 overflow-hidden">
-      <header className="bg-primary-50 px-5 py-4 border-b border-primary-100">
-        <p className="text-xs font-semibold text-primary-700">REV PREPARED THIS FOR YOU</p>
-        <div className="flex flex-wrap items-start justify-between gap-2 mt-1">
-          <h3 className="font-semibold text-neutral-900">{artifact.subject}</h3>
+    <article className="card border border-neutral-200 overflow-hidden">
+      <details>
+      <summary className="cursor-pointer p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500">
+        <div className="inline-flex w-full flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-neutral-900 break-words">{artifact.subject || 'Prepared follow-up'}</h3>
+            <p className="mt-1 text-sm text-neutral-600">Suggested channel: {artifact.suggestedChannel.replace('_', ' ')}</p>
+          </div>
           <span className={pending ? 'badge-warning' : artifact.approvalState === 'approved_not_sent' ? 'badge-success' : 'badge-danger'}>
-            {pending ? 'DRAFT — REVIEW REQUIRED' : artifact.approvalState === 'approved_not_sent' ? 'APPROVED — NOT SENT' : 'REJECTED — NOT SENT'}
+            {pending ? 'Draft — review required' : artifact.approvalState === 'approved_not_sent' ? 'Approved — not sent' : 'Rejected — not sent'}
           </span>
         </div>
-      </header>
-      <div className="p-5 grid gap-5">
+        <span className="mt-2 inline-block text-xs font-medium text-primary-700">View draft and actions</span>
+      </summary>
+      <div className="border-t border-neutral-200 p-4 grid gap-4">
         <div className="grid sm:grid-cols-2 gap-3 text-sm text-neutral-700">
           <p><strong>Recovery reason:</strong> {artifact.recoveryReason}</p>
           <p><strong>Objective:</strong> {artifact.objective}</p>
-          <p><strong>Suggested channel:</strong> {artifact.suggestedChannel.replace('_', ' ')}</p>
-          <p><strong>External effect:</strong> None. £0 cost.</p>
         </div>
 
         {isEditing ? (
@@ -166,15 +168,9 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
           </div>
         )}
         {pending && !canReview && <p className="text-sm text-amber-800">Owner or admin review is required.</p>}
-        {artifact.approvalState === 'approved_not_sent' && executionMode === 'live' && (
-          <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p className="font-semibold">EMAIL SENDING DISABLED</p>
-            <p className="mt-1">Approved draft retained. Nothing has been sent and no email provider can be invoked.</p>
-          </div>
-        )}
         {artifact.approvalState === 'approved_not_sent' && executionMode === 'dry_run' && canRequestExecution && onRequestExecution && (
           <div className="border-t border-neutral-200 pt-4">
-            <p className="text-sm font-medium text-neutral-900">Phase 4F is dry-run only. Nothing will be sent.</p>
+            <p className="text-sm font-medium text-neutral-900">This is a dry-run only. Nothing will be sent.</p>
             <button
               className="btn-secondary text-sm mt-3"
               type="button"
@@ -184,14 +180,23 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
             </button>
           </div>
         )}
+      </div>
+      </details>
+        {executionMode === 'live' && (
+          <p className="m-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+            {!liveExecutionResult && !executionError
+              ? 'Email sending disabled — nothing sent'
+              : 'Email sending disabled — review the saved outcome below'}
+          </p>
+        )}
         {executionResult && (
-          <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
+          <div className="m-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>{executionResult.displayStatus}</strong>
             <p className="mt-1">Provider calls: 0 | Cost: £0 | External effect: none</p>
           </div>
         )}
         {liveExecutionResult && (
-          <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
+          <div className="m-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
             <strong>
               {liveExecutionResult.acceptedByProvider
                 ? 'ACCEPTED BY PROVIDER ? DELIVERY NOT CONFIRMED'
@@ -205,13 +210,7 @@ export const PreparedFollowUpReview: React.FC<PreparedFollowUpReviewProps> = ({
             )}
           </div>
         )}
-        {executionError && <p className="text-sm text-red-700" role="alert">{executionError}</p>}
-        <p className="text-xs text-neutral-500">
-          {executionMode === 'live'
-            ? 'Email sending is disabled. Preparation and approval do not contact the recipient.'
-            : 'Preparation and approval do not send this draft. No provider is invoked.'}
-        </p>
-      </div>
+        {executionError && <p className="m-4 text-sm text-red-700" role="alert">{executionError}</p>}
     </article>
   );
 };
@@ -289,6 +288,34 @@ interface EmailThreadListProps {
   opportunities: { id: string; title: string }[];
 }
 
+export function MeetingProposalGroups({
+  actions,
+  renderAction,
+  needsAttention,
+  now = Date.now(),
+}: {
+  actions: LivePendingAction[];
+  renderAction: (action: LivePendingAction) => React.ReactNode;
+  needsAttention: (action: LivePendingAction) => boolean;
+  now?: number;
+}) {
+  const history = actions.filter((action) => !needsAttention(action) && (
+    ['completed', 'rejected', 'cancelled', 'failed'].includes(action.status)
+    || (action.meetingProposal && Date.parse(action.meetingProposal.endAt) < now)
+  ));
+  const historyIds = new Set(history.map((action) => action.id));
+  const current = actions.filter((action) => !historyIds.has(action.id));
+  return <div className="grid gap-3">
+    {current.map(renderAction)}
+    {history.length > 0 && <details className="rounded-lg border border-neutral-200 bg-neutral-50">
+      <summary className="cursor-pointer p-4 font-semibold text-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500">
+        Meeting history ({history.length})
+      </summary>
+      <div className="grid gap-3 border-t border-neutral-200 p-3 sm:p-4">{history.map(renderAction)}</div>
+    </details>}
+  </div>;
+}
+
 const EmailThreadList: React.FC<EmailThreadListProps> = ({ threads, contacts, opportunities }) => (
   <div className="grid gap-4">
     {threads.map((thread) => {
@@ -298,9 +325,13 @@ const EmailThreadList: React.FC<EmailThreadListProps> = ({ threads, contacts, op
       const opportunity = thread.opportunityId
         ? opportunities.find((item) => item.id === thread.opportunityId)
         : undefined;
+      const latestMessage = [...thread.messages].sort((left, right) =>
+        (right.communicationAt ?? '').localeCompare(left.communicationAt ?? ''),
+      )[0];
       return (
-        <article key={thread.id} className="card divide-y divide-neutral-100 overflow-hidden">
-          <header className="p-3 sm:p-4">
+        <article key={thread.id} className="card border border-neutral-200 overflow-hidden">
+          <details>
+          <summary className="cursor-pointer p-3 sm:p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500">
             <h3 className="font-semibold text-neutral-900">
               {thread.subject ?? 'Email conversation'}
             </h3>
@@ -313,8 +344,12 @@ const EmailThreadList: React.FC<EmailThreadListProps> = ({ threads, contacts, op
             <p className="text-xs text-neutral-500 mt-2">
               Last message: {formatEmailTimestamp(thread.lastMessageAt)}
             </p>
-          </header>
-          <div className="divide-y divide-neutral-100">
+            <p className="mt-2 text-sm text-neutral-600 break-words">
+              {latestMessage?.bodyText ? emailBodyPreview(latestMessage.bodyText, 120) : 'No message preview available.'}
+            </p>
+            <span className="mt-2 inline-block text-xs font-medium text-primary-700">View conversation ({thread.messages.length})</span>
+          </summary>
+          <div className="border-t border-neutral-200 divide-y divide-neutral-100">
             {thread.messages.map((message) => (
               <div key={message.id} className="p-3 sm:p-4 text-sm text-neutral-700">
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
@@ -345,6 +380,7 @@ const EmailThreadList: React.FC<EmailThreadListProps> = ({ threads, contacts, op
               </div>
             ))}
           </div>
+          </details>
         </article>
       );
     })}
@@ -366,13 +402,12 @@ export const EmailConversationHistory: React.FC<EmailConversationHistoryProps> =
         </h2>
         <span className="badge-neutral">READ-ONLY HISTORY</span>
       </div>
-      <p className="text-sm text-neutral-600 -mt-2 mb-3">Read a short preview or expand a message. This history cannot send or reply to email.</p>
       {threads.length === 0 ? (
         <div className="card p-6 text-center text-neutral-600">
           No email conversation history is recorded for this workspace.
         </div>
       ) : (
-        <div className="grid gap-8">
+        <div className="grid gap-4">
           <section aria-labelledby="customer-conversations-heading">
             <h3 id="customer-conversations-heading" className="text-lg font-semibold text-neutral-900 mb-3">
               CUSTOMER CONVERSATIONS
@@ -1207,10 +1242,18 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
             <section aria-labelledby="meeting-proposals-heading" className="rev-motion-in">
               <div className="mb-4">
                 <h2 id="meeting-proposals-heading" className="text-xl font-bold text-neutral-900">MEETING PROPOSALS &amp; RESULTS</h2>
-                <p className="text-sm text-neutral-600 mt-1">Review each proposal here. Approval is not a booking; any saved Outlook result remains visible on its proposal.</p>
+                <p className="text-sm text-neutral-600 mt-1">Open a proposal to review it. Past and completed meetings are in history.</p>
               </div>
-              <div className="card divide-y divide-neutral-100">
-                {meetingActions.map((action) => (
+              <MeetingProposalGroups actions={meetingActions}
+                needsAttention={(action) => Boolean(
+                  meetingExecutionErrors[action.id] || meetingDecisionErrors[action.id]
+                  || meetingDecisionFeedback[action.id] || busyId === action.id
+                  || meetingExecutionBusyId === action.id
+                  || meetingExecutionResults[action.id]
+                  || ['outcome_unknown', 'provider_rejected'].includes((meetingExecutionResults[action.id] ?? action.meetingDryRun)?.status ?? '')
+                  || action.status === 'failed'
+                )}
+                renderAction={(action) => (
                   <MeetingProposalReviewCard
                     key={action.id}
                     action={action}
@@ -1226,8 +1269,7 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     onRequestLive={() => handleMeetingLiveExecution(action)}
                     onDecision={(decision) => handleMeetingDecision(action, decision)}
                   />
-                ))}
-              </div>
+                )} />
             </section>
           )}
 

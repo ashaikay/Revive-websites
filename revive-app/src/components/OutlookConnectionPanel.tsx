@@ -125,11 +125,21 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
   };
   return <section aria-labelledby="outlook-connection-heading" className="max-w-5xl mx-auto card border border-neutral-200 p-5 sm:p-6 my-6">
     <h2 id="outlook-connection-heading" className="text-lg font-semibold">{callback?'Complete Outlook authorization':'OUTLOOK CONNECTION'}</h2>
-    <p className="text-sm text-neutral-600 my-3">Connect a business Outlook calendar for read-only availability. Calendar-change permission is requested separately when needed; bookings remain disabled.</p>
+    <p className="text-sm text-neutral-600 my-3">Use the selected calendar to check availability. Bookings remain disabled.</p>
     {callback&&message&&<p role="status" className="my-3">{message}</p>}
     {callback&&!done&&<button className="btn-secondary" disabled={busy} onClick={()=>void execute()}>{busy?'Please wait...':'SAVE OUTLOOK AUTHORIZATION'}</button>}
     {callback?<a className="block mt-4" href="/#rev">Return to REV</a>:metadataStatus==='loading'?<p className="my-3" role="status">Loading Outlook connections...</p>:metadataStatus==='error'?<div className="my-3"><p role="alert">{message}</p><button className="btn-secondary mt-3" onClick={()=>void reloadMetadata()}>RETRY LOADING CONNECTIONS</button></div>:<>
       {message&&<p role="status" className="my-3">{message}</p>}
+      <div className="rounded-lg border border-primary-200 bg-primary-50 p-3 text-sm">
+        <p className="font-semibold text-neutral-900">Selected Outlook calendar</p>
+        {metadata.calendars.filter(calendar=>calendar.active&&calendar.selected).map(calendar=><p key={calendar.id} className="mt-1 break-words">
+          {metadata.connections.find(connection=>connection.id===calendar.connectionId)?.account||'Outlook account'} {'→'} {calendar.displayName} ({calendar.timezone})
+        </p>)}
+        {!metadata.calendars.some(calendar=>calendar.active&&calendar.selected)&&<p className="mt-1">No calendar selected. Open connection setup to select one.</p>}
+      </div>
+      <details className="mt-3 rounded-lg border border-neutral-200">
+      <summary className="cursor-pointer p-3 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500">Manage Outlook connections</summary>
+      <div className="border-t border-neutral-200 p-3 sm:p-4">
       {!done&&<button className="btn-secondary" disabled={busy||disconnectConfirmation!==null} onClick={()=>void execute()}>{busy?'CONNECTING...':metadata.connections.length?'ADD OUTLOOK CONNECTION':'CONNECT OUTLOOK'}</button>}
       <label className="block text-sm mt-4">Calendar timezone<input className="block border rounded px-3 py-2 mt-1" value={timezone} disabled={busy} onChange={event=>setTimezone(event.target.value)} placeholder="Europe/London" /></label>
       {metadata.connections.length===0&&<p className="text-sm mt-4">No Outlook connections saved.</p>}
@@ -151,6 +161,8 @@ export function OutlookConnectionPanel({workspaceId,userId,callback=false}:{work
         </div>:<button className="btn-secondary mt-3" disabled={busy} onClick={()=>setDisconnectConfirmation(connection.id)}>{duplicateAccountConnectionId===connection.id?'REMOVE UNFINISHED CONNECTION':'DISCONNECT OUTLOOK'}</button>)}
         <ul className="mt-3 space-y-2">{metadata.calendars.filter(calendar=>calendar.connectionId===connection.id&&calendar.active).map(calendar=><li key={calendar.id}>{calendar.displayName} <span className="text-sm text-neutral-600">({calendar.timezone}) · {calendar.selected?'Selected':'Not selected'}</span>{connection.status==='connected'&&!calendar.selected&&<button className="btn-secondary ml-3" disabled={busy||disconnectConfirmation!==null} onClick={()=>void selectCalendar(calendar.id,connection.id)}>SELECT CALENDAR</button>}</li>)}</ul>
       </div>)}
+      </div>
+      </details>
       <CalendarBusinessHoursPanel key={workspaceId} workspaceId={workspaceId} disabled={busy||disconnectConfirmation!==null} />
     </>}
   </section>;

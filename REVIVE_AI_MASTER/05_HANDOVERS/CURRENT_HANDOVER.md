@@ -20,6 +20,12 @@ The earlier additional-account credential-load and empty-availability blockers a
 
 ## REV layout tidy-up — implemented locally (2026-10-09)
 
+- Follow-up visual pass: conversations and proposals are collapsed by default. Conversation summaries show subject, linked contact, last-message date and one 120-character preview of the newest message. Meeting summaries show title, attendee, date/time and durable status.
+- Prepared follow-ups are collapsed by default. Their summaries retain the title, suggested channel, durable approval status and disabled-email safeguard; expansion reveals the draft, recovery reason, objective, evidence and existing review actions. The application footer now uses neutral product wording rather than developer diagnostics or blanket no-action claims.
+- Completed/resolved or past-end-time proposals move into collapsed meeting history. Errors, uncertain outcomes, failed/provider-rejected bookings, in-flight actions and newly received feedback/results remain in the visible current section. History expansion preserves all saved booking results and existing action guards.
+- Outlook connection management and business hours are separate collapsed setup sections; the selected account/calendar summary and setup feedback remain visible.
+- Rendered appearance is checked using an offline mocked fixture and the built stylesheet, not live customer/provider access.
+- Follow-up verification: the prepared-follow-up/footer focused selection passed 35/35 tests; the complete 19-file CI mounted selection passed 151/151 on rerun after one unrelated Annual Leave lifecycle assertion transiently failed in the first parallel run and then passed 7/7 in isolation. Type-check/build passed with the existing chunk-size advisory, and `git diff --check` passed. The offline fixture was inspected at 1280px desktop and 390px mobile widths, including conversation/proposal/history expansion; neither layout had horizontal overflow. No live service calls or gate changes.
 - Email conversation cards show compact previews with an accessible disclosure for full messages.
 - Outlook connection, availability, meeting proposals and execution results are visually distinct and grouped in workflow order.
 - Meeting actions have concise, business-facing instructions and immediate progress labels.

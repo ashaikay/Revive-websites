@@ -40,22 +40,24 @@ describe('Phase 4D prepared follow-up UI', () => {
     const markup = renderToStaticMarkup(
       <PreparedFollowUpReview artifact={artifact()} canReview onEdit={vi.fn()} onApprove={vi.fn()} onReject={vi.fn()} />,
     );
-    expect(markup).toContain('REV PREPARED THIS FOR YOU');
-    expect(markup).toContain('DRAFT — REVIEW REQUIRED');
+    expect(markup).toContain('View draft and actions');
+    expect(markup).toContain('Suggested channel: email');
+    expect(markup).toContain('Draft — review required');
     expect(markup).toContain('EVIDENCE USED');
     expect(markup).toContain('MISSING INFORMATION');
     expect(markup).toMatch(/<button[^>]*>Edit<\/button>/);
     expect(markup).toMatch(/<button[^>]*>Approve<\/button>/);
     expect(markup).toMatch(/<button[^>]*>Reject<\/button>/);
     expect(markup).not.toMatch(/<button[^>]*>[^<]*Send/i);
-    expect(markup).toContain('No provider is invoked.');
+    expect(markup).toContain('<details>');
+    expect(markup).not.toContain('<details open');
   });
 
   it('shows approved but not sent and removes all review controls', () => {
     const markup = renderToStaticMarkup(
       <PreparedFollowUpReview artifact={artifact({ approvalState: 'approved_not_sent' })} canReview onEdit={vi.fn()} onApprove={vi.fn()} onReject={vi.fn()} />,
     );
-    expect(markup).toContain('APPROVED — NOT SENT');
+    expect(markup).toContain('Approved — not sent');
     expect(markup).not.toMatch(/<button/);
     expect(markup).not.toMatch(/<button[^>]*>[^<]*Send/i);
   });

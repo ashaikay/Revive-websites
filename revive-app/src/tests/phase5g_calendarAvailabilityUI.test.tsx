@@ -87,7 +87,7 @@ describe('Phase 5G read-only calendar availability UI and client', () => {
 
   it('keeps existing email-send safeguards unchanged', () => {
     const source = readFileSync(new URL('../components/REVInterface.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('EMAIL SENDING DISABLED');
+    expect(source).toContain('Email sending disabled — nothing sent');
     expect(source).not.toMatch(/<button[^>]*>\s*Send\s*<\/button>/i);
   });
 });
