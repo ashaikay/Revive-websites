@@ -101,6 +101,7 @@ jobs:
           node src/tests/phase5w_local_claim_validation.mjs
           node --experimental-strip-types src/tests/phase6f_local_provider_lifecycle.mjs
           node --experimental-strip-types src/tests/phase6c_local_graph_adapter_validation.mjs
+          node src/tests/phase6g_local_delegated_token_validation.mjs
           node src/tests/phase5_calendar_connections_local_validation.mjs
           node src/tests/phase5_calendar_oauth_storage_local_validation.mjs
           node src/tests/phase5_calendar_connection_creation_local_validation.mjs

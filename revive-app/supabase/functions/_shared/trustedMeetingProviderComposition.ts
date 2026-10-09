@@ -1,4 +1,4 @@
-import { createTrustedMeetingExecutionReadModel, type TrustedMeetingReadClient } from './trustedMeetingExecutionReadModel.ts';
+import { createTrustedMeetingExecutionReadModel, type TrustedMeetingExecutionSnapshot, type TrustedMeetingReadClient } from './trustedMeetingExecutionReadModel.ts';
 import { buildTrustedMeetingGraphRequest } from './trustedMeetingGraphRequest.ts';
 import { createTrustedMeetingProviderAttempt, type ClaimedMeetingAttempt, type MeetingProviderAttemptClient } from './trustedMeetingProviderAttempt.ts';
 import { createMeetingProviderWorkflow, type MeetingProviderWorkflowDependencies } from './meetingProviderWorkflow.ts';
@@ -9,8 +9,7 @@ export interface TrustedMeetingProviderCompositionDependencies {
   trustedClient: TrustedMeetingReadClient & MeetingProviderAttemptClient;
   trustedWorkspaceId: string;
   liveWorkspaceId: string;
-  primaryMailboxUserPrincipalName: string;
-  getAccessToken: () => Promise<string>;
+  getAccessToken: (snapshot: TrustedMeetingExecutionSnapshot) => Promise<string>;
   // A test may supply a fake transport. Production uses the existing Graph adapter.
   invokeGraph?: MeetingProviderWorkflowDependencies['invokeGraph'];
 }
@@ -27,10 +26,10 @@ export function createTrustedMeetingProviderComposition(deps: TrustedMeetingProv
           snapshot.bindingVersion !== attempt.bindingVersion) {
           throw new Error('Trusted meeting provider snapshot mismatch.');
         }
-        const accessToken = await deps.getAccessToken();
+        const accessToken = await deps.getAccessToken(snapshot);
         return buildTrustedMeetingGraphRequest(snapshot, {
           workspaceId: deps.trustedWorkspaceId,
-          providerAccountReference: deps.primaryMailboxUserPrincipalName,
+          providerAccountReference: snapshot.calendarReference,
           accessToken,
         });
       },

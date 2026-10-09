@@ -75,8 +75,12 @@ test('matching workspace reaches fake Graph after durable claim while mismatch r
     };
     const execute = createTrustedMeetingProviderComposition({
       trustedClient: client as never, trustedWorkspaceId: workspaceId, liveWorkspaceId,
-      primaryMailboxUserPrincipalName: 'owner@example.test',
-      getAccessToken: async () => { calls.push('token'); return 'fake-token'; },
+      getAccessToken: async targetSnapshot => {
+        assert.equal(targetSnapshot.executionId, executionId);
+        assert.equal(targetSnapshot.calendarId, target.calendar_id);
+        calls.push('token');
+        return 'fake-token';
+      },
       invokeGraph: async () => { calls.push('graph'); return { provider: 'microsoft_graph', outcome: 'created',
         providerEventReference: 'fake-event', actualCost: 0 }; },
     });

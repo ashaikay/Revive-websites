@@ -4,6 +4,14 @@ export interface TrustedMeetingReadClient {
   rpc(name: 'load_rev_meeting_execution_calendar_target', args: {
     target_execution_id: string;
   }): Promise<{ data: unknown; error: unknown }>;
+  rpc(name: 'load_rev_meeting_calendar_credential', args: {
+    target_execution_id: string;
+  }): Promise<{ data: unknown; error: unknown }>;
+  rpc(name: 'rotate_rev_meeting_calendar_credential', args: {
+    target_execution_id: string;
+    expected_revision: number;
+    target_refresh_token: string;
+  }): Promise<{ data: unknown; error: unknown }>;
   from(table: string): {
     select(columns: string): {
       eq(column: string, value: string): {
@@ -25,6 +33,7 @@ export interface TrustedMeetingExecutionSnapshot {
   connectionId: string;
   credentialReference: string;
   credentialRevision: number;
+  consentVersion: number;
   calendarReference: string;
   providerCalendarReference: string;
   targetFingerprint: string;
@@ -81,6 +90,7 @@ export function createTrustedMeetingExecutionReadModel(client: TrustedMeetingRea
       !Number.isSafeInteger(target.credential_revision) || (target.credential_revision as number) < 1 ||
       typeof target.provider_account_reference !== 'string' || !target.provider_account_reference.trim() ||
       typeof target.provider_calendar_reference !== 'string' || !target.provider_calendar_reference.trim() ||
+      !Number.isSafeInteger(target.consent_version) || (target.consent_version as number) < 1 ||
       typeof target.timezone !== 'string' || !target.timezone.trim() ||
       typeof target.target_fingerprint !== 'string' || !sha256.test(target.target_fingerprint) ||
       !Number.isSafeInteger(target.workspace_binding_version) || (target.workspace_binding_version as number) < 1) {
@@ -103,6 +113,7 @@ export function createTrustedMeetingExecutionReadModel(client: TrustedMeetingRea
       connectionId: target.connection_id,
       credentialReference: target.credential_reference,
       credentialRevision: target.credential_revision as number,
+      consentVersion: target.consent_version as number,
       calendarReference: target.provider_account_reference,
       providerCalendarReference: target.provider_calendar_reference,
       targetFingerprint: target.target_fingerprint,

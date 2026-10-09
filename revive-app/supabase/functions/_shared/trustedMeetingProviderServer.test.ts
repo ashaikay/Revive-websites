@@ -8,7 +8,7 @@ const attempt = {
   correlationId: '33333333-3333-4333-8333-333333333333',
   requestFingerprint: 'a'.repeat(64), bindingVersion: 1,
 };
-test('existing server settings configure the composed provider; disabled gate reads no credentials or durable records', async () => {
+test('trusted workspace setting configures the composed provider; disabled gate reads no credential or durable records', async () => {
   const reads: string[] = [];
   const run = createTrustedMeetingProviderServer({
     liveWorkspaceId: '44444444-4444-4444-8444-444444444444',
@@ -16,7 +16,6 @@ test('existing server settings configure the composed provider; disabled gate re
       reads.push(key);
       return ({
         REV_CALENDAR_AVAILABILITY_WORKSPACE_ID: workspace,
-        REV_CALENDAR_AVAILABILITY_PRIMARY_MAILBOX: 'owner@example.test',
       } as Record<string, string>)[key];
     },
     trustedClient: {
@@ -29,11 +28,10 @@ test('existing server settings configure the composed provider; disabled gate re
   await assert.rejects(run(attempt), /disabled/);
   assert.deepEqual(reads, [
     'REV_CALENDAR_AVAILABILITY_WORKSPACE_ID',
-    'REV_CALENDAR_AVAILABILITY_PRIMARY_MAILBOX',
   ]);
 });
 
-test('missing server workspace or mailbox fails before provider workflow construction', () => {
+test('missing trusted workspace fails before provider workflow construction', () => {
   assert.throws(() => createTrustedMeetingProviderServer({
     liveWorkspaceId: workspace,
     getEnvironment: () => undefined,

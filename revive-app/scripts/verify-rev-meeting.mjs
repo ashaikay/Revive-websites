@@ -15,6 +15,7 @@ const tests = [
   'meetingProviderWorkflow.test.ts',
   'trustedMeetingProviderComposition.test.ts',
   'trustedMeetingGraphTokenSupplier.test.ts',
+  'trustedMeetingDelegatedGraphTokenSupplier.test.ts',
   'trustedMeetingProviderServer.test.ts',
   'meetingProviderHttpService.test.ts',
 ].map(name => shared + name);

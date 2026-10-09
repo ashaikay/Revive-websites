@@ -100,6 +100,11 @@ begin
       and c.calendar_write_consent_version > 0
     for update;
   if not found then raise exception 'verified Outlook write consent required'; end if;
+  perform 1 from public.workspace_members authorizer
+    where authorizer.workspace_id = target_workspace_id
+      and authorizer.user_id = connected.authorized_by_user_id
+      and authorizer.status = 'active' and authorizer.role in ('owner','admin') for share;
+  if not found then raise exception 'verified Outlook connection unavailable'; end if;
   perform 1 from public.workspace_members m where m.workspace_id = target_workspace_id
     and m.user_id = connected.calendar_write_consent_by_user_id
     and m.status = 'active' and m.role in ('owner','admin') for share;
@@ -118,7 +123,7 @@ begin
   target_fingerprint := pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
     pg_catalog.jsonb_build_object(
       'workspaceId',target_workspace_id,'calendarId',selected.id,'connectionId',connected.id,
-      'credentialReference',credential.id,'credentialRevision',credential.revision,
+      'credentialReference',credential.id,
       'providerAccountReference',connected.provider_account_reference,
       'providerCalendarReference',selected.provider_calendar_reference,'timezone',selected.timezone,
       'consentVersion',connected.calendar_write_consent_version,
@@ -193,6 +198,11 @@ begin
       and c.calendar_write_consent_version = target.consent_version
       and c.calendar_write_consent_by_user_id = target.consent_by_user_id for share;
   if not found then raise exception 'Outlook write consent changed'; end if;
+  perform 1 from public.workspace_members authorizer
+    where authorizer.workspace_id = target.workspace_id
+      and authorizer.user_id = connected.authorized_by_user_id
+      and authorizer.status = 'active' and authorizer.role in ('owner','admin') for share;
+  if not found then raise exception 'Outlook connection unavailable'; end if;
   perform 1 from public.workspace_members m where m.workspace_id = target.workspace_id
     and m.user_id = target.consent_by_user_id and m.status = 'active'
     and m.role in ('owner','admin') for share;
@@ -227,7 +237,7 @@ returns table(
 )
 language plpgsql security definer set search_path = '' as $$
 begin
-  if auth.role() <> 'service_role' then raise exception 'trusted backend role required'; end if;
+  if auth.role() is distinct from 'service_role' then raise exception 'trusted backend role required'; end if;
   return query
     select target.execution_id,target.workspace_id,target.calendar_id,target.connection_id,
       target.credential_reference,target.credential_revision,target.provider_account_reference,
@@ -250,6 +260,9 @@ begin
       and connection.calendar_write_consent_at = target.consent_at
       and connection.calendar_write_consent_version = target.consent_version
       and connection.calendar_write_consent_by_user_id = target.consent_by_user_id
+    join public.workspace_members connection_authorizer on connection_authorizer.workspace_id = target.workspace_id
+      and connection_authorizer.user_id = connection.authorized_by_user_id
+      and connection_authorizer.status = 'active' and connection_authorizer.role in ('owner','admin')
     join public.workspace_members consent_actor on consent_actor.workspace_id = target.workspace_id
       and consent_actor.user_id = target.consent_by_user_id
       and consent_actor.status = 'active' and consent_actor.role in ('owner','admin')

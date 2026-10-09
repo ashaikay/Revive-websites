@@ -29,14 +29,16 @@ export class CalendarDiscoveryFailure extends Error{
  constructor(stage:CalendarDiscoveryStage,code:CalendarDiscoveryErrorCode){super(code);this.stage=stage;this.code=code;}
 }
 function failure(stage:CalendarDiscoveryStage,code:CalendarDiscoveryErrorCode):CalendarDiscoveryFailure{return new CalendarDiscoveryFailure(stage,code);}
-export async function refreshCalendarDiscoveryToken(config:OAuthTokenConfiguration,refreshToken:string,fetchImpl:typeof fetch=fetch):Promise<{accessToken:string;refreshToken:string}>{
+export async function refreshCalendarDiscoveryToken(config:OAuthTokenConfiguration,refreshToken:string,fetchImpl:typeof fetch=fetch,accessMode:'read'|'write'='read'):Promise<{accessToken:string;refreshToken:string}>{
   validateOAuthTokenConfiguration(config);
-  if(!refreshToken?.trim()||refreshToken.length>32768)throw new Error('Calendar authentication unavailable');
+  if(!refreshToken?.trim()||refreshToken.length>32768||!['read','write'].includes(accessMode))throw new Error('Calendar authentication unavailable');
   try{
-    const response=await fetchImpl(`https://login.microsoftonline.com/${config.authority}/oauth2/v2.0/token`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:config.clientId,client_secret:config.clientSecret,grant_type:'refresh_token',refresh_token:refreshToken,scope:'offline_access https://graph.microsoft.com/Calendars.Read'})});
+    const calendarScope=accessMode==='write'?'https://graph.microsoft.com/Calendars.ReadWrite':'https://graph.microsoft.com/Calendars.Read';
+    const response=await fetchImpl(`https://login.microsoftonline.com/${config.authority}/oauth2/v2.0/token`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:config.clientId,client_secret:config.clientSecret,grant_type:'refresh_token',refresh_token:refreshToken,scope:`offline_access ${calendarScope}`})});
     if(!response.ok)throw new Error('Denied');const data=await response.json();
     const scopes=typeof data.scope==='string'?data.scope.toLowerCase().split(/\s+/):[];
-    if(typeof data.access_token!=='string'||!data.access_token.trim()||/[\r\n]/.test(data.access_token)||data.token_type?.toLowerCase()!=='bearer'||!Number.isFinite(data.expires_in)||data.expires_in<=0||!scopes.some((s:string)=>['calendars.read','https://graph.microsoft.com/calendars.read'].includes(s)))throw new Error('Invalid token');
+    const requiredScopes=accessMode==='write'?['calendars.readwrite','https://graph.microsoft.com/calendars.readwrite']:['calendars.read','https://graph.microsoft.com/calendars.read'];
+    if(typeof data.access_token!=='string'||!data.access_token.trim()||/[\r\n]/.test(data.access_token)||data.token_type?.toLowerCase()!=='bearer'||!Number.isFinite(data.expires_in)||data.expires_in<=0||!scopes.some((s:string)=>requiredScopes.includes(s)))throw new Error('Invalid token');
     const rotated=data.refresh_token===undefined?refreshToken:data.refresh_token;
     if(typeof rotated!=='string'||!rotated.trim()||rotated.length>32768)throw new Error('Invalid refresh');return{accessToken:data.access_token,refreshToken:rotated};
   }catch{throw new Error('Calendar authentication unavailable');}

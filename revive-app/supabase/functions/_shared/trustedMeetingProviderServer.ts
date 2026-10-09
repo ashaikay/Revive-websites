@@ -1,5 +1,5 @@
 import { createTrustedMeetingProviderComposition, type TrustedMeetingProviderCompositionDependencies } from './trustedMeetingProviderComposition.ts';
-import { createTrustedMeetingGraphTokenSupplier } from './trustedMeetingGraphTokenSupplier.ts';
+import { createTrustedMeetingDelegatedGraphTokenSupplier } from './trustedMeetingDelegatedGraphTokenSupplier.ts';
 
 type ServerInput = Pick<TrustedMeetingProviderCompositionDependencies, 'trustedClient' | 'invokeGraph'> & {
   liveWorkspaceId: string;
@@ -13,19 +13,18 @@ const required = (value: string | undefined) => value?.trim() || '';
  * only after the hard provider workflow gate and trusted snapshot checks. */
 export function createTrustedMeetingProviderServer(input: ServerInput) {
   const workspaceId = required(input.getEnvironment('REV_CALENDAR_AVAILABILITY_WORKSPACE_ID')).toLowerCase();
-  const mailbox = required(input.getEnvironment('REV_CALENDAR_AVAILABILITY_PRIMARY_MAILBOX'));
-  if (!uuid.test(workspaceId) || !mailbox || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox)) {
+  if (!uuid.test(workspaceId)) {
     throw new Error('Trusted meeting provider configuration unavailable.');
   }
   return createTrustedMeetingProviderComposition({
     trustedClient: input.trustedClient,
     trustedWorkspaceId: workspaceId,
     liveWorkspaceId: input.liveWorkspaceId,
-    primaryMailboxUserPrincipalName: mailbox,
-    getAccessToken: createTrustedMeetingGraphTokenSupplier(() => ({
-      tenantId: required(input.getEnvironment('MICROSOFT_GRAPH_TENANT_ID')),
-      clientId: required(input.getEnvironment('MICROSOFT_GRAPH_CLIENT_ID')),
-      clientSecret: required(input.getEnvironment('MICROSOFT_GRAPH_CLIENT_SECRET')),
+    getAccessToken: createTrustedMeetingDelegatedGraphTokenSupplier(input.trustedClient, () => ({
+      clientId: required(input.getEnvironment('REV_CALENDAR_OAUTH_CLIENT_ID')),
+      clientSecret: required(input.getEnvironment('REV_CALENDAR_OAUTH_CLIENT_SECRET')),
+      authority: required(input.getEnvironment('REV_CALENDAR_OAUTH_AUTHORITY')),
+      redirectUri: required(input.getEnvironment('REV_CALENDAR_OAUTH_REDIRECT_URI')),
     }), input.tokenFetch),
     invokeGraph: input.invokeGraph,
   });
