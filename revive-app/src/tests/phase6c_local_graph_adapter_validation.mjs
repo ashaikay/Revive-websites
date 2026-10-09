@@ -100,7 +100,12 @@ check('OWNER_DURABLE_NO_PROVIDER', accepted.status === 200 && execution?.capabil
 
 const client = { rpc: async (name, parameters) => {
   const response = await rpc(service, name, parameters);
-  return { data: response.status === 200 ? [response.data] : null, error: response.status === 200 ? null : response.data };
+  return {
+    data: response.status === 200
+      ? Array.isArray(response.data) ? response.data : [response.data]
+      : null,
+    error: response.status === 200 ? null : response.data,
+  };
 }, from: table => ({ select: columns => ({ eq: (first, firstValue) => ({ eq: (second, secondValue) => ({ maybeSingle: async () => {
   const path = '/rest/v1/' + table + '?' + new URLSearchParams({ [first]: 'eq.' + firstValue, [second]: 'eq.' + secondValue, select: columns });
   const response = await request(service, 'GET', path);
