@@ -1,4 +1,4 @@
-## Current Checkpoint — Phase 5E Reminder Preparation Implemented Locally (2026-10-09)
+## Current Checkpoint — Phase 5E Reminder Preparation Verified in Isolated CI (2026-10-09)
 
 ## Controlled Outlook booking and invitation receipt (user-verified)
 
@@ -29,7 +29,7 @@ An owner/admin can record `held`, `no_show` or `cancelled` against the existing 
 
 The slice is committed and verified in isolated CI, but its migration and Edge Function have not been deployed to hosted Supabase and it is not generally available. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. The earlier controlled 9 October customer Outlook booking and invitation receipt remain verified hosted/manual evidence for that exact test only.
 
-### Phase 5E meeting-reminder preparation — implemented locally, not committed or deployed
+### Phase 5E meeting-reminder preparation — isolated CI verified, not deployed
 
 Active workspace owners/admins can prepare one current plain-text reminder draft against a provider-accepted meeting proposal and correct it through version-bound trusted writes. Drafts contain only a trimmed 1–2,000 character body and reference the existing proposal; they do not duplicate attendee PII or contain a subject, channel, recipient or scheduled-send field.
 
@@ -37,9 +37,9 @@ The trusted save path requires provider-accepted execution evidence bound to the
 
 The UI states **“Reminder draft saved. Delivery is not enabled.”** No sent or scheduled state exists. This slice adds no timer, delivery consent, provider call, email send, calendar update, RSVP ingestion, commercial mutation or gate change.
 
-**Local verification:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; the trusted reminder boundary suite passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. Local-validator syntax, TypeScript, Deno entry-point check, production build and `git diff --check` passed; the build retained the existing large-chunk advisory. The isolated database validator is registered in CI but could not run locally because Docker Desktop returned an engine API 500.
+**Verification:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; the trusted reminder boundary suite passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. Local-validator syntax, TypeScript, Deno entry-point check, production build and `git diff --check` passed; the build retained the existing large-chunk advisory. The implementation is commit `e2b10acfedd9f52d17a5d56d6f944026b98b0066`. GitHub Actions run [#115](https://github.com/ashaikay/Revive-websites/actions/runs/37931746067) passed both the meeting and database jobs for that exact commit. The reminder validator was an unconditional command in the successful fail-fast database step, establishing that it executed and exited successfully. Raw validator PASS-marker logs were unavailable and were not inspected. A separate local database run remained unavailable because Docker Desktop returned an engine API 500.
 
-**Release state:** local implementation only. The new migration and Edge Function are not committed, deployed or applied to hosted Supabase. Reminder timing/delivery and RSVP/response ingestion remain unfinished.
+**Release state:** reminder preparation is committed and verified in isolated CI. The new migration and Edge Function have not been deployed or applied to hosted Supabase. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
 
 The previous 2026-10-08 blocker investigation below is historical and superseded for the manual check. Do not claim the exact causes of every earlier credential or availability failure were proven.
 
@@ -180,7 +180,7 @@ Remaining work:
 Phase 5 — CALENDAR & MEETINGS CONTROLLED OUTLOOK PILOT VERIFIED; MVP PHASE REMAINS IN PROGRESS.
 
 ## Current Objective
-Review and verify the local Phase 5E reminder-preparation slice without enabling delivery or provider execution. Keep its migration/function undeployed until separately authorized and preserve the disabled live booking and email-sending gates. Reminder timing/delivery and RSVP/response ingestion remain unfinished.
+Define the next separately authorized Phase 5E reminder-delivery contract without enabling delivery or provider execution. Keep the reminder-preparation migration/function undeployed until separately authorized and preserve the disabled live booking and email-sending gates. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished.
 
 ## Phase 5 Controlled Meeting Verification — 2026-09-29
 
@@ -204,7 +204,7 @@ Review and verify the local Phase 5E reminder-preparation slice without enabling
 ### Remaining Phase 5 MVP work — not verified complete
 
 - Customer-managed Outlook connection, discovery, selection and availability are implemented and manually verified for the controlled customer account. Google calendar integration is not implemented, and the controlled Outlook evidence does not establish general production rollout.
-- Manual channel-neutral reminder-draft preparation is implemented locally; timing and delivery are not implemented.
+- Manual channel-neutral reminder-draft preparation is implemented and verified in isolated CI but is not deployed; timing and delivery are not implemented.
 - RSVP tracking and response detection are not implemented.
 - Meeting outcome recording into the broader customer/opportunity workflow is not complete.
 - Goal-progress updates from booked or completed meetings are not complete.
@@ -212,7 +212,7 @@ Review and verify the local Phase 5E reminder-preparation slice without enabling
 
 ### Next unfinished roadmap task
 
-The local reminder-preparation slice must complete review and registered isolated CI. Reminder timing/delivery and RSVP/response ingestion remain unfinished and are not authorized to begin automatically.
+Reminder preparation has completed registered isolated CI. The next existing roadmap work is reminder delivery, followed by RSVP/response ingestion, but its timing, channel, consent and execution contract must be agreed before implementation and is not authorized to begin automatically.
 
 **Prerequisites:** preserve the rule that booking, RSVP and manually recorded outcome are separate facts; retain tenant isolation and auditable trusted writes; and require separate provider/read-permission design and authorization for any reminder or RSVP integration.
 

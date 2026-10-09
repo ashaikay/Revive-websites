@@ -786,7 +786,7 @@
 
 **Release boundary and next checkpoint:** Phase 5E.1 is committed and verified in isolated CI, but its migration and Edge Function are not deployed to hosted Supabase. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. Any hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain the next unfinished Phase 5E capabilities; neither is implemented or authorized to start by this closeout.
 
-### Phase 5E — meeting-reminder preparation (local implementation)
+### Phase 5E — meeting-reminder preparation (isolated CI verified, not deployed)
 
 - Documented the authorized owner/admin-only reminder-draft contract in the calendar architecture.
 - Added one current workspace/proposal-bound plain-text draft with no subject, channel, recipient, schedule or duplicated attendee PII.
@@ -797,9 +797,9 @@
 - Added focused UI/domain/client tests, trusted boundary tests and an isolated database validator registered in the meeting CI workflow.
 - No timer, delivery channel, consent-for-sending behavior, provider call, calendar update, email send, RSVP ingestion, commercial mutation or gate change was added.
 
-**Verification state:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; reminder boundary tests passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. TypeScript, local-validator syntax, Deno entry-point check, production build and `git diff --check` passed with the existing large-chunk advisory. The isolated database validator is registered in CI but could not run locally because Docker Desktop returned an engine API 500. This slice is local, uncommitted and undeployed.
+**Verification state:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; reminder boundary tests passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. TypeScript, local-validator syntax, Deno entry-point check, production build and `git diff --check` passed with the existing large-chunk advisory. The implementation is commit `e2b10acfedd9f52d17a5d56d6f944026b98b0066`. GitHub Actions run [#115](https://github.com/ashaikay/Revive-websites/actions/runs/37931746067) passed both the meeting and database jobs. The reminder validator was an unconditional command in the successful fail-fast database step, so it executed and exited successfully; raw validator PASS-marker logs were unavailable and were not inspected. A separate local database run remained unavailable because Docker Desktop returned an engine API 500.
 
-**Next controlled checkpoint:** finish local checks and registered isolated CI review for reminder preparation. Reminder timing/delivery and RSVP/response ingestion remain unfinished and require separate contracts and authorization.
+**Release boundary and next controlled checkpoint:** reminder preparation is committed and verified in isolated CI, but its migration and Edge Function have not been deployed to hosted Supabase. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished and require separate contracts and authorization. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
 
 **Objective:** Integrate calendar and enable meeting booking
 
