@@ -1,4 +1,4 @@
-# Current Handover — Phase 5E.1 Outcomes Implemented Locally (2026-10-09)
+# Current Handover — Phase 5E.1 Isolated CI Verified (2026-10-09)
 
 ## Controlled booking and invitation receipt (user-verified, 2026-10-09)
 
@@ -18,17 +18,17 @@ The earlier additional-account credential-load and empty-availability blockers a
 
 **Safety/release state:** Live calendar booking and email sending remain disabled. “Approved but not booked” is not permission to create an event. Worker job-brief uploads and assignment emails remain planned, not implemented, and are not automatically prioritized.
 
-## Phase 5E.1 explicit meeting outcomes — implemented locally, not deployed
+## Phase 5E.1 explicit meeting outcomes — isolated CI verified, not deployed
 
 The agreed `held`, `no_show` and `cancelled` values are enforced in the architecture, database, trusted HTTP boundary, domain and UI. An active owner/admin can record one current outcome linked to the existing workspace meeting proposal and correct it using the current version. Repeated requests are idempotent; exact duplicate saves do not add another audit event; accepted corrections increment the version and append correction audit evidence.
 
 The proposal details show a compact record/correct action, durable saved result and explicit empty state. Booking and RSVP status stay separate. Recording `cancelled` explicitly states that it does not cancel the Outlook event or notify anyone. The slice does not infer sales, revenue, goal progress or attendance; mutate opportunities; poll RSVP; call a provider; or alter booking/email gates.
 
-**Verification:** the complete registered 20-file mounted selection passed 157/157, the trusted HTTP-boundary suite passed 6/6, and type-check/build passed with the existing chunk-size advisory. The new isolated database validator is registered in `.github/workflows/rev-meeting-verify.yml`, but local Supabase could not inspect/start because Docker Desktop returned an engine API 500 for the existing database container. Therefore its database assertions have not run locally in this turn.
+**Verification:** the complete registered 20-file mounted selection passed 157/157, the trusted HTTP-boundary suite passed 6/6, and type-check/build passed with the existing chunk-size advisory. The implementation is commit `458730791cbbdd19e2eb5ce27c0835da13d1dfa7`; validator authentication was corrected in `625cdfea94a06d61415a65e48fef9674493ad633`. GitHub Actions run [#113](https://github.com/ashaikay/Revive-websites/actions/runs/37928235997) passed both the meeting and database jobs. The isolated Phase 5E.1 database validator executed and passed. A separate local database run remained unavailable because Docker Desktop returned an engine API 500 for the existing database container.
 
-**Release state:** all Phase 5E.1 code, migration and function changes are local and uncommitted. No hosted migration, function deployment, provider call, gate change or general release occurred. The recorded 9 October controlled customer Outlook booking and Gmail invitation receipt remain verified for that exact rollout only; this new outcome slice does not alter or supersede that evidence.
+**Release state:** Phase 5E.1 is committed and verified in isolated CI, but its migration and Edge Function have not been deployed to hosted Supabase. No provider call, gate enablement or general release occurred. The recorded 9 October controlled customer Outlook booking and Gmail invitation receipt remain verified for that exact rollout only; this new outcome slice does not alter or supersede that evidence.
 
-**Next checkpoint:** review this diff and run the registered meeting/database CI after a future commit. Hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain unfinished and must not be started automatically as part of this slice.
+**Next checkpoint:** hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain the next unfinished Phase 5 capabilities and must not be started automatically as part of this closeout.
 
 ## REV Business Guide and Video Walkthroughs — planned, not created
 

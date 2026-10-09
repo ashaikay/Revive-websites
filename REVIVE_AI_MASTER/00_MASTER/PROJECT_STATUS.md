@@ -1,4 +1,4 @@
-## Current Checkpoint — Customer Outlook Verified (2026-10-09)
+## Current Checkpoint — Phase 5E.1 Isolated CI Verified (2026-10-09)
 
 ## Controlled Outlook booking and invitation receipt (user-verified)
 
@@ -12,9 +12,9 @@ The REV layout tidy-up is implemented and committed at `e19f205`: compact expand
 
 The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check, but their exact causes were not all proven. The timezone date fix addresses a demonstrated local-date boundary defect; it does not establish that this defect explains every earlier failure.
 
-Live calendar booking remains disabled. Phase 5E.1 explicit meeting outcomes are now implemented locally without provider calls, inbox polling or automatic customer/revenue/goal mutation. Worker job-brief uploads and assignment emails remain planned, not implemented, and are not the next roadmap action.
+Live calendar booking remains disabled. Phase 5E.1 explicit meeting outcomes are implemented and verified in isolated CI without provider calls, inbox polling or automatic customer/revenue/goal mutation. Worker job-brief uploads and assignment emails remain planned, not implemented, and are not the next roadmap action.
 
-### Phase 5E.1 explicit meeting outcomes — implemented locally, not deployed
+### Phase 5E.1 explicit meeting outcomes — isolated CI verified, not deployed
 
 An owner/admin can record `held`, `no_show` or `cancelled` against the existing meeting proposal and see that durable result after refresh. Commercial results and next steps stay in the summary. Booking and RSVP status remain separate, and event creation never implies attendance.
 
@@ -25,9 +25,9 @@ An owner/admin can record `held`, `no_show` or `cancelled` against the existing 
 - Recording `cancelled` clearly states that it does not cancel Outlook or notify anyone.
 - The migration and Edge Function are local only and have not been applied or deployed to hosted Supabase.
 
-**Local verification:** the complete registered 20-file mounted selection passed 157/157; the trusted outcome HTTP-boundary suite passed 6/6; type-check/build passed with the existing chunk advisory. The isolated database validator covers valid persistence, invalid types/times, duplicate requests/saves, version-bound corrections, audit counts, unauthorized/inactive actors, direct writes and cross-workspace reads/writes. It is registered in CI but could not run locally because Docker Desktop returned an engine API 500 when Supabase inspected the local database container.
+**Verification:** the complete registered 20-file mounted selection passed 157/157; the trusted outcome HTTP-boundary suite passed 6/6; type-check/build passed with the existing chunk advisory. The implementation is commit `458730791cbbdd19e2eb5ce27c0835da13d1dfa7`; validator authentication was corrected in `625cdfea94a06d61415a65e48fef9674493ad633`. GitHub Actions run [#113](https://github.com/ashaikay/Revive-websites/actions/runs/37928235997) passed both the meeting and database jobs at the latter commit. The isolated Phase 5E.1 database validator executed and passed, covering valid persistence, invalid types/times, duplicate requests/saves, version-bound corrections, audit counts, unauthorized/inactive actors, direct writes and cross-workspace reads/writes. A separate local run remained unavailable because Docker Desktop returned an engine API 500 when Supabase inspected the local database container.
 
-The new slice is not committed or CI-verified and must not be described as deployed or generally available. The earlier controlled 9 October customer Outlook booking and invitation receipt remain verified hosted/manual evidence for that exact test only.
+The slice is committed and verified in isolated CI, but its migration and Edge Function have not been deployed to hosted Supabase and it is not generally available. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. The earlier controlled 9 October customer Outlook booking and invitation receipt remain verified hosted/manual evidence for that exact test only.
 
 The previous 2026-10-08 blocker investigation below is historical and superseded for the manual check. Do not claim the exact causes of every earlier credential or availability failure were proven.
 
@@ -168,7 +168,7 @@ Remaining work:
 Phase 5 — CALENDAR & MEETINGS CONTROLLED OUTLOOK PILOT VERIFIED; MVP PHASE REMAINS IN PROGRESS.
 
 ## Current Objective
-Review and verify the local Phase 5E.1 outcome slice through its registered meeting/database CI after a future commit. Keep the new migration/function undeployed until separately authorized, and preserve the disabled live booking and email-sending gates.
+Preserve the isolated-CI-verified Phase 5E.1 outcome slice while keeping its migration and function undeployed until separately authorized. Preserve the disabled live booking and email-sending gates. Reminders and RSVP/response ingestion remain the next unfinished Phase 5 capabilities.
 
 ## Phase 5 Controlled Meeting Verification — 2026-09-29
 
@@ -200,7 +200,7 @@ Review and verify the local Phase 5E.1 outcome slice through its registered meet
 
 ### Next unfinished roadmap task
 
-Phase 5E reminders and RSVP/response ingestion remain unfinished. Do not begin either automatically before the local Phase 5E.1 outcome slice has completed review and registered CI.
+Phase 5E reminders and RSVP/response ingestion remain unfinished. Phase 5E.1 has completed registered isolated CI, but this does not authorize either next capability to begin automatically.
 
 **Prerequisites:** preserve the rule that booking, RSVP and manually recorded outcome are separate facts; retain tenant isolation and auditable trusted writes; and require separate provider/read-permission design and authorization for any reminder or RSVP integration.
 

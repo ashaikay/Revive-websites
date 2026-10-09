@@ -771,7 +771,7 @@
 
 **Safety state:** The live booking gate is disabled. Reminders, RSVP tracking, provider update/delete operations and autonomous booking remain disabled. Email sending remains disabled.
 
-### Phase 5E.1 — explicit meeting outcomes (local implementation)
+### Phase 5E.1 — explicit meeting outcomes (isolated CI verified, not deployed)
 
 - Added the agreed manually recorded values: `held`, `no_show` and `cancelled`.
 - Added additive workspace-scoped durable storage linked to the existing meeting proposal through composite tenant constraints.
@@ -782,9 +782,9 @@
 - No opportunity, revenue, goal, calendar or provider mutation is introduced.
 - Implementation is local only: the new migration and Edge Function are not hosted, deployed or generally available.
 
-**Verification:** focused mounted/domain/UI tests passed 40/40 before the final contract assertion and the complete registered 20-file mounted selection passed 157/157. The trusted HTTP-boundary suite passed 6/6. Type-check/build passed with the existing large-chunk advisory. The isolated database validator is registered in CI but could not run locally because Docker Desktop returned an engine API 500 while Supabase inspected the local database container.
+**Verification:** focused mounted/domain/UI tests passed 40/40 before the final contract assertion and the complete registered 20-file mounted selection passed 157/157. The trusted HTTP-boundary suite passed 6/6. Type-check/build passed with the existing large-chunk advisory. The implementation is commit `458730791cbbdd19e2eb5ce27c0835da13d1dfa7`; validator authentication was corrected in `625cdfea94a06d61415a65e48fef9674493ad633`. GitHub Actions run [#113](https://github.com/ashaikay/Revive-websites/actions/runs/37928235997) passed both the meeting and database jobs. The isolated Phase 5E.1 database validator executed and passed. A separate local database run remained unavailable because Docker Desktop returned an engine API 500 while Supabase inspected the local database container.
 
-**Next controlled checkpoint:** review the Phase 5E.1 diff and run its registered meeting/database CI after a future commit. Any hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain the next unfinished Phase 5E capabilities; neither is implemented by this slice.
+**Release boundary and next checkpoint:** Phase 5E.1 is committed and verified in isolated CI, but its migration and Edge Function are not deployed to hosted Supabase. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. Any hosted migration/function deployment requires separate authorization. Reminders and RSVP/response ingestion remain the next unfinished Phase 5E capabilities; neither is implemented or authorized to start by this closeout.
 
 **Objective:** Integrate calendar and enable meeting booking
 
