@@ -771,7 +771,7 @@
 
 **Safety state:** The live booking gate is disabled. Reminders, RSVP tracking, provider update/delete operations and autonomous booking remain disabled. Email sending remains disabled.
 
-### Phase 5E.1 — explicit meeting outcomes (isolated CI verified; hosted migration applied; function unverified)
+### Phase 5E.1 — explicit meeting outcomes (hosted function verified; live save pending)
 
 - Added the agreed manually recorded values: `held`, `no_show` and `cancelled`.
 - Added additive workspace-scoped durable storage linked to the existing meeting proposal through composite tenant constraints.
@@ -780,13 +780,13 @@
 - Proposal details show a compact record/correct action, a durable saved result and an explicit empty state.
 - Booking/RSVP status remains separate. Recording `cancelled` does not cancel Outlook or notify anyone.
 - No opportunity, revenue, goal, calendar or provider mutation is introduced.
-- Migration `20261009123000_rev_meeting_outcomes.sql` is registered in hosted Supabase. Deployment of the meeting-outcome Edge Function remains unverified, so hosted operational availability is not established.
+- Migration `20261009123000_rev_meeting_outcomes.sql` is registered in hosted Supabase. `rev-meeting-outcome-save` version 1 is ACTIVE with JWT verification enabled, and downloaded hosted `index.ts` and `meetingOutcomeBoundary.ts` match the reviewed local source.
 
 **Verification:** focused mounted/domain/UI tests passed 40/40 before the final contract assertion and the complete registered 20-file mounted selection passed 157/157. The trusted HTTP-boundary suite passed 6/6. Type-check/build passed with the existing large-chunk advisory. The implementation is commit `458730791cbbdd19e2eb5ce27c0835da13d1dfa7`; validator authentication was corrected in `625cdfea94a06d61415a65e48fef9674493ad633`. GitHub Actions run [#113](https://github.com/ashaikay/Revive-websites/actions/runs/37928235997) passed both the meeting and database jobs. The isolated Phase 5E.1 database validator executed and passed. A separate local database run remained unavailable because Docker Desktop returned an engine API 500 while Supabase inspected the local database container.
 
-**Release boundary and next checkpoint:** Phase 5E.1 is committed and verified in isolated CI, and its migration was applied as an authorised sickness-deployment prerequisite on 9 October 2026. Meeting-outcome function deployment remains unverified, so the feature is not recorded as hosted-operational or generally available. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. RSVP/response ingestion remains unfinished and is not authorized to start by this closeout.
+**Release boundary and next checkpoint:** Phase 5E.1 is committed and verified in isolated CI, and its migration and trusted function are deployed and source-verified. No live hosted outcome save was invoked, so hosted persistence and UI behavior remain manually unverified and general availability is not established. No provider gate was enabled. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released. RSVP/response ingestion remains unfinished and is not authorized to start by this closeout.
 
-### Phase 5E — meeting-reminder preparation (isolated CI verified; hosted migration applied; function unverified)
+### Phase 5E — meeting-reminder preparation (hosted function verified; live save pending)
 
 - Documented the authorized owner/admin-only reminder-draft contract in the calendar architecture.
 - Added one current workspace/proposal-bound plain-text draft with no subject, channel, recipient, schedule or duplicated attendee PII.
@@ -799,7 +799,7 @@
 
 **Verification state:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; reminder boundary tests passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. TypeScript, local-validator syntax, Deno entry-point check, production build and `git diff --check` passed with the existing large-chunk advisory. The implementation is commit `e2b10acfedd9f52d17a5d56d6f944026b98b0066`. GitHub Actions run [#115](https://github.com/ashaikay/Revive-websites/actions/runs/37931746067) passed both the meeting and database jobs. The reminder validator was an unconditional command in the successful fail-fast database step, so it executed and exited successfully; raw validator PASS-marker logs were unavailable and were not inspected. A separate local database run remained unavailable because Docker Desktop returned an engine API 500.
 
-**Release boundary and next controlled checkpoint:** reminder preparation is committed and verified in isolated CI. Migration `20261009134000_rev_meeting_reminder_preparation.sql` was applied to hosted Supabase as an authorised sickness-deployment prerequisite on 9 October 2026. Reminder-function deployment remains unverified, so hosted reminder preparation is not recorded as operational. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished and require separate contracts and authorization. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
+**Release boundary and next controlled checkpoint:** reminder preparation is committed and verified in isolated CI. Migration `20261009134000_rev_meeting_reminder_preparation.sql` is registered in hosted Supabase. `rev-meeting-reminder-save` version 1 is ACTIVE with JWT verification enabled, and downloaded hosted `index.ts` and `meetingReminderBoundary.ts` match the reviewed local source. No live hosted reminder-draft save was invoked, so hosted persistence and UI behavior remain manually unverified. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished and require separate contracts and authorization. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
 
 ### Scheduling enhancement — full-width month planner and sickness recording (CI verified, hosted and user-confirmed)
 
@@ -815,7 +815,7 @@
 
 **Verification:** the implementation was committed at `ea829630c5c07314beba351475369a5fa8382caf`. The visible sickness form and retained-retry fix were committed at `53d8dbd3ce731d73e10c54ab1286257a9e58b556`; GitHub Actions run [#119](https://github.com/ashaikay/Revive-websites/actions/runs/37948467949) passed both the meeting and isolated-database jobs for that exact commit. Focused sickness UI tests passed 7/7, worker-unavailability browser/service tests passed 18/18, and TypeScript/Vite build and whitespace check passed with the existing chunk-size advisory.
 
-**State:** authorised migrations `20261009123000_rev_meeting_outcomes.sql`, `20261009134000_rev_meeting_reminder_preparation.sql` and `20261009150000_rev_scheduling_sickness.sql` are registered in hosted project `ntbowgutwyyhhnmkadlv`. `rev-worker-unavailability-save` version 6 is ACTIVE with JWT verification enabled, and its hosted source matched the reviewed sickness-aware source. The user confirmed that sickness saving works and entries appear in the planner. No automatic retry, provider call, notification or execution-gate change occurred. Meeting-outcome and reminder function deployment remains unverified.
+**State:** authorised migrations `20261009123000_rev_meeting_outcomes.sql`, `20261009134000_rev_meeting_reminder_preparation.sql` and `20261009150000_rev_scheduling_sickness.sql` are registered in hosted project `ntbowgutwyyhhnmkadlv`. `rev-worker-unavailability-save` version 6 is ACTIVE with JWT verification enabled, and its hosted source matched the reviewed sickness-aware source. The user confirmed that sickness saving works and entries appear in the planner. Meeting-outcome and reminder functions are deployed and source-verified, but their live save paths remain untested. No automatic retry, provider call, notification or execution-gate change occurred.
 
 **Objective:** Integrate calendar and enable meeting booking
 
