@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {supabaseClient} from '@/data/supabaseClient';
 import {
  clearLeaveAttempt,
@@ -9,6 +9,7 @@ import {
  loadWorkerUnavailability,
  localLeaveToUtc,
  localSicknessDatesToUtc,
+ LeaveSaveRejected,
  rememberLeaveAttempt,
  rememberLegacyLeaveCancelAttempt,
  restoreLeaveAttempt,
@@ -46,7 +47,7 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
  const [accountedLeaveIds,setAccountedLeaveIds]=useState<Set<string>>(new Set());
  const [legacyPending,setLegacyPending]=useState<LegacyLeaveCancelAttempt|null>(null);
  const [legacyCancel,setLegacyCancel]=useState<UnavailablePeriod|null>(null);
- const lock=useRef(false),mounted=useRef(true);
+ const lock=useRef(false),mounted=useRef(true),detailsRef=useRef<HTMLDetailsElement>(null),formRef=useRef<HTMLFormElement>(null);
 
  const read=()=>loadWorkerUnavailability(workspaceId,workerId,async(columns,ws,worker)=>{
   if(!supabaseClient)throw new Error('Unavailable');
@@ -127,7 +128,7 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
     const {data,error}=await supabaseClient.functions.invoke(name,{body});
     if(error){
      const context=(error as {context?:unknown}).context;
-     if(context instanceof Response&&context.status===409)return{status:409,data:await context.clone().json()};
+     if(context instanceof Response)return{status:context.status,data:await context.clone().json().catch(()=>null)};
      throw new Error('Uncertain result');
     }
     return{status:200,data};
@@ -144,7 +145,9 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
    catch{if(mounted.current){setReady(false);setMessage('Saved. Refresh to reload the periods.');}}
   }catch(error){
    if(!mounted.current)return;
-   if(error instanceof LeaveSaveRefused){
+   if(error instanceof LeaveSaveRejected){
+    setMessage(`${error.message} This confirmed rejection did not record a period. The same request ID and payload remain retained; retry only after the hosted save boundary is confirmed.`);
+   }else if(error instanceof LeaveSaveRefused){
     try{
      clearLeaveAttempt(window.sessionStorage,workspaceId,userId,workerId);
      setPending(null);
@@ -230,14 +233,32 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
     setDraft({record:period,start:utcLeaveToLocal(period.startAt,timezone),end:utcLeaveToLocal(period.endAt,timezone),category:'unavailable'});
    }
    setEditing(true);
+   requestAnimationFrame(()=>{detailsRef.current?.setAttribute('open','');formRef.current?.scrollIntoView?.({behavior:'smooth',block:'nearest'});formRef.current?.querySelector<HTMLElement>('select,input')?.focus();});
   }catch{
    setMessage('This sickness record cannot be edited until its workspace-local dates can be confirmed. It remains readable and can still be cancelled.');
   }
  };
+ const startAdding=()=>{
+  setDraft(blank());
+  setMessage('');
+  setEditing(true);
+  requestAnimationFrame(()=>{detailsRef.current?.setAttribute('open','');formRef.current?.scrollIntoView?.({behavior:'smooth',block:'nearest'});formRef.current?.querySelector<HTMLElement>('select')?.focus();});
+ };
+ const submitDraft=(event:FormEvent<HTMLFormElement>)=>{
+  event.preventDefault();
+  if(!draft.start||!draft.end){setMessage(draft.category==='sickness'?'Choose both inclusive sickness dates.':'Enter both the unavailable start and end times.');return;}
+  if(draft.category==='sickness'){
+   if(!workspaceTimezone){setMessage('Sickness cannot be saved until the workspace timezone is confirmed.');return;}
+   try{localSicknessDatesToUtc(draft.start,draft.end,workspaceTimezone);}
+   catch(error){setMessage(error instanceof Error?error.message:'Choose valid inclusive sickness dates.');return;}
+  }
+  setMessage('');
+  void save();
+ };
  const controlsDisabled=busy||!!pending||!!legacyPending||disabled||blocked||!ready;
  const disabledReason=busy?'A save is in progress. Wait for its result.':blocked?'Pending request details cannot be read. Contact support before changing periods.':!ready?'Periods are not ready. Refresh this page to reload them.':disabled?parentDisabledReason||'Another scheduling change is unresolved. Recover it from Scheduling before changing periods.':pending?'This save outcome is unconfirmed. Use RETRY SAME PERIOD SAVE; editing would change the retained payload.':legacyPending?'This cancellation outcome is unconfirmed. Use RETRY HISTORICAL LEAVE CANCELLATION.':!active?'This worker is inactive. Reactivate the worker before adding or editing periods.':cancel||legacyCancel?'Finish or keep the pending cancellation before using other controls.':editing?'Save or discard the current edit before using timezone or cancellation controls.':'';
 
- return <details className="border-t mt-4 pt-3">
+ return <details ref={detailsRef} open={editing||undefined} onToggle={event=>{if(editing&&!event.currentTarget.open)event.currentTarget.open=true;}} className="border-t mt-4 pt-3 overflow-visible">
   <summary className="font-medium cursor-pointer">Leave, sickness and unavailable periods</summary>
   {message&&<p role="status" className="my-2">{message}</p>}
   {disabledReason&&<p className="text-sm my-2">Controls unavailable: {disabledReason}</p>}
@@ -245,23 +266,23 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
   <button className="btn-secondary" title={disabledReason||undefined} disabled={controlsDisabled||editing||!!cancel} onClick={()=>{try{new Intl.DateTimeFormat('en-GB',{timeZone:timezoneInput});setTimezone(timezoneInput);setMessage('Timezone applied.');}catch{setMessage('Use a valid timezone such as Europe/London.');}}}>APPLY TIMEZONE</button>
   <p className="text-sm my-2">Unavailable times are shown in {timezone}. Sickness uses inclusive dates in {workspaceTimezone??'the confirmed workspace timezone'}. Stored intervals use an exclusive end. No calendar event or notification is created.</p>
   {!workspaceTimezone&&<p className="text-sm text-amber-800 my-2">Sickness recording is unavailable because the workspace timezone could not be confirmed.</p>}
-  <button className="btn-secondary my-2" title={disabledReason||undefined} disabled={controlsDisabled||!active||!!cancel} onClick={()=>{setDraft(blank());setEditing(true);}}>ADD UNAVAILABLE / SICKNESS</button>
+  <button type="button" className="btn-secondary my-2" title={disabledReason||undefined} disabled={controlsDisabled||!active||!!cancel} onClick={startAdding}>ADD UNAVAILABLE / SICKNESS</button>
   {pending&&<button className="btn-secondary my-2" title={retryDisabled?disabledReason||undefined:undefined} disabled={busy||retryDisabled||blocked||!ready} onClick={()=>void save(null,true)}>{busy?'RETRYING...':'RETRY SAME PERIOD SAVE'}</button>}
   {legacyPending&&<button className="btn-secondary my-2" title={retryDisabled?disabledReason||undefined:undefined} disabled={busy||retryDisabled||blocked||!ready} onClick={()=>void cancelLegacy(true)}>{busy?'RETRYING...':'RETRY HISTORICAL LEAVE CANCELLATION'}</button>}
-  {editing&&<form onSubmit={event=>{event.preventDefault();void save();}}>
-   <fieldset disabled={controlsDisabled||!active} title={disabledReason||undefined}>
-    <legend>{draft.record?'Edit period':'New period'}</legend>
-    <label className="block my-2">Category<select className="block border rounded p-2" value={draft.category} onChange={event=>setDraft({...draft,start:'',end:'',category:event.target.value as Draft['category']})}><option value="unavailable">Unavailable</option><option value="sickness" disabled={!workspaceTimezone}>Sickness</option></select></label>
+  {editing&&<form ref={formRef} aria-label={draft.record?'Edit unavailable or sickness period':'Record unavailable or sickness period'} noValidate className="relative z-10 mt-3 w-full overflow-visible rounded-lg border border-blue-200 bg-blue-50 p-4 shadow-sm" onSubmit={submitDraft}>
+   <fieldset className="min-w-0" disabled={controlsDisabled||!active} title={disabledReason||undefined}>
+    <legend className="px-1 font-semibold text-slate-900">{draft.record?'Edit period':'New period'}</legend>
+    <label className="block my-2 font-medium">Unavailable / Sickness<select className="mt-1 block w-full border rounded p-2 bg-white" value={draft.category} onChange={event=>{setMessage('');setDraft({...draft,start:'',end:'',category:event.target.value as Draft['category']});}}><option value="unavailable">Unavailable</option><option value="sickness" disabled={!workspaceTimezone}>Sickness</option></select></label>
     {draft.category==='sickness'?<>
-     <label className="block my-2">First sickness date ({workspaceTimezone})<input className="block border rounded p-2" type="date" required value={draft.start} onChange={event=>setDraft({...draft,start:event.target.value})}/></label>
-     <label className="block my-2">Last sickness date ({workspaceTimezone}, inclusive)<input className="block border rounded p-2" type="date" required value={draft.end} onChange={event=>setDraft({...draft,end:event.target.value})}/></label>
+     <label className="block my-2 font-medium">First sickness date (inclusive, {workspaceTimezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="date" value={draft.start} onChange={event=>{setMessage('');setDraft({...draft,start:event.target.value});}}/></label>
+     <label className="block my-2 font-medium">Last sickness date (inclusive, {workspaceTimezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="date" value={draft.end} onChange={event=>{setMessage('');setDraft({...draft,end:event.target.value});}}/></label>
      <p className="text-sm my-2">Only sickness dates are recorded. Do not enter diagnoses, symptoms, medical notes or other health details. REV will list conflicting assignments and will not cancel or reassign them.</p>
     </>:<>
-     <label className="block my-2">Start ({timezone})<input className="block border rounded p-2" type="datetime-local" required value={draft.start} onChange={event=>setDraft({...draft,start:event.target.value})}/></label>
-     <label className="block my-2">End ({timezone})<input className="block border rounded p-2" type="datetime-local" required value={draft.end} onChange={event=>setDraft({...draft,end:event.target.value})}/></label>
+     <label className="block my-2 font-medium">Start ({timezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="datetime-local" value={draft.start} onChange={event=>{setMessage('');setDraft({...draft,start:event.target.value});}}/></label>
+     <label className="block my-2 font-medium">End ({timezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="datetime-local" value={draft.end} onChange={event=>{setMessage('');setDraft({...draft,end:event.target.value});}}/></label>
     </>}
-    <button className="btn-secondary" type="submit">{busy?'SAVING...':'SAVE PERIOD'}</button>
-    <button className="btn-secondary ml-2" type="button" onClick={()=>setEditing(false)}>DISCARD EDIT</button>
+    <div className="mt-3 flex flex-wrap gap-2"><button className="btn-primary" type="submit">{busy?'SAVING...':'SAVE'}</button>
+    <button className="btn-secondary" type="button" onClick={()=>{setDraft(blank());setEditing(false);setMessage('Period entry cancelled. No changes were saved.');}}>CANCEL</button></div>
    </fieldset>
   </form>}
   <ul className="space-y-3 mt-3">{list.map(period=>{
