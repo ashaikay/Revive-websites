@@ -127,8 +127,27 @@ const savedEmployers = await Promise.all([
   saveEngagement(adviser.id, workspaceId, 'discovery_employer', programmeId, null, 0, { searchId: discoveryRequestId, sourceIdentity: candidate.sourceIdentity }, saveRequestId),
   saveEngagement(adviser.id, workspaceId, 'discovery_employer', programmeId, null, 0, { searchId: discoveryRequestId, sourceIdentity: candidate.sourceIdentity }, saveRequestId),
 ]);
-check('DISCOVERED_EMPLOYER_CONCURRENT_REPLAY', savedEmployers.every((value) => value.status === 200) &&
-  savedEmployers[0].payload?.record_id === savedEmployers[1].payload?.record_id);
+const discoveredEmployerConcurrentReplay = savedEmployers.every((value) => value.status === 200) &&
+  savedEmployers[0].payload?.record_id === savedEmployers[1].payload?.record_id;
+if (!discoveredEmployerConcurrentReplay) {
+  const diagnostics = savedEmployers.map(({ status, payload }) => {
+    const responseType = payload === null ? 'null' : Array.isArray(payload) ? 'array' : typeof payload;
+    const response = responseType === 'object' ? payload : null;
+    const errorCode = typeof response?.code === 'string'
+      ? response.code
+      : typeof response?.error_code === 'string' ? response.error_code : null;
+    return {
+      status,
+      errorCode,
+      responseType,
+      topLevelKeys: response ? Object.keys(response).sort() : [],
+      recordIdIsValidUuid: typeof response?.record_id === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(response.record_id),
+    };
+  });
+  console.error('DISCOVERED_EMPLOYER_CONCURRENT_REPLAY_DIAGNOSTICS=' + JSON.stringify(diagnostics));
+}
+check('DISCOVERED_EMPLOYER_CONCURRENT_REPLAY', discoveredEmployerConcurrentReplay);
 const employerId = id(savedEmployers[0].payload?.record_id);
 check('DISCOVERED_EMPLOYER_CHANGED_RETRY_DENIED', (await saveEngagement(
   adviser.id, workspaceId, 'discovery_employer', programmeId, null, 0,
