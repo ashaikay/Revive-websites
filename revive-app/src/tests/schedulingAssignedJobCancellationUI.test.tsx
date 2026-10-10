@@ -4,9 +4,13 @@ import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/r
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 
 type DbRow=Record<string,unknown>;
-const mocks=vi.hoisted(()=>({db:{} as Record<string,DbRow[]>,invoke:vi.fn()}));
+const mocks=vi.hoisted(()=>({db:{} as Record<string,DbRow[]>,invoke:vi.fn(),documentStatus:vi.fn()}));
 // Minimal in-memory query builder so the real job, worker, assignment and planner loaders run unchanged.
-vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:mocks.invoke},from:(table:string)=>{
+vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:(name:string,options:{body?:Record<string,unknown>}={})=>{
+ if(name!=='rev-scheduling-job-document-analyse')return mocks.invoke(name,options);
+ if(options.body?.action!=='status')throw Error('Unexpected document analysis call');
+ return mocks.documentStatus(name,options);
+}},from:(table:string)=>{
  let columns:string[]=[],range:[number,number]|null=null;const filters:[string,unknown][]=[];
  const run=()=>{let rows=(mocks.db[table]??[]).filter(row=>filters.every(([column,value])=>row[column]===value));if(range)rows=rows.slice(range[0],range[1]+1);return{data:rows.map(row=>Object.fromEntries(columns.map(column=>[column,structuredClone(row[column])]))),error:null};};
  const query={select:(value:string)=>{columns=value.split(',');return query;},eq:(column:string,value:unknown)=>{filters.push([column,value]);return query;},order:()=>query,range:(from:number,to:number)=>{range=[from,to];return query;},then:(resolve:(value:unknown)=>unknown,reject:(reason:unknown)=>unknown)=>Promise.resolve(run()).then(resolve,reject)};
@@ -38,7 +42,7 @@ const expand=(title:string)=>{const toggle=within(card(title)).queryByRole('butt
 const reasonFor=(title:string,name:string)=>{const guidance=card(title).querySelector('[aria-label="Worker suitability guidance"]') as HTMLElement|null;return guidance?within(guidance).queryByText(name)?.nextElementSibling?.textContent:undefined;};
 const pausedText='Worker changes are paused because cancelling this job is not confirmed yet. Select “Retry job cancellation”. If the job still has assigned workers, Revive will say so and this will become available.';
 
-beforeEach(()=>{mocks.invoke.mockReset();HTMLElement.prototype.scrollIntoView=vi.fn();seed();});
+beforeEach(()=>{mocks.invoke.mockReset();mocks.documentStatus.mockReset().mockResolvedValue({data:{available:false,model:null},error:null});HTMLElement.prototype.scrollIntoView=vi.fn();seed();});
 afterEach(()=>{cleanup();window.sessionStorage.clear();vi.restoreAllMocks();});
 
 describe('cancelling a job that still has an assigned worker',()=>{

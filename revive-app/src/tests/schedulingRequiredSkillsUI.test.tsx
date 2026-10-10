@@ -6,8 +6,12 @@ import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import type {SchedulingJob} from '@/services/schedulingJobs';
 
 const workspaceId='11111111-1111-4111-8111-111111111111',userId='22222222-2222-4222-8222-222222222222';
-const mocks=vi.hoisted(()=>({invoke:vi.fn(),jobs:[] as unknown[],workers:[] as unknown[],workersFail:false}));
-vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:mocks.invoke},from:(table:string)=>({select:()=>({eq:async()=>table==='scheduling_workers'?(mocks.workersFail?{data:null,error:{message:'down'}}:{data:structuredClone(mocks.workers),error:null}):{data:structuredClone(mocks.jobs),error:null}})})}}));
+const mocks=vi.hoisted(()=>({invoke:vi.fn(),documentStatus:vi.fn(),jobs:[] as unknown[],workers:[] as unknown[],workersFail:false}));
+vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:(name:string,options:{body?:Record<string,unknown>}={})=>{
+ if(name!=='rev-scheduling-job-document-analyse')return mocks.invoke(name,options);
+ if(options.body?.action!=='status')throw Error('Unexpected document analysis call');
+ return mocks.documentStatus(name,options);
+}},from:(table:string)=>({select:()=>({eq:async()=>table==='scheduling_workers'?(mocks.workersFail?{data:null,error:{message:'down'}}:{data:structuredClone(mocks.workers),error:null}):{data:structuredClone(mocks.jobs),error:null}})})}}));
 vi.mock('@/components/JobAssignmentsPanel',()=>({JobAssignmentsPanel:({job,jobActions}:{job:SchedulingJob;jobActions?:ReactNode})=><article aria-label={`${job.title} job`}><h3>{job.title}</h3>{jobActions}</article>}));
 
 import {SchedulingJobsPanel} from '@/components/SchedulingJobsPanel';
@@ -22,7 +26,7 @@ const boxes=()=>within(skillsGroup()).getAllByRole('checkbox').map(box=>[box.clo
 const box=(label:string)=>within(skillsGroup()).getByRole('checkbox',{name:new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}`)});
 async function mount(){render(<SchedulingJobsPanel workspaceId={workspaceId} userId={userId}/>);const add=await screen.findByRole('button',{name:'ADD JOB / SHIFT'});await waitFor(()=>expect(add).toBeEnabled());}
 
-beforeEach(()=>{n=0;mocks.invoke.mockReset();mocks.workersFail=false;mocks.jobs=[];mocks.workers=[worker('Karol',['Dsear & Fire','First aid']),worker('Tom',['dsear  &  FIRE','Admin']),worker('Kim',['DSEAR & FIRE']),worker('Ann',['Dsear & Fire']),worker('Old',['Forklift'],false)];HTMLElement.prototype.scrollIntoView=vi.fn();});
+beforeEach(()=>{n=0;mocks.invoke.mockReset();mocks.documentStatus.mockReset().mockResolvedValue({data:{available:false,model:null},error:null});mocks.workersFail=false;mocks.jobs=[];mocks.workers=[worker('Karol',['Dsear & Fire','First aid']),worker('Tom',['dsear  &  FIRE','Admin']),worker('Kim',['DSEAR & FIRE']),worker('Ann',['Dsear & Fire']),worker('Old',['Forklift'],false)];HTMLElement.prototype.scrollIntoView=vi.fn();});
 afterEach(()=>{cleanup();window.sessionStorage.clear();vi.restoreAllMocks();});
 
 describe('required skills selector',()=>{

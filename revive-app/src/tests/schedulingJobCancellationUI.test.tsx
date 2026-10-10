@@ -8,8 +8,12 @@ import type {SchedulingJob} from '@/services/schedulingJobs';
 
 const workspaceId='11111111-1111-4111-8111-111111111111',userId='22222222-2222-4222-8222-222222222222';
 const jobKey=`rev-job-save:${workspaceId}:${userId}`,dailyKey=`rev-daily-job-save:${workspaceId}:${userId}`;
-const mocks=vi.hoisted(()=>({invoke:vi.fn(),read:vi.fn()}));
-vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:mocks.invoke},from:()=>({select:()=>({eq:mocks.read})})}}));
+const mocks=vi.hoisted(()=>({invoke:vi.fn(),documentStatus:vi.fn(),read:vi.fn()}));
+vi.mock('@/data/supabaseClient',()=>({supabaseClient:{functions:{invoke:(name:string,options:{body?:Record<string,unknown>}={})=>{
+ if(name!=='rev-scheduling-job-document-analyse')return mocks.invoke(name,options);
+ if(options.body?.action!=='status')throw Error('Unexpected document analysis call');
+ return mocks.documentStatus(name,options);
+}},from:()=>({select:()=>({eq:mocks.read})})}}));
 vi.mock('@/components/JobAssignmentsPanel',()=>({JobAssignmentsPanel:({job,note,jobActions,disabled}:{job:SchedulingJob;note?:ReactNode;jobActions?:ReactNode;disabled?:boolean})=><article aria-label={`${job.title} job`} data-disabled={String(!!disabled)}><h3>{job.title}</h3>{note}{jobActions&&<section aria-label="Job actions">{jobActions}</section>}</article>}));
 
 import {SchedulingJobsPanel} from '@/components/SchedulingJobsPanel';
@@ -27,7 +31,7 @@ const retained=()=>{const value=window.sessionStorage.getItem(jobKey);return val
 const card=(title:string)=>screen.getByRole('article',{name:`${title} job`});
 async function mountWith(...rows:Row[]){mocks.read.mockResolvedValue(listOf(...rows));render(<SchedulingJobsPanel workspaceId={workspaceId} userId={userId}/>);await waitFor(()=>expect(screen.getByRole('button',{name:'ADD JOB / SHIFT'})).toBeEnabled());}
 
-beforeEach(()=>{mocks.invoke.mockReset();mocks.read.mockReset();HTMLElement.prototype.scrollIntoView=vi.fn();});
+beforeEach(()=>{mocks.invoke.mockReset();mocks.documentStatus.mockReset().mockResolvedValue({data:{available:false,model:null},error:null});mocks.read.mockReset();HTMLElement.prototype.scrollIntoView=vi.fn();});
 afterEach(()=>{cleanup();window.sessionStorage.clear();vi.restoreAllMocks();});
 
 describe('mounted job cancellation and list tidy-up',()=>{
