@@ -432,3 +432,6 @@ verify_jwt = true
 
 [functions.rev-scheduling-job-requirements-confirm]
 verify_jwt = true
+
+[functions.rev-scheduling-job-document-access]
+verify_jwt = true

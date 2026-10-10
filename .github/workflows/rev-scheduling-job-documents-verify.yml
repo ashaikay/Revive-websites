@@ -21,11 +21,12 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: npm test -- src/tests/schedulingJobDocuments.test.ts src/tests/schedulingJobDocumentsUI.test.tsx src/tests/schedulingSuitabilityUI.test.tsx src/tests/jobAssignmentsPanelUI.test.tsx
-      - run: node --experimental-strip-types --test supabase/functions/rev-scheduling-job-document-upload/*.test.ts supabase/functions/rev-scheduling-job-document-analyse/*.test.ts supabase/functions/rev-scheduling-job-requirements-confirm/*.test.ts
+      - run: node --experimental-strip-types --test supabase/functions/rev-scheduling-job-document-upload/*.test.ts supabase/functions/rev-scheduling-job-document-access/*.test.ts supabase/functions/rev-scheduling-job-document-analyse/*.test.ts supabase/functions/rev-scheduling-job-requirements-confirm/*.test.ts
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - run: deno check supabase/functions/rev-scheduling-job-document-upload/index.ts
+      - run: deno check supabase/functions/rev-scheduling-job-document-access/index.ts
       - run: deno check supabase/functions/rev-scheduling-job-document-analyse/index.ts
       - run: deno check supabase/functions/rev-scheduling-job-requirements-confirm/index.ts
       - run: npm run build

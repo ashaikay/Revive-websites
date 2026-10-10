@@ -2,7 +2,7 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {describe,expect,it} from 'vitest';
-import {DocumentAnalysisRefused,DocumentAnalysisUnavailable,recommendWorkersForConfirmedRequirements,submitAnalysisAttempt,submitConfirmationAttempt,validateExtractedJobRequirements,validateJobDocumentUpload} from '@/services/schedulingJobDocuments';
+import {DocumentAnalysisRefused,DocumentAnalysisUnavailable,recommendWorkersForConfirmedRequirements,requestJobDocumentAccess,submitAnalysisAttempt,submitConfirmationAttempt,validateExtractedJobRequirements,validateJobDocumentUpload,type JobDocument} from '@/services/schedulingJobDocuments';
 import type {PlannerData} from '@/services/schedulingPlanner';
 import type {SchedulingJob} from '@/services/schedulingJobs';
 
@@ -61,5 +61,17 @@ describe('Scheduling job documents and extracted requirements',()=>{
   expect(migration).toContain('set required_skills=confirmed_skills,version=value.version+1');
   expect(migration).toContain("raise exception 'Worker qualification evidence required'");
   expect(migration).toContain('where review.workspace_id=new.workspace_id and review.job_id=new.job_id and review.current');
+ });
+ it('validates short-lived document access against the exact workspace, job and metadata',async()=>{
+  const document:JobDocument={documentId,workspaceId,jobId,originalName:'brief.pdf',mimeType:'application/pdf',sizeBytes:100,sha256:'a'.repeat(64),status:'stored',version:1,createdAt:'2026-10-10T00:00:00.000Z'},expiresAt='2026-10-10T00:01:00.000Z';
+  await expect(requestJobDocumentAccess(document,'open',async()=>({status:200,data:{workspaceId,jobId,documentId,originalName:'brief.pdf',mimeType:'application/pdf',sizeBytes:100,action:'open',url:'https://storage.test/one',expiresAt}}),Date.parse('2026-10-10T00:00:00.000Z'))).resolves.toMatchObject({url:'https://storage.test/one',action:'open'});
+  await expect(requestJobDocumentAccess(document,'open',async()=>({status:200,data:{workspaceId,jobId:'99999999-9999-4999-8999-999999999999',documentId,originalName:'brief.pdf',mimeType:'application/pdf',sizeBytes:100,action:'open',url:'https://storage.test/two',expiresAt}}),Date.parse('2026-10-10T00:00:00.000Z'))).rejects.toThrow(/verified/);
+  await expect(requestJobDocumentAccess(document,'open',async()=>({status:403,data:{error:'denied'}}))).rejects.toThrow(/no longer have access/);
+ });
+ it('requests a fresh link after expiry instead of retaining signed URLs',async()=>{
+  const document:JobDocument={documentId,workspaceId,jobId,originalName:'brief.txt',mimeType:'text/plain',sizeBytes:4,sha256:'a'.repeat(64),status:'stored',version:1,createdAt:'2026-10-10T00:00:00.000Z'};let requests=0;
+  const invoke=async()=>({status:200,data:{workspaceId,jobId,documentId,originalName:'brief.txt',mimeType:'text/plain',sizeBytes:4,action:'open',url:`https://storage.test/${++requests}`,expiresAt:new Date(Date.parse('2026-10-10T00:00:00.000Z')+requests*60000).toISOString()}});
+  const first=await requestJobDocumentAccess(document,'open',invoke,Date.parse('2026-10-10T00:00:00.000Z')),second=await requestJobDocumentAccess(document,'open',invoke,Date.parse('2026-10-10T00:01:00.000Z'));
+  expect(first.url).not.toBe(second.url);expect(requests).toBe(2);
  });
 });

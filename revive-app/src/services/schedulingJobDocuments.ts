@@ -9,6 +9,7 @@ export type JobDocumentMime='application/pdf'|'text/plain';
 export interface JobDocument{documentId:string;workspaceId:string;jobId:string;originalName:string;mimeType:JobDocumentMime;sizeBytes:number;sha256:string;status:'stored';version:number;createdAt:string;}
 export interface JobDocumentUploadAttempt{workspaceId:string;jobId:string;requestId:string;originalName:string;mimeType:JobDocumentMime;sizeBytes:number;sha256:string;base64:string;}
 export interface JobDocumentUploadResult extends JobDocument{analysisAvailable:false;}
+export interface JobDocumentAccess{workspaceId:string;jobId:string;documentId:string;originalName:string;mimeType:JobDocumentMime;sizeBytes:number;action:'open'|'download';url:string;expiresAt:string;}
 interface Storage{getItem(key:string):string|null;setItem(key:string,value:string):void;removeItem(key:string):void;}
 
 function object(value:unknown):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Job document unavailable');return value as Record<string,unknown>;}
@@ -56,6 +57,14 @@ export async function submitJobDocumentUpload(attempt:JobDocumentUploadAttempt,i
 export async function loadJobDocuments(workspaceId:string,jobId:string,read:(columns:string,workspaceId:string,jobId:string)=>Promise<unknown>):Promise<JobDocument[]>{
  if(!id(workspaceId)||!id(jobId))throw Error('Job required');const raw=await read(jobDocumentColumns,workspaceId,jobId);if(!Array.isArray(raw))throw Error('Job documents unavailable');
  const seen=new Set<string>();return raw.map(value=>{const source=object(value);if(Object.keys(source).sort().join(',')!==jobDocumentColumns.split(',').sort().join(','))throw Error('Job documents unavailable');const document=row({documentId:source.id,workspaceId:source.workspace_id,jobId:source.job_id,originalName:source.original_name,mimeType:source.mime_type,sizeBytes:source.size_bytes,sha256:source.sha256,status:source.status,version:source.version,createdAt:source.created_at});if(document.workspaceId!==workspaceId||document.jobId!==jobId||seen.has(document.documentId))throw Error('Job documents unavailable');seen.add(document.documentId);return document;}).sort((left,right)=>right.createdAt.localeCompare(left.createdAt));
+}
+export async function requestJobDocumentAccess(document:JobDocument,action:'open'|'download',invoke:(name:string,body:Record<string,unknown>)=>Promise<{status:number;data:unknown}>,now=Date.now()):Promise<JobDocumentAccess>{
+ const response=await invoke('rev-scheduling-job-document-access',{workspaceId:document.workspaceId,jobId:document.jobId,documentId:document.documentId,action});
+ if(response.status===401||response.status===403||response.status===404)throw Error('You no longer have access to this job document.');
+ if(response.status!==200)throw Error('A temporary document link could not be created. Try again.');
+ const raw=object(response.data),expiresAt=instant(raw.expiresAt);
+ if(Object.keys(raw).sort().join(',')!=='action,documentId,expiresAt,jobId,mimeType,originalName,sizeBytes,url,workspaceId'||raw.workspaceId!==document.workspaceId||raw.jobId!==document.jobId||raw.documentId!==document.documentId||raw.originalName!==document.originalName||raw.mimeType!==document.mimeType||raw.sizeBytes!==document.sizeBytes||raw.action!==action||typeof raw.url!=='string'||!/^https?:\/\//.test(raw.url)||Date.parse(expiresAt)<=now)throw Error('The temporary document link could not be verified.');
+ return{...raw,expiresAt} as JobDocumentAccess;
 }
 
 export interface EvidenceReference{page:number|null;section:string|null;}
