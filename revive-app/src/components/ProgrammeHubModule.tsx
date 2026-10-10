@@ -11,6 +11,7 @@ import type {
   ProgrammeHubVacancy,
 } from '@/domain/programmeHub';
 import { programmeNeedsReview } from '@/domain/programmeHub';
+import { ProgrammeEmployerEngagement } from '@/components/ProgrammeEmployerEngagement';
 import {
   clearProgrammeHubAttempt,
   loadProgrammeHubData,
@@ -338,8 +339,8 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
 
       {selectedProgramme && isManager && (
         <section className="card p-5" aria-labelledby="adviser-heading">
-          <h2 id="adviser-heading" className="text-xl font-semibold">Advisers and caseload</h2>
-          <p className="mt-1 text-sm text-neutral-600">Advisers can see programme employer records and only participant profiles assigned to their caseload.</p>
+          <h2 id="adviser-heading" className="text-xl font-semibold">Employment Specialists and caseload</h2>
+          <p className="mt-1 text-sm text-neutral-600">Employment Specialists can see programme employer records and only Service user profiles assigned to their caseload.</p>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
             <select aria-label="Workspace member" className={inputClass} value={adviserUserId} onChange={(event) => setAdviserUserId(event.target.value)}>
               <option value="">Select an active workspace member</option>
@@ -348,13 +349,13 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             <button className="btn-primary" disabled={!adviserUserId || busy || !!pending} onClick={() => void saveAttempt(attempt('adviser', selectedProgramme.id, null, 0, { userId: adviserUserId, active: true }), 'Programme adviser added.').then((confirmed) => { if (confirmed) setAdviserUserId(''); })}>Add adviser</button>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <select aria-label="Participant for caseload" className={inputClass} value={assignmentParticipantId} onChange={(event) => setAssignmentParticipantId(event.target.value)}>
-              <option value="">Select participant</option>{programmeParticipants.map((participant) => <option key={participant.id} value={participant.id}>{participant.preferredName} - {participant.caseReference}</option>)}
+            <select aria-label="Service user for caseload" className={inputClass} value={assignmentParticipantId} onChange={(event) => setAssignmentParticipantId(event.target.value)}>
+              <option value="">Select Service user</option>{programmeParticipants.map((participant) => <option key={participant.id} value={participant.id}>{participant.preferredName} - {participant.caseReference}</option>)}
             </select>
-            <select aria-label="Adviser for caseload" className={inputClass} value={assignmentAdviserId} onChange={(event) => setAssignmentAdviserId(event.target.value)}>
-              <option value="">Select adviser</option>{programmeAdvisers.filter((adviser) => adviser.active).map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)}</option>)}
+            <select aria-label="Employment Specialist for caseload" className={inputClass} value={assignmentAdviserId} onChange={(event) => setAssignmentAdviserId(event.target.value)}>
+              <option value="">Select Employment Specialist</option>{programmeAdvisers.filter((adviser) => adviser.active).map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)}</option>)}
             </select>
-            <button className="btn-primary" disabled={!assignmentParticipantId || !assignmentAdviserId || busy || !!pending} onClick={() => void saveAttempt(attempt('participant_adviser', selectedProgramme.id, null, 0, { participantId: assignmentParticipantId, adviserUserId: assignmentAdviserId, active: true }), 'Participant assigned to adviser.').then((confirmed) => { if (confirmed) { setAssignmentParticipantId(''); setAssignmentAdviserId(''); } })}>Assign caseload</button>
+            <button className="btn-primary" disabled={!assignmentParticipantId || !assignmentAdviserId || busy || !!pending} onClick={() => void saveAttempt(attempt('participant_adviser', selectedProgramme.id, null, 0, { participantId: assignmentParticipantId, adviserUserId: assignmentAdviserId, active: true }), 'Service user assigned to Employment Specialist.').then((confirmed) => { if (confirmed) { setAssignmentParticipantId(''); setAssignmentAdviserId(''); } })}>Assign caseload</button>
           </div>
         </section>
       )}
@@ -362,6 +363,20 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       {selectedProgramme && canMaintainEmployerRecords && (
         <>
           <h2 className="text-xl font-semibold">Employers and contacts</h2>
+          <ProgrammeEmployerEngagement
+            key={`${workspaceId}:${selectedProgramme.id}`}
+            workspaceId={workspaceId}
+            userId={userId}
+            programme={selectedProgramme}
+            employers={programmeEmployers}
+            contacts={programmeContacts}
+            advisers={programmeAdvisers}
+            members={data.members}
+            isManager={isManager}
+            canMaintain={canMaintainEmployerRecords}
+            onEmployersChanged={load}
+          />
+          <h3 className="text-lg font-semibold">Manual employer and contact records</h3>
           <RecordSection title="Employers" empty="No employers have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" onSubmit={saveEmployer}>
             <Field label="Employer reference (for example, EMP-001)"><input required className={inputClass} value={employerDraft.employerKey} onChange={(event) => setEmployerDraft({ ...employerDraft, employerKey: event.target.value })} /></Field>
             <Field label="Employer name"><input required className={inputClass} value={employerDraft.displayName} onChange={(event) => setEmployerDraft({ ...employerDraft, displayName: event.target.value })} /></Field>
@@ -386,7 +401,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             {programmeContacts.map((contact) => <RecordRow key={contact.id} title={contact.preferredName} detail={`${programmeEmployers.find((employer) => employer.id === contact.employerId)?.displayName ?? 'Employer'}${contact.suppressed ? ' - Suppressed' : ''}`} edit={() => editContact(contact)} />)}
           </RecordSection>
 
-          <RecordSection title="Vacancies" empty="No vacancies have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" onSubmit={saveVacancy}>
+          <RecordSection title="Job opportunities" empty="No Job opportunities have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" onSubmit={saveVacancy}>
             <Field label="Employer"><select required className={inputClass} value={vacancyDraft.employerId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerId: event.target.value, employerContactId: '' })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
             <Field label="Employer contact"><select className={inputClass} value={vacancyDraft.employerContactId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerContactId: event.target.value })}><option value="">No contact selected</option>{programmeContacts.filter((contact) => contact.employerId === vacancyDraft.employerId).map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}</option>)}</select></Field>
             <Field label="Vacancy reference (for example, VAC-001)"><input required className={inputClass} value={vacancyDraft.vacancyKey} onChange={(event) => setVacancyDraft({ ...vacancyDraft, vacancyKey: event.target.value })} /></Field>
@@ -402,7 +417,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       )}
 
       {selectedProgramme && isManager && (
-        <RecordSection title="Participants" empty="No participants have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" onSubmit={saveParticipant}>
+        <RecordSection title="Service users" empty="No Service users have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" onSubmit={saveParticipant}>
           <Field label="Participant reference (for example, PART-001)"><input required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
           <Field label="Preferred name"><input required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
           <Field label="Tenant case reference"><input required className={inputClass} value={participantDraft.caseReference} onChange={(event) => setParticipantDraft({ ...participantDraft, caseReference: event.target.value })} /></Field>
@@ -418,9 +433,9 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
 
       {selectedProgramme && isAdviser && !isManager && (
         <section className="card p-5">
-          <h2 className="text-xl font-semibold">My assigned participants</h2>
+          <h2 className="text-xl font-semibold">My assigned Service users</h2>
           <div className="mt-3 space-y-3">{programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}</div>
-          {programmeParticipants.length === 0 && <p className="mt-3 text-sm text-neutral-600">No participants are currently assigned to your caseload in this programme.</p>}
+          {programmeParticipants.length === 0 && <p className="mt-3 text-sm text-neutral-600">No Service users are currently assigned to your caseload in this programme.</p>}
           {participantEdit && <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={saveParticipant}><Field label="Preferred name"><input required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field><Field label="Desired roles"><input className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field><Field label="Employment skills"><input className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field><Field label="Vacancy search areas"><input className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field><FormActions editing busy={busy || !!pending} cancel={resetParticipant} /></form>}
         </section>
       )}

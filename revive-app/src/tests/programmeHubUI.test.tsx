@@ -15,16 +15,37 @@ const savedId = '66666666-6666-4666-8666-666666666666';
 const mocks = vi.hoisted(() => ({
   rows: {} as Record<string, unknown[]>,
   invoke: vi.fn(),
+  discoveryStatus: vi.fn(),
+  outreachStatus: vi.fn(),
 }));
 
 vi.mock('@/data/supabaseClient', () => ({
   supabaseClient: {
-    from: (table: string) => ({
-      select: () => ({
-        eq: async () => ({ data: mocks.rows[table] ?? [], error: null }),
-      }),
-    }),
-    functions: { invoke: mocks.invoke },
+    from: (table: string) => {
+      const filters: Array<[string, unknown]> = [];
+      const result = () => ({
+        data: (mocks.rows[table] ?? []).filter((row) => filters.every(([column, value]) => (row as Record<string, unknown>)[column] === value)),
+        error: null,
+      });
+      const query = {
+        select: () => query,
+        eq: (column: string, value: unknown) => { filters.push([column, value]); return query; },
+        order: async () => result(),
+        then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(result()).then(resolve, reject),
+      };
+      return query;
+    },
+    functions: { invoke: (name: string, options: { body?: Record<string, unknown> } = {}) => {
+      if (name === 'rev-programme-employer-discovery') {
+        if (options.body?.action !== 'status') throw new Error('Unexpected employer discovery provider call');
+        return mocks.discoveryStatus(name, options);
+      }
+      if (name === 'rev-programme-employer-outreach-draft') {
+        if (options.body?.action !== 'status') throw new Error('Unexpected employer outreach provider call');
+        return mocks.outreachStatus(name, options);
+      }
+      return mocks.invoke(name, options);
+    } },
   },
 }));
 
@@ -78,14 +99,21 @@ const setRows = (role: 'owner' | 'member', includeParticipant = false) => {
     programme_hub_participants: includeParticipant ? [participantRow] : [],
     programme_hub_participant_advisers: includeParticipant ? [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, adviser_user_id: adviserId, active: true, version: 1 }] : [],
     programme_hub_participant_notes: [],
+    programme_hub_employer_discovery_searches: [],
+    programme_hub_outreach_settings: [],
+    programme_hub_employer_engagements: [],
+    programme_hub_employer_engagement_events: [],
+    programme_hub_employer_outreach_drafts: [],
     programme_hub_contracts: [],
-    workspace_members: [{ user_id: role === 'owner' ? ownerId : adviserId, role, status: 'active' }],
+    workspace_members: [{ workspace_id: workspaceId, user_id: role === 'owner' ? ownerId : adviserId, role, status: 'active' }],
   };
 };
 
 beforeEach(() => {
   window.sessionStorage.clear();
   mocks.invoke.mockReset();
+  mocks.discoveryStatus.mockReset().mockResolvedValue({ data: { available: false, provider: 'Companies House' }, error: null });
+  mocks.outreachStatus.mockReset().mockResolvedValue({ data: { available: false, model: null }, error: null });
   vi.stubGlobal('crypto', { randomUUID: () => '77777777-7777-4777-8777-777777777777' });
 });
 afterEach(() => {
@@ -103,7 +131,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.getByRole('region', { name: 'Programme readiness' })).toHaveTextContent('outcome vocabulary');
     expect(screen.getByRole('region', { name: 'Programme readiness' })).toHaveTextContent('spreadsheet mapping');
     expect(screen.getByText(/Matching postcode areas never prove participant residency/)).toBeVisible();
-    for (const heading of ['Overview and setup', 'Advisers and caseload', 'Employers and contacts', 'Employers', 'Employer contacts', 'Vacancies', 'Participants']) {
+    for (const heading of ['Overview and setup', 'Employment Specialists and caseload', 'Employers and contacts', 'Employers', 'Employer contacts', 'Job opportunities', 'Service users']) {
       expect(screen.getByRole('heading', { name: heading })).toBeVisible();
     }
     expect(screen.queryByText(/revenue/i)).toBeNull();
@@ -164,7 +192,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
   it('restricts an adviser view to assigned participants returned by caseload RLS', async () => {
     setRows('member', true);
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
-    expect(await screen.findByRole('heading', { name: 'My assigned participants' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'My assigned Service users' })).toBeVisible();
     expect(screen.getByText(/Alex/)).toBeVisible();
     expect(screen.getByText(/CASE-001/)).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Advisers and caseload' })).toBeNull();

@@ -435,3 +435,13 @@ verify_jwt = true
 
 [functions.rev-scheduling-job-document-access]
 verify_jwt = true
+
+
+[functions.rev-programme-employer-discovery]
+verify_jwt = true
+
+[functions.rev-programme-employer-engagement-save]
+verify_jwt = true
+
+[functions.rev-programme-employer-outreach-draft]
+verify_jwt = true

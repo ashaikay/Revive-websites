@@ -23,14 +23,22 @@ jobs:
       - name: Test Programme Hub fixture response handling
         run: node --test src/tests/programmeHubFixtureResponse.test.mjs
       - name: Test Programme Hub boundary
-        run: node --experimental-strip-types --test supabase/functions/rev-programme-hub-save/*.test.ts
+        run: |
+          node --experimental-strip-types --test \
+            supabase/functions/rev-programme-hub-save/*.test.ts \
+            supabase/functions/rev-programme-employer-discovery/*.test.ts \
+            supabase/functions/rev-programme-employer-engagement-save/*.test.ts \
+            supabase/functions/rev-programme-employer-outreach-draft/*.test.ts
       - name: Test Programme Hub mounted UI
-        run: npm test -- src/tests/programmeHubContract.test.ts src/tests/programmeHubUI.test.tsx
+        run: npm test -- src/tests/programmeHubContract.test.ts src/tests/programmeHubUI.test.tsx src/tests/programmeEmployerEngagementUI.test.tsx
       - name: Check Programme Hub Edge Function
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - run: deno check supabase/functions/rev-programme-hub-save/index.ts
+      - run: deno check supabase/functions/rev-programme-employer-discovery/index.ts
+      - run: deno check supabase/functions/rev-programme-employer-engagement-save/index.ts
+      - run: deno check supabase/functions/rev-programme-employer-outreach-draft/index.ts
       - run: npm run build
 
   programme-hub-database:
@@ -62,3 +70,4 @@ jobs:
           test -n "${REV_LOCAL_SUPABASE_ANON_KEY:-}"
           test -n "${REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY:-}"
           node src/tests/programme_hub_local_validation.mjs
+          node src/tests/programme_employer_engagement_local_validation.mjs

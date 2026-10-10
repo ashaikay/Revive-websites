@@ -76,8 +76,16 @@ export async function loadProgrammeHubData(workspaceId: string, gateway: Program
     return { id: row.id as string, workspaceId, programmeId: row.programme_id, userId: row.user_id, active: row.active as boolean, version: row.version as number };
   });
   const employers = rows(employerRows).map((row): ProgrammeHubEmployer => {
-    if (!common(row, workspaceId) || !id(row.programme_id) || !text(row.employer_key) || !text(row.display_name) || !nullableText(row.sector_key) || !nullableText(row.primary_geography_key)) throw new Error('Invalid Programme Hub employer.');
-    return { id: row.id as string, workspaceId, programmeId: row.programme_id, employerKey: row.employer_key, displayName: row.display_name, sectorKey: row.sector_key, primaryGeographyKey: row.primary_geography_key, active: row.active as boolean, version: row.version as number };
+    if (!common(row, workspaceId) || !id(row.programme_id) || !text(row.employer_key) || !text(row.display_name) ||
+      !nullableText(row.sector_key) || !nullableText(row.primary_geography_key)) {
+      throw new Error('Invalid Programme Hub employer.');
+    }
+    return {
+      id: row.id as string, workspaceId, programmeId: row.programme_id, employerKey: row.employer_key,
+      displayName: row.display_name, sectorKey: row.sector_key, primaryGeographyKey: row.primary_geography_key,
+      sourceProvider: null, sourceIdentity: null, sourceUrl: null, sourceRetrievedAt: null,
+      sourceAddress: null, sourceEvidence: null, active: row.active as boolean, version: row.version as number,
+    };
   });
   const contacts = rows(contactRows).map((row): ProgrammeHubEmployerContact => {
     if (!common(row, workspaceId) || !id(row.programme_id) || !id(row.employer_id) || !text(row.contact_key) || !text(row.preferred_name) || !nullableText(row.role_title) || !nullableText(row.business_email) || !nullableText(row.business_phone) || typeof row.suppressed !== 'boolean' || !nullableText(row.suppression_reason_key)) throw new Error('Invalid Programme Hub contact.');

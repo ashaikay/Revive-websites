@@ -37,6 +37,12 @@ export interface ProgrammeHubEmployer {
   displayName: string;
   sectorKey: string | null;
   primaryGeographyKey: string | null;
+  sourceProvider: 'companies_house' | null;
+  sourceIdentity: string | null;
+  sourceUrl: string | null;
+  sourceRetrievedAt: string | null;
+  sourceAddress: string | null;
+  sourceEvidence: unknown[] | null;
   active: boolean;
   version: number;
 }

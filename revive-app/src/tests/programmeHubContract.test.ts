@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync(new URL('../../supabase/migrations/20261010100000_rev_programme_hub_employer_foundation.sql', import.meta.url), 'utf8');
 const notesMigration = readFileSync(new URL('../../supabase/migrations/20261010110000_rev_programme_hub_participant_notes.sql', import.meta.url), 'utf8');
+const engagementMigration = readFileSync(new URL('../../supabase/migrations/20261011010000_rev_programme_employer_discovery_engagement.sql', import.meta.url), 'utf8');
 const architecture = readFileSync(new URL('../../../REVIVE_AI_MASTER/01_ARCHITECTURE/OUTCOMES_PROGRAMME_HUB_EMPLOYER_ENGAGEMENT_IPS.md', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 const navigation = readFileSync(new URL('../components/Navigation.tsx', import.meta.url), 'utf8');
@@ -66,5 +67,20 @@ describe('Outcomes / Programme Hub contract', () => {
     expect(notesMigration).toContain('to service_role');
     expect(notesMigration).not.toContain('delete from public.programme_hub_participant_notes');
     expect(notesMigration).not.toContain('update public.programme_hub_participant_notes');
+  });
+
+  it('keeps employer discovery, engagement history and prepared outreach tenant-scoped and idempotent', () => {
+    expect(engagementMigration).toContain('programme_hub_employer_discovery_searches');
+    expect(engagementMigration).toContain('public.can_access_rev_programme(workspace_id, programme_id)');
+    expect(engagementMigration).toContain('pg_catalog.pg_advisory_xact_lock');
+    expect(engagementMigration).toContain('provider_call_count integer not null default 1 check (provider_call_count = 1)');
+    expect(engagementMigration).toContain('Programme request unavailable');
+    expect(engagementMigration).toContain('Employer contact unavailable or suppressed');
+    expect(engagementMigration).toContain("status text not null default 'prepared_not_sent'");
+    expect(engagementMigration).toContain("'rev_prepared_not_sent'");
+    expect(engagementMigration).not.toContain("'sent'");
+    expect(supabaseConfig).toContain('[functions.rev-programme-employer-discovery]');
+    expect(supabaseConfig).toContain('[functions.rev-programme-employer-engagement-save]');
+    expect(supabaseConfig).toContain('[functions.rev-programme-employer-outreach-draft]');
   });
 });
