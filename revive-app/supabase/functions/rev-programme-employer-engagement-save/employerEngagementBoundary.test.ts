@@ -35,6 +35,25 @@ test('binds the authenticated actor and preserves the exact manual-contact paylo
   });
 });
 
+test('preserves the discovered-employer search UUID and text source identity', async () => {
+  const searchId = '66666666-6666-4666-8666-666666666666';
+  const discoveryPayload = { searchId, sourceIdentity: '12345678' };
+  let saved: unknown;
+  const response = await handleEmployerEngagementSave(request({
+    operation: 'discovery_employer', workspaceId, programmeId, recordId: null, requestId, expectedVersion: 0,
+    payload: discoveryPayload,
+  }), dependencies({ save: async (input) => {
+    saved = input;
+    return { operation: input.target_operation, recordId: employerId, workspaceId, programmeId, version: 1, duplicate: false };
+  } }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(saved, {
+    target_operation: 'discovery_employer', target_workspace_id: workspaceId, initiating_user_id: userId,
+    target_request_id: requestId, target_programme_id: programmeId, target_record_id: null,
+    expected_version: 0, target_payload: discoveryPayload,
+  });
+});
+
 test('denies cross-programme access before service-role save', async () => {
   let saved = false;
   const response = await handleEmployerEngagementSave(request(body), dependencies({

@@ -83,4 +83,11 @@ describe('Outcomes / Programme Hub contract', () => {
     expect(supabaseConfig).toContain('[functions.rev-programme-employer-engagement-save]');
     expect(supabaseConfig).toContain('[functions.rev-programme-employer-outreach-draft]');
   });
+
+  it('extracts the discovered source identity as text before building the employer key', () => {
+    expect(engagementMigration).toContain("'CH-' || (candidate->>'sourceIdentity')");
+    expect(engagementMigration).not.toContain("'CH-' || candidate->>'sourceIdentity'");
+    expect(engagementMigration).toContain("where search.id = (target_payload->>'searchId')::uuid");
+    expect(engagementMigration).toContain("item->>'sourceIdentity' = target_payload->>'sourceIdentity'");
+  });
 });

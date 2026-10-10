@@ -421,7 +421,7 @@ begin
         source_provider, source_identity, source_url, source_retrieved_at, source_address, source_evidence,
         active, created_by_user_id, updated_by_user_id
       ) values (
-        target_workspace_id, target_programme_id, 'CH-' || candidate->>'sourceIdentity',
+        target_workspace_id, target_programme_id, 'CH-' || (candidate->>'sourceIdentity'),
         candidate->>'name', nullif(candidate->>'sector', ''), nullif(candidate->>'location', ''),
         'companies_house', candidate->>'sourceIdentity', candidate->>'sourceUrl',
         (candidate->>'retrievedAt')::timestamptz, nullif(candidate->>'address', ''),
