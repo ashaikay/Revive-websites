@@ -51,6 +51,17 @@ export interface ProgrammeHubInvokeGateway {
   invoke(name: string, body: Record<string, unknown>): Promise<{ status: number; data: unknown }>;
 }
 
+export class ProgrammeHubSaveRejectedError extends Error {
+  readonly status: number;
+  readonly errorCode: string;
+
+  constructor(message: string, status: number, errorCode: string) {
+    super(message);
+    this.status = status;
+    this.errorCode = errorCode;
+  }
+}
+
 export async function loadProgrammeHubData(workspaceId: string, gateway: ProgrammeHubReadGateway): Promise<ProgrammeHubData> {
   if (!id(workspaceId)) throw new Error('Workspace required.');
   const [programmeRows, adviserRows, employerRows, contactRows, vacancyRows, participantRows, assignmentRows, contractRows, memberRows] = await Promise.all([
@@ -142,7 +153,27 @@ export async function loadProgrammeHubParticipantNotes(
 
 export async function submitProgrammeHubAttempt(attempt: ProgrammeHubSaveAttempt, gateway: ProgrammeHubInvokeGateway) {
   const response = await gateway.invoke('rev-programme-hub-save', { ...attempt });
-  if (response.status !== 200) throw new Error('Save not confirmed. Keep this page open and retry the same change.');
+  if (response.status !== 200) {
+    const raw = response.data && typeof response.data === 'object' && !Array.isArray(response.data)
+      ? response.data as Record<string, unknown>
+      : {};
+    const errorCode = typeof raw.errorCode === 'string' ? raw.errorCode : 'programme_record_rejected';
+    if ([400, 403, 409].includes(response.status)) {
+      const message = errorCode === 'workspace_access_denied' || errorCode === 'programme_manager_required'
+        ? 'You do not have permission to save this Programme Hub change.'
+        : errorCode === 'active_adviser_required'
+          ? 'The selected Employment Specialist is not actively registered for this programme.'
+          : errorCode === 'participant_unavailable'
+            ? 'The selected Service user is no longer available in this programme.'
+            : errorCode === 'caseload_assignment_exists'
+              ? 'This Service user is already assigned to that Employment Specialist.'
+              : errorCode === 'caseload_assignment_changed'
+                ? 'This caseload assignment changed after it was loaded. Refresh Programme Hub before trying again.'
+                : 'The Programme Hub change was rejected. Review the current record and try again.';
+      throw new ProgrammeHubSaveRejectedError(message, response.status, errorCode);
+    }
+    throw new Error('Save outcome is unknown. Keep this page open and retry the same change.');
+  }
   const value = object(response.data);
   if (value.operation !== attempt.operation || !id(value.recordId) || value.workspaceId !== attempt.workspaceId ||
     !id(value.programmeId) || value.version !== attempt.expectedVersion + 1) {

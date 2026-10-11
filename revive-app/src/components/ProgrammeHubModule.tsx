@@ -18,6 +18,7 @@ import {
   loadProgrammeHubParticipantNotes,
   rememberProgrammeHubAttempt,
   restoreProgrammeHubAttempt,
+  ProgrammeHubSaveRejectedError,
   submitProgrammeHubAttempt,
 } from '@/services/programmeHubService';
 
@@ -130,6 +131,11 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const programmeParticipants = data.participants.filter((item) => item.programmeId === selectedProgrammeId);
   const programmeAdvisers = data.advisers.filter((item) => item.programmeId === selectedProgrammeId);
   const programmeNotes = data.participantNotes.filter((item) => item.programmeId === selectedProgrammeId);
+  const selectedCaseloadAssignment = data.participantAdvisers.find((item) =>
+    item.programmeId === selectedProgrammeId &&
+    item.participantId === assignmentParticipantId &&
+    item.adviserUserId === assignmentAdviserId,
+  ) ?? null;
 
   const saveAttempt = async (attempt: ProgrammeHubSaveAttempt, success: string): Promise<boolean> => {
     if (busyRef.current) return false;
@@ -145,7 +151,13 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       await submitProgrammeHubAttempt(attempt, {
         invoke: async (name, body) => {
           const { data: responseData, error: invokeError } = await client.functions.invoke(name, { body });
-          if (invokeError) throw new Error('Save not confirmed. Keep this page open and retry the same change.');
+          if (invokeError) {
+            const context = (invokeError as { context?: unknown }).context;
+            if (context instanceof Response) {
+              return { status: context.status, data: await context.clone().json().catch(() => null) };
+            }
+            throw new Error('Save outcome is unknown. Keep this page open and retry the same change.');
+          }
           return { status: 200, data: responseData };
         },
       });
@@ -155,7 +167,11 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       setMessage(success);
       return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Save not confirmed. Keep this page open and retry the same change.');
+      if (saveError instanceof ProgrammeHubSaveRejectedError) {
+        clearProgrammeHubAttempt(window.sessionStorage, workspaceId, userId);
+        setPending(null);
+      }
+      setError(saveError instanceof Error ? saveError.message : 'Save outcome is unknown. Keep this page open and retry the same change.');
       return false;
     } finally {
       busyRef.current = false;
@@ -387,9 +403,25 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             <select aria-label="Employment Specialist for caseload" className={inputClass} value={assignmentAdviserId} onChange={(event) => setAssignmentAdviserId(event.target.value)}>
               <option value="">Select Employment Specialist</option>{programmeAdvisers.filter((adviser) => adviser.active).map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)}</option>)}
             </select>
-            <button className="btn-primary" disabled={!assignmentParticipantId || !assignmentAdviserId || busy || !!pending} onClick={() => void saveAttempt(attempt('participant_adviser', selectedProgramme.id, null, 0, { participantId: assignmentParticipantId, adviserUserId: assignmentAdviserId, active: true }), 'Service user assigned to Employment Specialist.').then((confirmed) => { if (confirmed) { setAssignmentParticipantId(''); setAssignmentAdviserId(''); } })}>Assign caseload</button>
+            <button className="btn-primary" disabled={!assignmentParticipantId || !assignmentAdviserId || selectedCaseloadAssignment?.active || busy || !!pending} onClick={() => void saveAttempt(attempt(
+              'participant_adviser',
+              selectedProgramme.id,
+              selectedCaseloadAssignment?.id ?? null,
+              selectedCaseloadAssignment?.version ?? 0,
+              { participantId: assignmentParticipantId, adviserUserId: assignmentAdviserId, active: true },
+            ), selectedCaseloadAssignment ? 'Caseload assignment reactivated.' : 'Service user assigned to Employment Specialist.').then((confirmed) => {
+              if (confirmed) {
+                setAssignmentParticipantId('');
+                setAssignmentAdviserId('');
+              }
+            })}>{selectedCaseloadAssignment?.active ? 'Already assigned' : selectedCaseloadAssignment ? 'Reactivate caseload' : 'Assign caseload'}</button>
           </div>
           {(!assignmentParticipantId || !assignmentAdviserId) && <p className="mt-2 text-sm text-neutral-600">Choose both a Service user and an Employment Specialist to enable Assign caseload.</p>}
+          {assignmentAdviserId === userId && <p className="mt-2 text-sm text-neutral-600">“You” is available because your account has an active Employment Specialist registration for this programme. Workspace ownership alone does not satisfy this prerequisite.</p>}
+          {programmeAdvisers.filter((adviser) => adviser.active).length === 0 && <p className="mt-2 text-sm text-amber-800">Add an active Employment Specialist registration to this programme before assigning a caseload.</p>}
+          {selectedCaseloadAssignment?.active && <p className="mt-2 text-sm text-neutral-600">This exact Service user and Employment Specialist caseload assignment is already active; no duplicate assignment will be submitted.</p>}
+          {selectedCaseloadAssignment && !selectedCaseloadAssignment.active && <p className="mt-2 text-sm text-amber-800">This caseload assignment is inactive. Reactivating it will use its current version and will be rejected if it changed after loading.</p>}
+          <p className="mt-2 text-xs text-neutral-600">Only Service users loaded for {selectedProgramme.name} and active Employment Specialists registered to the same programme can be assigned. The signed-in actor must also remain an active workspace owner or administrator.</p>
         </section>
       )}
 

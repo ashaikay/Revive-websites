@@ -203,7 +203,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(await screen.findByText('Employer created.')).toBeVisible();
   });
 
-  it('shows a denied save and preserves the submitted form values', async () => {
+  it('shows an unknown save outcome and preserves the submitted form values', async () => {
     setRows('owner');
     mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('denied') });
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
@@ -214,7 +214,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     fireEvent.change(reference, { target: { value: 'EMP-DENIED' } });
     fireEvent.change(name, { target: { value: 'Denied Employer' } });
     fireEvent.click(within(section).getByRole('button', { name: 'Add record' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Save not confirmed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save outcome is unknown');
     expect(reference).toHaveValue('EMP-DENIED');
     expect(name).toHaveValue('Denied Employer');
   });
@@ -229,7 +229,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     fireEvent.change(within(section).getByLabelText('Employer name'), { target: { value: 'Unconfirmed Employer' } });
     fireEvent.click(within(section).getByRole('button', { name: 'Add record' }));
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Save not confirmed');
+    expect(alert).toHaveTextContent('Save outcome is unknown');
     expect(screen.getByRole('button', { name: 'Retry same change' })).toBeVisible();
     expect(within(section).getByRole('button', { name: 'Add record' })).toBeDisabled();
     const retained = JSON.parse(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`) ?? 'null');
@@ -245,6 +245,114 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.queryByRole('heading', { name: 'Advisers and caseload' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Participant employment profiles' })).toBeNull();
     expect(screen.getByText(/Needs review - residency evidence is missing/)).toBeVisible();
+  });
+
+  it('creates an authorised caseload assignment only for an active programme adviser', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [{
+      id: savedId, workspace_id: workspaceId, programme_id: programmeId, user_id: ownerId, active: true, version: 1,
+    }];
+    mocks.invoke.mockImplementation(async (_name: string, { body }: { body: Record<string, unknown> }) => ({
+      data: { operation: body.operation, recordId: savedId, workspaceId, programmeId, version: 1 },
+      error: null,
+    }));
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
+    fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
+    expect(screen.getByText(/Workspace ownership alone does not satisfy this prerequisite/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Assign caseload' }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(1));
+    expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({
+      operation: 'participant_adviser',
+      programmeId,
+      recordId: null,
+      expectedVersion: 0,
+      payload: { participantId, adviserUserId: ownerId, active: true },
+    });
+    expect(await screen.findByText('Service user assigned to Employment Specialist.')).toBeVisible();
+  });
+
+  it('explains when no active programme adviser registration exists', async () => {
+    setRows('owner', true);
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    expect(await screen.findByText(/Add an active Employment Specialist registration/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Assign caseload' })).toBeDisabled();
+  });
+
+  it('reactivates an inactive assignment with its loaded version and treats stale rejection as definitive', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [{
+      id: savedId, workspace_id: workspaceId, programme_id: programmeId, user_id: ownerId, active: true, version: 1,
+    }];
+    const assignmentId = '88888888-8888-4888-8888-888888888888';
+    mocks.rows.programme_hub_participant_advisers = [{
+      id: assignmentId, workspace_id: workspaceId, programme_id: programmeId,
+      participant_id: participantId, adviser_user_id: ownerId, active: false, version: 3,
+    }];
+    mocks.invoke.mockResolvedValueOnce({
+      data: null,
+      error: { context: new Response(JSON.stringify({
+        error: 'Programme record could not be saved.',
+        errorCode: 'caseload_assignment_changed',
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } }) },
+    });
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
+    fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
+    expect(screen.getByText(/will use its current version/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Reactivate caseload' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('changed after it was loaded');
+    expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({
+      operation: 'participant_adviser',
+      recordId: assignmentId,
+      expectedVersion: 3,
+    });
+    expect(screen.queryByRole('button', { name: 'Retry same change' })).toBeNull();
+    expect(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`)).toBeNull();
+    expect(screen.getByLabelText('Service user for caseload')).toHaveValue(participantId);
+    expect(screen.getByLabelText('Employment Specialist for caseload')).toHaveValue(ownerId);
+  });
+
+  it('does not offer a retry for a definitive caseload permission denial', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [{
+      id: savedId, workspace_id: workspaceId, programme_id: programmeId, user_id: ownerId, active: true, version: 1,
+    }];
+    mocks.invoke.mockResolvedValueOnce({
+      data: null,
+      error: { context: new Response(JSON.stringify({
+        error: 'Programme record could not be saved.',
+        errorCode: 'workspace_access_denied',
+      }), { status: 403, headers: { 'Content-Type': 'application/json' } }) },
+    });
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
+    fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
+    fireEvent.click(screen.getByRole('button', { name: 'Assign caseload' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('do not have permission');
+    expect(screen.queryByRole('button', { name: 'Retry same change' })).toBeNull();
+    expect(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`)).toBeNull();
+  });
+
+  it('retains the exact caseload request when the outcome is genuinely uncertain', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [{
+      id: savedId, workspace_id: workspaceId, programme_id: programmeId, user_id: ownerId, active: true, version: 1,
+    }];
+    mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('network unavailable') });
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
+    fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
+    fireEvent.click(screen.getByRole('button', { name: 'Assign caseload' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('outcome is unknown');
+    const original = mocks.invoke.mock.calls[0][1].body;
+    mocks.invoke.mockResolvedValueOnce({
+      data: { operation: 'participant_adviser', recordId: savedId, workspaceId, programmeId, version: 1 },
+      error: null,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry same change' }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
+    expect(mocks.invoke.mock.calls[1][1].body).toEqual(original);
   });
 
   it('switches programmes without showing stale participant records or drafts', async () => {
@@ -289,7 +397,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     const note = await screen.findByLabelText('Add a note');
     fireEvent.change(note, { target: { value: '  Agreed to update the CV this week.  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Save not confirmed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save outcome is unknown');
     const retained = JSON.parse(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`) ?? 'null');
     expect(retained).toMatchObject({
       operation: 'participant_note',

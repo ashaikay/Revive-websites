@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleProgrammeHubSave, type ProgrammeHubSaveInput } from './programmeHubBoundary.ts';
+import {
+  classifyProgrammeHubDatabaseError,
+  handleProgrammeHubSave,
+  ProgrammeHubSaveFailure,
+  type ProgrammeHubSaveInput,
+} from './programmeHubBoundary.ts';
 
 const workspaceId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -115,8 +120,75 @@ test('fails closed when the trusted result does not match the request', async ()
   const response = await handleProgrammeHubSave(request(programmeBody), dependencies(async () => ({
     operation: 'employer', record_id: recordId, workspace_id: workspaceId, programme_id: recordId, version: 1,
   })));
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), { error: 'Programme record could not be saved.' });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'Programme save outcome is unknown.', errorCode: 'outcome_unknown' });
+});
+
+test('accepts an authorised caseload assignment and preserves its prerequisites', async () => {
+  let captured: ProgrammeHubSaveInput | undefined;
+  const body = {
+    operation: 'participant_adviser',
+    workspaceId,
+    programmeId,
+    recordId: null,
+    requestId,
+    expectedVersion: 0,
+    payload: { participantId: recordId, adviserUserId: userId, active: true },
+  };
+  const response = await handleProgrammeHubSave(request(body), dependencies(async (input) => {
+    captured = input;
+    return { operation: 'participant_adviser', record_id: recordId, workspace_id: workspaceId, programme_id: programmeId, version: 1 };
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(captured?.target_payload, body.payload);
+  assert.equal(captured?.target_record_id, null);
+  assert.equal(captured?.expected_version, 0);
+});
+
+test('reports missing adviser registration, stale assignment and workspace denial as definitive', async () => {
+  const body = {
+    operation: 'participant_adviser',
+    workspaceId,
+    programmeId,
+    recordId: null,
+    requestId,
+    expectedVersion: 0,
+    payload: { participantId: recordId, adviserUserId: userId, active: true },
+  };
+  const missing = await handleProgrammeHubSave(request(body), dependencies(async () => {
+    throw new ProgrammeHubSaveFailure(409, 'active_adviser_required');
+  }));
+  assert.equal(missing.status, 409);
+  assert.deepEqual(await missing.json(), { error: 'Programme record could not be saved.', errorCode: 'active_adviser_required' });
+
+  const stale = await handleProgrammeHubSave(request({ ...body, recordId, expectedVersion: 2 }), dependencies(async () => {
+    throw new ProgrammeHubSaveFailure(409, 'caseload_assignment_changed');
+  }));
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { error: 'Programme record could not be saved.', errorCode: 'caseload_assignment_changed' });
+
+  const denied = await handleProgrammeHubSave(request(body), { ...dependencies(), canWriteWorkspace: async () => false });
+  assert.equal(denied.status, 403);
+  assert.deepEqual(await denied.json(), { error: 'Programme record could not be saved.', errorCode: 'workspace_access_denied' });
+});
+
+test('classifies database errors without exposing database messages', () => {
+  assert.deepEqual(
+    classifyProgrammeHubDatabaseError('participant_adviser', { code: '23505', message: 'duplicate key value' }),
+    new ProgrammeHubSaveFailure(409, 'caseload_assignment_exists'),
+  );
+  assert.equal(
+    classifyProgrammeHubDatabaseError('participant_adviser', { code: 'P0001', message: 'Active adviser required' }).errorCode,
+    'active_adviser_required',
+  );
+  assert.equal(
+    classifyProgrammeHubDatabaseError('participant_adviser', { code: 'P0001', message: 'Caseload assignment unavailable or changed' }).errorCode,
+    'caseload_assignment_changed',
+  );
+  assert.equal(
+    classifyProgrammeHubDatabaseError('participant_adviser', {}).errorCode,
+    'outcome_unknown',
+  );
 });
 
 test('accepts an append-only participant note and binds its author on the server', async () => {

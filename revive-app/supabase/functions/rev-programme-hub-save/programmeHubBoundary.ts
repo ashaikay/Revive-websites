@@ -26,6 +26,46 @@ export interface ProgrammeHubDependencies {
   save(input: ProgrammeHubSaveInput): Promise<unknown>;
 }
 
+export type ProgrammeHubSaveErrorCode =
+  | 'workspace_access_denied'
+  | 'programme_manager_required'
+  | 'participant_unavailable'
+  | 'active_adviser_required'
+  | 'caseload_assignment_exists'
+  | 'caseload_assignment_changed'
+  | 'request_changed'
+  | 'programme_record_invalid'
+  | 'programme_record_rejected'
+  | 'outcome_unknown';
+
+export class ProgrammeHubSaveFailure extends Error {
+  readonly status: number;
+  readonly errorCode: ProgrammeHubSaveErrorCode;
+
+  constructor(status: number, errorCode: ProgrammeHubSaveErrorCode) {
+    super(errorCode);
+    this.status = status;
+    this.errorCode = errorCode;
+  }
+}
+
+export function classifyProgrammeHubDatabaseError(
+  operation: ProgrammeHubOperation,
+  error: { code?: unknown; message?: unknown },
+): ProgrammeHubSaveFailure {
+  const code = typeof error.code === 'string' ? error.code : '';
+  const message = typeof error.message === 'string' ? error.message : '';
+  if (message.includes('Programme manager required')) return new ProgrammeHubSaveFailure(403, 'programme_manager_required');
+  if (message.includes('Participant unavailable')) return new ProgrammeHubSaveFailure(409, 'participant_unavailable');
+  if (message.includes('Active adviser required')) return new ProgrammeHubSaveFailure(409, 'active_adviser_required');
+  if (message.includes('Caseload assignment unavailable or changed')) return new ProgrammeHubSaveFailure(409, 'caseload_assignment_changed');
+  if (message.includes('Programme request unavailable')) return new ProgrammeHubSaveFailure(409, 'request_changed');
+  if (code === '23505' && operation === 'participant_adviser') return new ProgrammeHubSaveFailure(409, 'caseload_assignment_exists');
+  if (['22P02', '22007', '22023', '23514'].includes(code)) return new ProgrammeHubSaveFailure(400, 'programme_record_invalid');
+  if (code.startsWith('23') || code === 'P0001') return new ProgrammeHubSaveFailure(409, 'programme_record_rejected');
+  return new ProgrammeHubSaveFailure(503, 'outcome_unknown');
+}
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const operations: ProgrammeHubOperation[] = ['programme', 'adviser', 'employer', 'contact', 'vacancy', 'participant', 'participant_adviser', 'participant_note'];
@@ -130,7 +170,7 @@ export async function handleProgrammeHubSave(request: Request, dependencies: Pro
     const userId = await dependencies.getUserId(authorization);
     if (!validId(userId)) return reply(401, { error: 'Authentication required.' });
     if (!await dependencies.canWriteWorkspace(authorization, body.workspaceId as string, userId)) {
-      return reply(403, { error: 'Programme record could not be saved.' });
+      return reply(403, { error: 'Programme record could not be saved.', errorCode: 'workspace_access_denied' });
     }
     const result = await dependencies.save({
       target_operation: body.operation as ProgrammeHubOperation,
@@ -155,7 +195,10 @@ export async function handleProgrammeHubSave(request: Request, dependencies: Pro
       programmeId: row.programme_id,
       version: row.version,
     });
-  } catch {
-    return reply(403, { error: 'Programme record could not be saved.' });
+  } catch (error) {
+    if (error instanceof ProgrammeHubSaveFailure) {
+      return reply(error.status, { error: 'Programme record could not be saved.', errorCode: error.errorCode });
+    }
+    return reply(503, { error: 'Programme save outcome is unknown.', errorCode: 'outcome_unknown' });
   }
 }

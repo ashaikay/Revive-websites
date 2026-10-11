@@ -1,5 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { handleProgrammeHubSave } from './programmeHubBoundary.ts';
+import {
+  classifyProgrammeHubDatabaseError,
+  handleProgrammeHubSave,
+} from './programmeHubBoundary.ts';
 
 const url = Deno.env.get('SUPABASE_URL')!;
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY')!;
@@ -37,7 +40,18 @@ Deno.serve((request) => handleProgrammeHubSave(request, {
           note_body: input.target_payload.body,
         })
       : await service.rpc('save_rev_programme_hub_record', input);
-    if (error || !data) throw new Error('Programme save unavailable');
+    if (error) {
+      const failure = classifyProgrammeHubDatabaseError(input.target_operation, error);
+      console.error('programme_hub_save_rpc_rejected', JSON.stringify({
+        operation: input.target_operation,
+        postgresCode: typeof error.code === 'string' ? error.code : null,
+        errorCode: failure.errorCode,
+        responseType: typeof error,
+        topLevelKeys: error && typeof error === 'object' ? Object.keys(error).sort() : [],
+      }));
+      throw failure;
+    }
+    if (!data) throw new Error('Programme save unavailable');
     return data;
   },
 }));
