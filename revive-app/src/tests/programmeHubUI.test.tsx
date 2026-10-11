@@ -111,6 +111,7 @@ const setRows = (role: 'owner' | 'member', includeParticipant = false) => {
 
 beforeEach(() => {
   window.sessionStorage.clear();
+  window.localStorage.clear();
   mocks.invoke.mockReset();
   mocks.discoveryStatus.mockReset().mockResolvedValue({ data: { available: false, provider: 'Companies House' }, error: null });
   mocks.outreachStatus.mockReset().mockResolvedValue({ data: { available: false, model: null }, error: null });
@@ -122,16 +123,18 @@ afterEach(() => {
 });
 
 describe('Outcomes / Programme Hub employer foundation', () => {
-  it('shows separate tenant configuration gaps as Needs review and offers all manual record forms to owners', async () => {
+  it('keeps unavailable configuration in collapsed manager settings and offers everyday record forms', async () => {
     setRows('owner');
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
     expect(await screen.findByRole('heading', { name: 'Employer Engagement' })).toBeVisible();
-    expect(screen.getByRole('region', { name: 'Programme readiness' })).toHaveTextContent('Needs review');
-    expect(screen.getByRole('region', { name: 'Programme readiness' })).toHaveTextContent('residency eligibility');
-    expect(screen.getByRole('region', { name: 'Programme readiness' })).toHaveTextContent('outcome vocabulary');
-    expect(screen.getByRole('region', { name: 'Programme readiness' })).toHaveTextContent('spreadsheet mapping');
-    expect(screen.getByText(/Matching postcode areas never prove participant residency/)).toBeVisible();
-    for (const heading of ['Overview and setup', 'Employment Specialists and caseload', 'Employers and contacts', 'Employers', 'Employer contacts', 'Job opportunities', 'Service users']) {
+    const settings = screen.getByText('Programme settings').closest('details');
+    if (!settings) throw new Error('Programme settings disclosure missing');
+    expect(settings).not.toHaveAttribute('open');
+    expect(within(settings).getByText(/not available in this interface/)).toHaveTextContent('residency eligibility');
+    expect(within(settings).getByText(/not available in this interface/)).toHaveTextContent('outcome vocabulary');
+    expect(within(settings).getByText(/not available in this interface/)).toHaveTextContent('spreadsheet mapping');
+    expect(screen.queryByText('Needs review')).toBeNull();
+    for (const heading of ['Employment Specialists and caseload', 'Employers and contacts', 'Employers', 'Employer contacts', 'Job opportunities', 'Service users']) {
       expect(screen.getByRole('heading', { name: heading })).toBeVisible();
     }
     expect(screen.queryByText(/revenue/i)).toBeNull();
@@ -244,6 +247,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.getByText(/CASE-001/)).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Advisers and caseload' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Participant employment profiles' })).toBeNull();
+    expect(screen.queryByText('Programme settings')).toBeNull();
     expect(screen.getByText(/Needs review - residency evidence is missing/)).toBeVisible();
   });
 
@@ -368,6 +372,61 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.getByText('Sam')).toBeVisible();
     expect(screen.queryByText('Alex')).toBeNull();
     expect(screen.getByLabelText('Participant reference (for example, PART-001)')).toHaveValue('');
+  });
+
+  it('restores only the selected programme ID after refresh for the same workspace and user', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_programmes = [programmeRow, secondProgrammeRow];
+    mocks.rows.programme_hub_participants = [participantRow, secondParticipantRow];
+    const first = render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.change(await screen.findByLabelText('Choose a programme'), { target: { value: secondProgrammeId } });
+    expect(await screen.findByText(/You are viewing/)).toHaveTextContent('Youth Employment');
+    expect(window.localStorage.getItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`)).toBe(secondProgrammeId);
+    expect(window.localStorage.length).toBe(1);
+    first.unmount();
+
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    expect(await screen.findByLabelText('Choose a programme')).toHaveValue(secondProgrammeId);
+    expect(screen.getByText('Sam')).toBeVisible();
+    expect(screen.queryByText('Alex')).toBeNull();
+  });
+
+  it('does not reuse a programme preference after the signed-in user changes', async () => {
+    const secondUserId = '22222222-2222-4222-8222-333333333333';
+    setRows('owner', true);
+    mocks.rows.programme_hub_programmes = [programmeRow, secondProgrammeRow];
+    mocks.rows.programme_hub_participants = [participantRow, secondParticipantRow];
+    window.localStorage.setItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`, secondProgrammeId);
+    mocks.rows.workspace_members = [{ workspace_id: workspaceId, user_id: secondUserId, role: 'owner', status: 'active' }];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={secondUserId} />);
+    expect(await screen.findByLabelText('Choose a programme')).toHaveValue(programmeId);
+    expect(screen.getByText('Alex')).toBeVisible();
+    expect(screen.queryByText('Sam')).toBeNull();
+    expect(window.localStorage.getItem(`rev-programme-hub-selection:${workspaceId}:${secondUserId}`)).toBe(programmeId);
+  });
+
+  it('does not reuse a programme preference after the workspace changes', async () => {
+    const secondWorkspaceId = '11111111-1111-4111-8111-222222222222';
+    setRows('owner', true);
+    window.localStorage.setItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`, secondProgrammeId);
+    mocks.rows = Object.fromEntries(Object.entries(mocks.rows).map(([table, rows]) => [
+      table,
+      rows.map((row) => ({ ...row as Record<string, unknown>, workspace_id: secondWorkspaceId })),
+    ]));
+    render(<ProgrammeHubModule workspaceId={secondWorkspaceId} userId={ownerId} />);
+    expect(await screen.findByLabelText('Choose a programme')).toHaveValue(programmeId);
+    expect(window.localStorage.getItem(`rev-programme-hub-selection:${secondWorkspaceId}:${ownerId}`)).toBe(programmeId);
+    expect(window.localStorage.getItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`)).toBe(secondProgrammeId);
+  });
+
+  it('falls back safely when access to the stored programme has been revoked', async () => {
+    setRows('owner', true);
+    window.localStorage.setItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`, secondProgrammeId);
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    expect(await screen.findByLabelText('Choose a programme')).toHaveValue(programmeId);
+    expect(screen.getByText('Alex')).toBeVisible();
+    expect(screen.queryByText('Sam')).toBeNull();
+    expect(window.localStorage.getItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`)).toBe(programmeId);
   });
 
   it('shows programme-scoped notes newest first with server author and programme time', async () => {

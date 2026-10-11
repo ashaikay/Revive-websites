@@ -34,8 +34,30 @@ const blankEmployer = { employerKey: '', displayName: '', sectorKey: '', primary
 const blankContact = { employerId: '', contactKey: '', preferredName: '', roleTitle: '', businessEmail: '', businessPhone: '', suppressed: false, suppressionReasonKey: '', active: true };
 const blankVacancy = { employerId: '', employerContactId: '', vacancyKey: '', title: '', workGeographyKey: '', requiredSkillKeys: '', desiredSkillKeys: '', active: true };
 const blankParticipant = { participantKey: '', preferredName: '', caseReference: '', desiredRoleKeys: '', skillKeys: '', vacancySearchGeographyKeys: '', residencyEvidenceReference: '', active: true };
+const programmeSelectionKey = (workspaceId: string, userId: string) => `rev-programme-hub-selection:${workspaceId}:${userId}`;
+const programmeIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function storedProgrammeId(workspaceId: string, userId: string) {
+  try {
+    const value = window.localStorage.getItem(programmeSelectionKey(workspaceId, userId));
+    return value && programmeIdPattern.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeProgrammeId(workspaceId: string, userId: string, programmeId: string) {
+  try {
+    window.localStorage.setItem(programmeSelectionKey(workspaceId, userId), programmeId);
+  } catch {
+    // The authorised programme remains selected for this session when browser preference storage is unavailable.
+  }
+}
 
 export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: string; userId: string }) {
+  const identityKey = `${workspaceId}:${userId}`;
+  const identityRef = useRef(identityKey);
+  identityRef.current = identityKey;
   const [data, setData] = useState<ProgrammeHubData>(emptyData);
   const [selectedProgrammeId, setSelectedProgrammeId] = useState('');
   const [ready, setReady] = useState(false);
@@ -70,26 +92,51 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     },
   }), []);
 
-  const load = async () => {
+  const load = async (capturedIdentity = identityKey) => {
     const loaded = await loadProgrammeHubData(workspaceId, readGateway);
+    if (identityRef.current !== capturedIdentity) return;
     setData((current) => ({ ...loaded, participantNotes: current.participantNotes }));
-    setSelectedProgrammeId((current) => loaded.programmes.some((programme) => programme.id === current)
-      ? current
-      : loaded.programmes.find((programme) => programme.active)?.id ?? loaded.programmes[0]?.id ?? '');
+    setSelectedProgrammeId((current) => {
+      const currentAllowed = loaded.programmes.some((programme) => programme.id === current);
+      const restored = storedProgrammeId(workspaceId, userId);
+      const restoredAllowed = loaded.programmes.some((programme) => programme.id === restored);
+      const selected = currentAllowed
+        ? current
+        : restoredAllowed
+          ? restored as string
+          : loaded.programmes.find((programme) => programme.active)?.id ?? loaded.programmes[0]?.id ?? '';
+      if (selected) storeProgrammeId(workspaceId, userId, selected);
+      else {
+        try {
+          window.localStorage.removeItem(programmeSelectionKey(workspaceId, userId));
+        } catch {
+          // No authorised programme remains to restore.
+        }
+      }
+      return selected;
+    });
     setReady(true);
   };
 
   useEffect(() => {
     let active = true;
+    const capturedIdentity = identityKey;
     setReady(false);
+    setData(emptyData);
+    setSelectedProgrammeId('');
+    setNotesReady(false);
+    setNotesError('');
+    setNoteDrafts({});
     setError('');
     try {
       setPending(restoreProgrammeHubAttempt(window.sessionStorage, workspaceId, userId));
     } catch {
       setError('A retained Programme Hub save could not be read. Contact support before making another change.');
     }
-    void load().catch((loadError: unknown) => {
-      if (active) setError(loadError instanceof Error ? loadError.message : 'Programme Hub could not be loaded.');
+    void load(capturedIdentity).catch((loadError: unknown) => {
+      if (active && identityRef.current === capturedIdentity) {
+        setError(loadError instanceof Error ? loadError.message : 'Programme Hub could not be loaded.');
+      }
     });
     return () => { active = false; };
   }, [workspaceId, userId]);
@@ -225,6 +272,8 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const resetVacancy = () => { setVacancyEdit(null); setVacancyDraft({ ...blankVacancy, employerId: programmeEmployers[0]?.id ?? '' }); };
   const resetParticipant = () => { setParticipantEdit(null); setParticipantDraft(blankParticipant); };
   const selectProgramme = (programmeId: string) => {
+    if (!data.programmes.some((programme) => programme.id === programmeId)) return;
+    storeProgrammeId(workspaceId, userId, programmeId);
     setSelectedProgrammeId(programmeId);
     resetEmployer();
     setContactEdit(null);
@@ -379,10 +428,10 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
         </section>
       )}
 
-      {selectedProgramme && <section className="space-y-3" aria-labelledby="overview-heading">
-        <h2 id="overview-heading" className="text-xl font-semibold">Overview and setup</h2>
+      {selectedProgramme && isManager && <details className="card p-5">
+        <summary className="cursor-pointer font-semibold">Programme settings</summary>
         <ConfigurationState programme={selectedProgramme} data={data} />
-      </section>}
+      </details>}
 
       {selectedProgramme && isManager && (
         <section className="card p-5" aria-labelledby="adviser-heading">
@@ -512,10 +561,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
 
 function ConfigurationState({ programme, data }: { programme: ProgrammeHubProgramme; data: ProgrammeHubData }) {
   const missing = programmeNeedsReview(programme, data.contracts);
-  return <section className={`rounded-md border p-4 ${missing.length ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`} aria-label="Programme readiness">
-    <h2 className="font-semibold">{missing.length ? 'Needs review' : 'Configuration ready'}</h2>
-    {missing.length ? <p className="mt-1 text-sm text-amber-900">You can keep entering working records. Planned matching and adviser-approved outreach stay unavailable until these items are configured and reviewed: {missing.join(', ')}.</p> : <p className="mt-1 text-sm text-green-900">Required programme contracts are active. Matching and outreach are still planned features and are not enabled here.</p>}
-    <p className="mt-1 text-xs text-neutral-600">Matching postcode areas never prove participant residency or programme eligibility.</p>
+  return <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Programme settings status">
+    <h2 className="font-medium">Configuration status</h2>
+    {missing.length
+      ? <p className="mt-1 text-sm text-neutral-700">The following configuration is not available in this interface: {missing.join(', ')}. Features that depend on it remain unavailable.</p>
+      : <p className="mt-1 text-sm text-neutral-700">Required programme contracts are active. This does not enable matching, outreach sending or other unfinished features.</p>}
+    <p className="mt-2 text-xs text-neutral-600">Postcode or location overlap never proves participant residency or programme eligibility.</p>
   </section>;
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
