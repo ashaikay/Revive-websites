@@ -141,6 +141,72 @@ describe('Programme Hub employer discovery and engagement', () => {
     expect(await screen.findByText(`${candidate.name} was saved to West Midlands Employment Support for review.`)).toBeVisible();
   });
 
+  it('accepts comma-separated exclusion typing and submits the normalized search once', async () => {
+    mocks.invoke.mockImplementation(async (name: string, { body }: { body: Record<string, unknown> }) => {
+      if (name === 'rev-programme-employer-discovery' && body.action === 'status') return { data: { available: true, provider: 'Companies House' }, error: null };
+      if (name === 'rev-programme-employer-outreach-draft' && body.action === 'status') return { data: { available: false, model: null }, error: null };
+      if (name === 'rev-programme-employer-discovery' && body.action === 'search') {
+        return { data: { searchId, status: 'succeeded', results: [], errorCode: null, retrievedAt: candidate.retrievedAt }, error: null };
+      }
+      throw new Error(`Unexpected call ${name}`);
+    });
+    render(<ProgrammeEmployerEngagement {...props()} />);
+    const exclusions = await screen.findByLabelText(/Exclude employer-name terms/);
+    fireEvent.change(exclusions, { target: { value: 'barbering, beauty salons' } });
+    expect(exclusions).toHaveValue('barbering, beauty salons');
+    const search = screen.getByRole('button', { name: 'SEARCH COMPANIES HOUSE' });
+    fireEvent.click(search);
+    fireEvent.click(search);
+    await waitFor(() => expect(mocks.invoke.mock.calls.filter(([name, options]) =>
+      name === 'rev-programme-employer-discovery' && options.body.action === 'search')).toHaveLength(1));
+    expect(mocks.invoke).toHaveBeenCalledWith('rev-programme-employer-discovery', {
+      body: expect.objectContaining({ filters: expect.objectContaining({ excludeTerms: ['barbering', 'beauty salons'] }) }),
+    });
+  });
+
+  it('shows validation for an empty manual-history submission without retaining a request', async () => {
+    render(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
+    const history = (await screen.findByRole('heading', { name: 'Record engagement history' })).closest('form');
+    if (!history) throw new Error('Engagement history form missing');
+    fireEvent.click(within(history).getByRole('button', { name: 'ADD MANUAL HISTORY' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Describe what happened before adding engagement history.');
+    expect(mocks.invoke.mock.calls.filter(([name]) => name === 'rev-programme-employer-engagement-save')).toHaveLength(0);
+    expect(window.sessionStorage.getItem(`rev-programme-employer-save:${workspaceId}:${userId}:${programmeId}`)).toBeNull();
+  });
+
+  it('retains and retries the exact engagement plan after an unconfirmed save', async () => {
+    mocks.invoke.mockImplementationOnce(async (name: string, { body }: { body: Record<string, unknown> }) => {
+      if (name === 'rev-programme-employer-discovery' && body.action === 'status') return { data: { available: true, provider: 'Companies House' }, error: null };
+      throw new Error(`Unexpected initial call ${name}`);
+    });
+    const originalImplementation = mocks.invoke.getMockImplementation();
+    render(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
+    await screen.findByRole('heading', { name: 'Employer engagement workspace' });
+    mocks.invoke.mockImplementation(async (name: string, { body }: { body: Record<string, unknown> }) => {
+      if (name === 'rev-programme-employer-engagement-save') {
+        return { data: null, error: { context: new Response(JSON.stringify({ error: 'denied' }), { status: 409 }) } };
+      }
+      return originalImplementation?.(name, { body });
+    });
+    const plan = screen.getByRole('button', { name: 'SAVE ENGAGEMENT PLAN' }).closest('form');
+    if (!plan) throw new Error('Engagement plan form missing');
+    fireEvent.change(within(plan).getByLabelText('Next action'), { target: { value: 'Call the employer on Friday' } });
+    fireEvent.click(within(plan).getByRole('button', { name: 'SAVE ENGAGEMENT PLAN' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('save not confirmed');
+    const firstSave = mocks.invoke.mock.calls.find(([name]) => name === 'rev-programme-employer-engagement-save')?.[1].body;
+    expect(firstSave).toBeTruthy();
+    mocks.invoke.mockImplementation(async (name: string, { body }: { body: Record<string, unknown> }) => {
+      if (name === 'rev-programme-employer-engagement-save') return { data: { operation: body.operation, recordId: employerId, workspaceId, programmeId, version: 1, duplicate: false }, error: null };
+      if (name === 'rev-programme-employer-discovery' && body.action === 'status') return { data: { available: true, provider: 'Companies House' }, error: null };
+      if (name === 'rev-programme-employer-outreach-draft' && body.action === 'status') return { data: { available: false, model: null }, error: null };
+      throw new Error(`Unexpected call ${name}`);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry exact saved change' }));
+    await waitFor(() => expect(mocks.invoke.mock.calls.filter(([name]) => name === 'rev-programme-employer-engagement-save')).toHaveLength(2));
+    const secondSave = mocks.invoke.mock.calls.filter(([name]) => name === 'rev-programme-employer-engagement-save')[1][1].body;
+    expect(secondSave).toEqual(firstSave);
+  });
+
   it('drops a late search response after programme switching', async () => {
     let resolveSearch!: (value: unknown) => void;
     const deferred = new Promise((resolve) => { resolveSearch = resolve; });

@@ -172,6 +172,53 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`)).toBeNull();
   });
 
+  it('shows persistent validation and keeps entered contact fields when required data is missing', async () => {
+    setRows('owner');
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const section = (await screen.findByRole('heading', { name: 'Employer contacts' })).closest('section');
+    if (!section) throw new Error('Employer contact section missing');
+    const contactName = within(section).getByLabelText('Preferred name');
+    fireEvent.change(contactName, { target: { value: 'Taylor Contact' } });
+    fireEvent.click(within(section).getByRole('button', { name: 'Add record' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter an employer before saving.');
+    expect(contactName).toHaveValue('Taylor Contact');
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('prevents duplicate submissions while a trusted save is pending', async () => {
+    setRows('owner');
+    let resolveSave!: (value: unknown) => void;
+    mocks.invoke.mockImplementation(() => new Promise((resolve) => { resolveSave = resolve; }));
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const section = (await screen.findByRole('heading', { name: 'Employers' })).closest('section');
+    if (!section) throw new Error('Employer section missing');
+    fireEvent.change(within(section).getByLabelText('Employer reference (for example, EMP-001)'), { target: { value: 'EMP-003' } });
+    fireEvent.change(within(section).getByLabelText('Employer name'), { target: { value: 'Single Save Employer' } });
+    const add = within(section).getByRole('button', { name: 'Add record' });
+    fireEvent.click(add);
+    fireEvent.click(add);
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('Saving this Programme Hub change. Please wait.')).toBeVisible();
+    resolveSave({ data: { operation: 'employer', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
+    expect(await screen.findByText('Employer created.')).toBeVisible();
+  });
+
+  it('shows a denied save and preserves the submitted form values', async () => {
+    setRows('owner');
+    mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('denied') });
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const section = (await screen.findByRole('heading', { name: 'Employers' })).closest('section');
+    if (!section) throw new Error('Employer section missing');
+    const reference = within(section).getByLabelText('Employer reference (for example, EMP-001)');
+    const name = within(section).getByLabelText('Employer name');
+    fireEvent.change(reference, { target: { value: 'EMP-DENIED' } });
+    fireEvent.change(name, { target: { value: 'Denied Employer' } });
+    fireEvent.click(within(section).getByRole('button', { name: 'Add record' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save not confirmed');
+    expect(reference).toHaveValue('EMP-DENIED');
+    expect(name).toHaveValue('Denied Employer');
+  });
+
   it('retains an unconfirmed save and blocks a different change until exact retry', async () => {
     setRows('owner');
     mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('network unavailable') });

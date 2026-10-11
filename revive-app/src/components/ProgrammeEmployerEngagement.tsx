@@ -78,6 +78,7 @@ export function ProgrammeEmployerEngagement({
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [discoveryAvailability, setDiscoveryAvailability] = useState<{ available: boolean; provider: 'Companies House' } | null>(null);
   const [outreachAvailability, setOutreachAvailability] = useState<{ available: boolean; model: string | null } | null>(null);
   const [filters, setFilters] = useState<EmployerDiscoveryFilters>({
@@ -85,6 +86,7 @@ export function ProgrammeEmployerEngagement({
     sectors: [...defaultEmployerDiscoverySectors],
     excludeTerms: [...defaultEmployerDiscoveryExclusions],
   });
+  const [excludeTermsInput, setExcludeTermsInput] = useState(defaultEmployerDiscoveryExclusions.join(', '));
   const [results, setResults] = useState<EmployerDiscoveryResult[]>([]);
   const [pendingSearch, setPendingSearch] = useState<EmployerDiscoveryAttempt | null>(null);
   const [pendingSave, setPendingSave] = useState<EmployerEngagementSaveAttempt | null>(null);
@@ -174,7 +176,8 @@ export function ProgrammeEmployerEngagement({
   }, [employers]);
 
   const retainAndSave = async (attempt: EmployerEngagementSaveAttempt, success: string) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     const captured = contextKey;
     setBusy(true);
     setError('');
@@ -192,12 +195,14 @@ export function ProgrammeEmployerEngagement({
     } catch (saveError) {
       if (contextRef.current === captured) setError(saveError instanceof Error ? saveError.message : 'Employer engagement save not confirmed.');
     } finally {
+      busyRef.current = false;
       if (contextRef.current === contextKey) setBusy(false);
     }
   };
 
   const runSearch = async (attempt: EmployerDiscoveryAttempt) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     const captured = contextKey;
     setBusy(true);
     setError('');
@@ -215,12 +220,14 @@ export function ProgrammeEmployerEngagement({
     } catch (searchError) {
       if (contextRef.current === captured) setError(searchError instanceof Error ? searchError.message : 'Employer discovery outcome is unconfirmed.');
     } finally {
+      busyRef.current = false;
       if (contextRef.current === contextKey) setBusy(false);
     }
   };
 
   const runDraft = async (attempt: EmployerOutreachAttempt) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     const captured = contextKey;
     setBusy(true);
     setError('');
@@ -238,6 +245,7 @@ export function ProgrammeEmployerEngagement({
     } catch (draftError) {
       if (contextRef.current === captured) setError(draftError instanceof Error ? draftError.message : 'Outreach draft outcome is unconfirmed.');
     } finally {
+      busyRef.current = false;
       if (contextRef.current === contextKey) setBusy(false);
     }
   };
@@ -266,9 +274,18 @@ export function ProgrammeEmployerEngagement({
 
   if (!canMaintain) return <p className="text-sm text-neutral-600">Employer discovery and engagement are available only to authorised Employment Specialists and programme managers.</p>;
 
+  const invalid = (message: string) => {
+    setMessage('');
+    setError(message);
+  };
+  const unavailableReason = pendingSearch || pendingSave || pendingDraft
+    ? 'Controls are paused until the exact retained request is retried.'
+    : busy ? 'The current request is still being confirmed.' : '';
+
   return <div className="space-y-5" aria-label="Employer discovery and engagement">
     {error && <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900">{error}</div>}
     {message && <div role="status" className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-900">{message}</div>}
+    {busy && <div role="status" className="rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">Confirming this employer engagement request. Please wait.</div>}
     {(pendingSearch || pendingSave || pendingDraft) && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
       <p>An earlier request is not confirmed. Other changes are paused until the exact retained request is retried.</p>
       {pendingSearch && <button className="btn-secondary mt-2" disabled={busy} onClick={() => void runSearch(pendingSearch)}>Retry exact employer search</button>}
@@ -283,12 +300,22 @@ export function ProgrammeEmployerEngagement({
       {discoveryAvailability && !discoveryAvailability.available && <div role="status" className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
         Employer discovery is unavailable. Configure a server-side <code>COMPANIES_HOUSE_API_KEY</code> and set <code>REV_PROGRAMME_EMPLOYER_DISCOVERY_ENABLED=true</code>. Manual employer entry remains available below.
       </div>}
-      <form className="mt-3 space-y-3" onSubmit={(event) => {
+      <form className="mt-3 space-y-3" noValidate onSubmit={(event) => {
         event.preventDefault();
-        void runSearch({ workspaceId, programmeId: programme.id, requestId: crypto.randomUUID(), filters });
+        const location = filters.location.trim();
+        const excludeTerms = split(excludeTermsInput);
+        if (location.length < 2 || location.length > 120) {
+          invalid('Enter a search geography between 2 and 120 characters.');
+          return;
+        }
+        if (filters.sectors.length === 0) {
+          invalid('Choose at least one employer sector before searching.');
+          return;
+        }
+        void runSearch({ workspaceId, programmeId: programme.id, requestId: crypto.randomUUID(), filters: { ...filters, location, excludeTerms } });
       }}>
         <label className="block text-sm font-medium">Search geography
-          <input className={fieldClass} value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })} disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} />
+          <input required minLength={2} maxLength={120} className={fieldClass} value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })} disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} />
         </label>
         <fieldset className="grid gap-2 md:grid-cols-2"><legend className="text-sm font-medium">Employer sectors</legend>
           {employerDiscoverySectors.map(([key, label]) => <label key={key} className="flex gap-2 text-sm">
@@ -298,10 +325,11 @@ export function ProgrammeEmployerEngagement({
           </label>)}
         </fieldset>
         <label className="block text-sm font-medium">Exclude employer-name terms
-          <input className={fieldClass} value={filters.excludeTerms.join(', ')} onChange={(event) => setFilters({ ...filters, excludeTerms: split(event.target.value) })} disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} />
+          <input className={fieldClass} value={excludeTermsInput} onChange={(event) => setExcludeTermsInput(event.target.value)} disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} />
           <span className="block text-xs text-neutral-600">Editable pilot default: barbering.</span>
         </label>
         <button className="btn-primary" disabled={busy || !discoveryAvailability?.available || filters.sectors.length === 0 || !!pendingSearch || !!pendingSave || !!pendingDraft}>SEARCH COMPANIES HOUSE</button>
+        {unavailableReason && <p className="text-sm text-amber-800">{unavailableReason}</p>}
       </form>
       {!ready && <p className="mt-3 text-sm">Loading employer discovery…</p>}
       {ready && results.length === 0 && <p className="mt-3 text-sm text-neutral-600">No discovery results are ready for review. Manual employer entry remains available.</p>}
@@ -317,11 +345,18 @@ export function ProgrammeEmployerEngagement({
           </li>)}</ul>
           {duplicate && <p className={`mt-2 text-sm ${duplicate.reliable ? 'text-green-800' : 'text-amber-800'}`}>{duplicate.label}</p>}
           <button className="btn-secondary mt-2" disabled={busy || duplicate?.reliable || !!pendingSearch || !!pendingSave || !!pendingDraft}
-            onClick={() => void retainAndSave({
+            onClick={() => {
+              const searchId = data.searches.find((search) => search.results?.some((item) => item.sourceIdentity === candidate.sourceIdentity))?.searchId;
+              if (!searchId) {
+                invalid('This discovery result is no longer linked to a confirmed search. Run the search again before saving.');
+                return;
+              }
+              void retainAndSave({
               operation: 'discovery_employer', workspaceId, programmeId: programme.id, recordId: null,
               requestId: crypto.randomUUID(), expectedVersion: 0,
-              payload: { searchId: data.searches.find((search) => search.results?.some((item) => item.sourceIdentity === candidate.sourceIdentity))?.searchId, sourceIdentity: candidate.sourceIdentity },
-            }, `${candidate.name} was saved to ${programme.name} for review.`)}>SAVE EMPLOYER TO PROGRAMME</button>
+              payload: { searchId, sourceIdentity: candidate.sourceIdentity },
+            }, `${candidate.name} was saved to ${programme.name} for review.`);
+            }}>SAVE EMPLOYER TO PROGRAMME</button>
         </article>;
       })}</div>
       <p className="mt-3 text-xs text-neutral-600">Contains public sector information licensed under the Open Government Licence v3.0.</p>
@@ -342,7 +377,7 @@ export function ProgrammeEmployerEngagement({
             <h5 className="mt-2 font-medium">Employer contacts</h5>
             {selectedContacts.length ? <ul className="text-sm">{selectedContacts.map((contact) => <li key={contact.id}>{contact.preferredName}{contact.roleTitle ? ` — ${contact.roleTitle}` : ''}{contact.suppressed ? ' — Suppressed' : ''}</li>)}</ul> : <p className="text-sm text-neutral-600">No employer contacts recorded.</p>}
           </div>
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={(event: FormEvent) => {
+          <form className="grid gap-3 md:grid-cols-2" noValidate onSubmit={(event: FormEvent) => {
             event.preventDefault();
             void retainAndSave({
               operation: 'engagement', workspaceId, programmeId: programme.id,
@@ -357,8 +392,12 @@ export function ProgrammeEmployerEngagement({
             <label className="text-sm font-medium">Follow-up date<input type="date" className={fieldClass} value={engagementDraft.followUpDate} onChange={(event) => setEngagementDraft({ ...engagementDraft, followUpDate: event.target.value })} /></label>
             <button className="btn-primary md:col-span-2" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>SAVE ENGAGEMENT PLAN</button>
           </form>
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={(event) => {
+          <form className="grid gap-3 md:grid-cols-2" noValidate onSubmit={(event) => {
             event.preventDefault();
+            if (!historyDraft.summary.trim()) {
+              invalid('Describe what happened before adding engagement history.');
+              return;
+            }
             void retainAndSave({
               operation: 'engagement_event', workspaceId, programmeId: programme.id, recordId: null,
               requestId: crypto.randomUUID(), expectedVersion: 0,
@@ -381,8 +420,12 @@ export function ProgrammeEmployerEngagement({
       <h3 id="prepare-outreach-heading" className="text-lg font-semibold">Prepare employer outreach</h3>
       <p className="mt-1 font-medium">Prepared — not sent</p>
       <p className="text-sm text-neutral-600">Drafts use saved employer evidence and the programme offer. They contain no Service user information and require Employment Specialist review.</p>
-      {isManager && <form className="mt-3 space-y-2" onSubmit={(event) => {
+      {isManager && <form className="mt-3 space-y-2" noValidate onSubmit={(event) => {
         event.preventDefault();
+        if (offerSummary.trim().length < 20) {
+          invalid('Enter a programme offer of at least 20 characters before saving.');
+          return;
+        }
         void retainAndSave({
           operation: 'outreach_settings', workspaceId, programmeId: programme.id,
           recordId: data.settings?.id ?? null, requestId: crypto.randomUUID(),
@@ -408,8 +451,12 @@ export function ProgrammeEmployerEngagement({
             });
           }}>PREPARE DRAFT FOR REVIEW</button>
         {(!data.settings || !programme.brandingName || !programme.senderDisplayName || !programme.senderReplyTo || !selectedEmployer.sourceEvidence) && <p className="text-sm text-amber-800">Draft preparation needs the programme offer, branding, sender identity and verified employer source evidence.</p>}
-        {draftEdit.draftId ? <form className="space-y-2" onSubmit={(event) => {
+        {draftEdit.draftId ? <form className="space-y-2" noValidate onSubmit={(event) => {
           event.preventDefault();
+          if (!draftEdit.subject.trim() || draftEdit.body.trim().length < 20) {
+            invalid('Enter a subject and an email body of at least 20 characters before saving the reviewed draft.');
+            return;
+          }
           void retainAndSave({
             operation: 'draft_revision', workspaceId, programmeId: programme.id,
             recordId: draftEdit.draftId, requestId: crypto.randomUUID(), expectedVersion: draftEdit.revision,
@@ -417,8 +464,8 @@ export function ProgrammeEmployerEngagement({
           }, 'Outreach draft revision saved. Nothing was sent.');
         }}>
           <p className="rounded border border-blue-300 bg-blue-50 p-2 text-sm"><strong>Prepared — not sent.</strong> Review and edit before any separately authorised future sending workflow.</p>
-          <label className="block text-sm font-medium">Subject<input className={fieldClass} value={draftEdit.subject} onChange={(event) => setDraftEdit({ ...draftEdit, subject: event.target.value })} /></label>
-          <label className="block text-sm font-medium">Email body<textarea className={fieldClass} rows={9} value={draftEdit.body} onChange={(event) => setDraftEdit({ ...draftEdit, body: event.target.value })} /></label>
+          <label className="block text-sm font-medium">Subject<input required maxLength={200} className={fieldClass} value={draftEdit.subject} onChange={(event) => setDraftEdit({ ...draftEdit, subject: event.target.value })} /></label>
+          <label className="block text-sm font-medium">Email body<textarea required minLength={20} maxLength={5000} className={fieldClass} rows={9} value={draftEdit.body} onChange={(event) => setDraftEdit({ ...draftEdit, body: event.target.value })} /></label>
           <button className="btn-secondary" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>SAVE REVIEWED DRAFT</button>
         </form> : <p className="text-sm text-neutral-600">No outreach draft has been prepared for this employer.</p>}
       </div>}
