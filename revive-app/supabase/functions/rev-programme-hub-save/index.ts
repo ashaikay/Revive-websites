@@ -39,7 +39,17 @@ Deno.serve((request) => handleProgrammeHubSave(request, {
           target_participant_id: input.target_payload.participantId,
           note_body: input.target_payload.body,
         })
-      : await service.rpc('save_rev_programme_hub_record', input);
+      : input.target_operation === 'participant_contact'
+        ? await service.rpc('save_rev_programme_hub_participant_contact', {
+            target_workspace_id: input.target_workspace_id,
+            initiating_user_id: input.initiating_user_id,
+            target_request_id: input.target_request_id,
+            target_programme_id: input.target_programme_id,
+            target_record_id: input.target_record_id,
+            expected_version: input.expected_version,
+            target_payload: input.target_payload,
+          })
+        : await service.rpc('save_rev_programme_hub_record', input);
     if (error) {
       const failure = classifyProgrammeHubDatabaseError(input.target_operation, error);
       console.error('programme_hub_save_rpc_rejected', JSON.stringify({

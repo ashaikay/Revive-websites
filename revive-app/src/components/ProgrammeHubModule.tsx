@@ -11,6 +11,8 @@ import type {
   ProgrammeHubVacancy,
 } from '@/domain/programmeHub';
 import { programmeNeedsReview } from '@/domain/programmeHub';
+import { ParticipantContactDetails } from '@/components/ParticipantContactDetails';
+import type { ParticipantContactDraft, ParticipantContactRecord } from '@/services/programmeParticipantContacts';
 import { ProgrammeEmployerEngagement } from '@/components/ProgrammeEmployerEngagement';
 import {
   clearProgrammeHubAttempt,
@@ -85,6 +87,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [notesReady, setNotesReady] = useState(false);
   const [notesError, setNotesError] = useState('');
+  const [contactRefreshKeys, setContactRefreshKeys] = useState<Record<string, number>>({});
 
   const readGateway = useMemo(() => ({
     read: async (table: string, columns: string, ws: string) => {
@@ -130,6 +133,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setNotesReady(false);
     setNotesError('');
     setNoteDrafts({});
+    setContactRefreshKeys({});
     setCaseloadSearch('');
     setOpenRecordRequest(null);
     setError('');
@@ -278,7 +282,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     if (!pending) return;
     const retained = pending;
     void saveAttempt(retained, 'The retained Programme Hub change was confirmed.').then(async (confirmed) => {
-      if (!confirmed || retained.operation !== 'participant_note') return;
+      if (!confirmed) return;
+      if (retained.operation === 'participant_contact' && typeof retained.payload.participantId === 'string') {
+        const participantId = retained.payload.participantId;
+        setContactRefreshKeys((current) => ({ ...current, [participantId]: (current[participantId] ?? 0) + 1 }));
+      }
+      if (retained.operation !== 'participant_note') return;
       const participantId = retained.payload.participantId;
       if (typeof participantId === 'string') {
         setNoteDrafts((current) => ({ ...current, [participantId]: '' }));
@@ -315,6 +324,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setAssignmentParticipantId('');
     setAssignmentAdviserId('');
     setNoteDrafts({});
+    setContactRefreshKeys({});
     setCaseloadSearch('');
     setOpenRecordRequest(null);
     setMessage('');
@@ -378,6 +388,10 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       participantEdit ? 'Participant employment profile updated.' : 'Participant employment profile created.',
     ).then((confirmed) => { if (confirmed) resetParticipant(); });
   };
+  const saveParticipantContact = (participant: ProgrammeHubParticipant, record: ParticipantContactRecord | null, draft: ParticipantContactDraft) => {
+    if (!selectedProgramme || participant.programmeId !== selectedProgramme.id || participant.workspaceId !== workspaceId) return Promise.resolve(false);
+    return saveAttempt(attempt('participant_contact', selectedProgramme.id, record?.id ?? null, record?.version ?? 0, { participantId: participant.id, ...draft }), 'Contact details saved.');
+  };
   const saveParticipantNote = (participant: ProgrammeHubParticipant) => {
     if (!selectedProgramme) return;
     const body = noteDrafts[participant.id]?.trim() ?? '';
@@ -424,7 +438,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const localFeedbackAvailable = feedbackTarget === 'programme' ? isManager
     : feedbackTarget === 'adviser' || feedbackTarget === 'participant_adviser' ? !!selectedProgramme && isManager
     : feedbackTarget === 'participant' ? !!selectedProgramme && (isManager || !!participantEdit)
-    : feedbackTarget.startsWith('participant_note:') ? programmeParticipants.some((participant) => feedbackTarget === `participant_note:${participant.id}`)
+    : (feedbackTarget.startsWith('participant_note:') || feedbackTarget.startsWith('participant_contact:')) ? programmeParticipants.some((participant) => feedbackTarget === `participant_note:${participant.id}` || feedbackTarget === `participant_contact:${participant.id}`)
     : !!selectedProgramme && canMaintainEmployerRecords;
 
   if (!ready && !error) return <main className="p-8 text-neutral-600">Loading Outcomes / Programme Hub...</main>;
@@ -610,7 +624,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
           <Field label="Residency evidence reference"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.residencyEvidenceReference} onChange={(event) => setParticipantDraft({ ...participantDraft, residencyEvidenceReference: event.target.value })} /></Field>
           <FormActions editing={!!participantEdit} saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />
         {renderSaveFeedback('participant')}</form>}>
-          {programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 0} openRecord={() => openParticipantRecord(participant)} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}
+          {programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 0} openRecord={() => openParticipantRecord(participant)} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}
         </RecordSection>
       )}
 
@@ -618,7 +632,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
         <section className="card p-5">
           <h2 className="text-xl font-semibold">My assigned Service users</h2>
           <label className="mt-3 block text-sm font-medium">Search Service users<input className={`${inputClass} mt-1`} disabled={busy || !!pending} value={caseloadSearch} onChange={(event) => setCaseloadSearch(event.target.value)} placeholder="Name or case reference" /></label>
-          <div className="mt-3 space-y-3">{visibleCaseload.map((participant) => <ParticipantRecord key={participant.id} participant={participant} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 0} openRecord={() => openParticipantRecord(participant)} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}</div>
+          <div className="mt-3 space-y-3">{visibleCaseload.map((participant) => <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 0} openRecord={() => openParticipantRecord(participant)} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}</div>
           {programmeParticipants.length === 0 && <p className="mt-3 text-sm text-neutral-600">No Service users are currently assigned to your caseload in this programme.</p>}
           {programmeParticipants.length > 0 && visibleCaseload.length === 0 && <p className="mt-3 text-sm text-neutral-600">No Service users match this search.</p>}
           {participantEdit && <form className="mt-4 grid gap-3 md:grid-cols-2" data-save-target="participant" noValidate onSubmit={saveParticipant}><Field label="Preferred name"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field><Field label="Desired roles"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field><Field label="Employment skills"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field><Field label="Vacancy search areas"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field><FormActions editing saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />{renderSaveFeedback('participant')}</form>}
@@ -663,7 +677,7 @@ function FormActions({ editing, busy, saving, cancel }: { editing: boolean; busy
   return <div className="flex items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy}>{saving ? 'Saving...' : editing ? 'Save changes' : 'Add record'}</button>{editing && <button type="button" disabled={busy} className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={cancel}>Cancel</button>}</div>;
 }
 function saveTarget(attempt: ProgrammeHubSaveAttempt) {
-  return attempt.operation === 'participant_note' ? `participant_note:${attempt.payload.participantId}` : attempt.operation;
+  return attempt.operation === 'participant_note' || attempt.operation === 'participant_contact' ? `${attempt.operation}:${attempt.payload.participantId}` : attempt.operation;
 }
 function SaveFeedback({ busy, error, message, pending, retry }: { busy: boolean; error: string; message: string; pending: boolean; retry: () => void }) {
   return <div className="col-span-full mt-2" aria-live="polite" aria-atomic="true">
@@ -717,9 +731,10 @@ function formatProgrammeDate(value: string, timeZone: string) {
 }
 
 function ParticipantRecord({
-  participant, openRequest, openRecord, notes, programme, data, userId, noteDraft, notesReady, notesError, busy, saving, feedback, keepNotesOpen, edit, setNote, saveNote,
+  participant, contactDetails, openRequest, openRecord, notes, programme, data, userId, noteDraft, notesReady, notesError, busy, saving, feedback, keepNotesOpen, edit, setNote, saveNote,
 }: {
   participant: ProgrammeHubParticipant;
+  contactDetails: (openRequest: number) => React.ReactNode;
   openRequest: number;
   openRecord: () => void;
   notes: ProgrammeHubParticipantNote[];
@@ -768,6 +783,7 @@ function ParticipantRecord({
         ['Record status', participant.active ? 'Active' : 'Inactive'],
       ]} />
     </details>
+    {contactDetails(openRequest)}
     <details className="mt-4 border-t border-neutral-200 pt-4" open={notesDisclosureOpen} onToggle={(event) => { if (!event.currentTarget.open && (noteDraft.trim() || keepNotesOpen)) event.currentTarget.open = true; setNotesOpen(event.currentTarget.open); }}>
       <summary className="cursor-pointer font-medium">Case notes ({notesError ? 'could not load' : !notesReady ? 'loading' : notes.length}){!notesError && notesReady && notes[0] ? ` · Latest: ${formatProgrammeDate(notes[0].createdAt, programme.timezone)}` : ''}</summary>
       <p className="mt-1 text-xs text-neutral-600">Record employment-support facts, agreed actions and relevant progress. Avoid diagnoses and unnecessary sensitive details.</p>

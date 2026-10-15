@@ -6,7 +6,8 @@ export type ProgrammeHubOperation =
   | 'vacancy'
   | 'participant'
   | 'participant_adviser'
-  | 'participant_note';
+  | 'participant_note'
+  | 'participant_contact';
 
 export interface ProgrammeHubSaveInput {
   target_operation: ProgrammeHubOperation;
@@ -29,6 +30,7 @@ export interface ProgrammeHubDependencies {
 export type ProgrammeHubSaveErrorCode =
   | 'workspace_access_denied'
   | 'programme_manager_required'
+  | 'participant_contact_changed'
   | 'participant_unavailable'
   | 'active_adviser_required'
   | 'caseload_assignment_exists'
@@ -55,7 +57,9 @@ export function classifyProgrammeHubDatabaseError(
 ): ProgrammeHubSaveFailure {
   const code = typeof error.code === 'string' ? error.code : '';
   const message = typeof error.message === 'string' ? error.message : '';
+  if (code === '42501') return new ProgrammeHubSaveFailure(403, 'workspace_access_denied');
   if (message.includes('Programme manager required')) return new ProgrammeHubSaveFailure(403, 'programme_manager_required');
+  if (message.includes('Participant contact unavailable or changed')) return new ProgrammeHubSaveFailure(409, 'participant_contact_changed');
   if (message.includes('Participant unavailable')) return new ProgrammeHubSaveFailure(409, 'participant_unavailable');
   if (message.includes('Active adviser required')) return new ProgrammeHubSaveFailure(409, 'active_adviser_required');
   if (message.includes('Caseload assignment unavailable or changed')) return new ProgrammeHubSaveFailure(409, 'caseload_assignment_changed');
@@ -68,7 +72,7 @@ export function classifyProgrammeHubDatabaseError(
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const operations: ProgrammeHubOperation[] = ['programme', 'adviser', 'employer', 'contact', 'vacancy', 'participant', 'participant_adviser', 'participant_note'];
+const operations: ProgrammeHubOperation[] = ['programme', 'adviser', 'employer', 'contact', 'vacancy', 'participant', 'participant_adviser', 'participant_note', 'participant_contact'];
 const validId = (value: unknown): value is string => typeof value === 'string' && uuid.test(value);
 const text = (value: unknown, max: number, optional = false): value is string =>
   typeof value === 'string' && ((optional && value === '') || (value.length >= 1 && value.length <= max && value.trim() === value));
@@ -113,6 +117,13 @@ function validPayload(operation: ProgrammeHubOperation, payload: unknown): paylo
     case 'participant_adviser':
       return exact(value, ['participantId', 'adviserUserId', 'active']) &&
         validId(value.participantId) && validId(value.adviserUserId) && typeof value.active === 'boolean';
+    case 'participant_contact':
+      return exact(value, ['participantId','phone','email','addressLine1','addressLine2','town','postcode']) &&
+        validId(value.participantId) &&
+        [['phone',40],['email',320],['addressLine1',200],['addressLine2',200],['town',120],['postcode',8]].every(([key,max]) =>
+          text(value[key as string], max as number, true) && !/[\u0000-\u001f\u007f]/.test(value[key as string] as string)) &&
+        (value.email === '' || email.test(value.email as string)) &&
+        (value.postcode === '' || /^(?:[A-Z]{1,2}[0-9][A-Z0-9]?|GIR) [0-9][A-Z]{2}$/.test(value.postcode as string));
     case 'participant_note':
       return exact(value, ['participantId', 'body']) &&
         validId(value.participantId) && text(value.body, 2000);

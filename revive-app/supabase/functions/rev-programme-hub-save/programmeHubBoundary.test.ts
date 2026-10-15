@@ -226,3 +226,46 @@ test('rejects participant note author timestamps, blank notes and correction att
   assert.equal((await handleProgrammeHubSave(request({ ...body, payload: { ...body.payload, body: ' ' } }), dependencies())).status, 400);
   assert.equal((await handleProgrammeHubSave(request({ ...body, recordId, expectedVersion: 1 }), dependencies())).status, 400);
 });
+
+
+const contactBody = {
+  ...programmeBody, operation: 'participant_contact', programmeId,
+  payload: { participantId: recordId, phone: '0121 555 0100', email: 'alex@example.test', addressLine1: '1 Test Road', addressLine2: '', town: 'Birmingham', postcode: 'B1 1AA' },
+};
+test('binds contact writes to the authenticated actor and preserves the exact versioned payload', async () => {
+  let captured: ProgrammeHubSaveInput | undefined;
+  const response = await handleProgrammeHubSave(request(contactBody), dependencies(async (input) => {
+    captured = input;
+    return { operation: input.target_operation, record_id: recordId, workspace_id: workspaceId, programme_id: programmeId, version: 1 };
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(captured, { target_operation: 'participant_contact', target_workspace_id: workspaceId, initiating_user_id: userId, target_request_id: requestId, target_programme_id: programmeId, target_record_id: null, expected_version: 0, target_payload: contactBody.payload });
+});
+test('rejects invalid contact details and invented authorship before calling the trusted write', async () => {
+  for (const payload of [
+    { ...contactBody.payload, postcode: 'not-a-postcode' },
+    { ...contactBody.payload, email: 'not-an-email' },
+    { ...contactBody.payload, phone: 'x'.repeat(41) },
+    { ...contactBody.payload, addressLine1: 'two\nlines' },
+    { ...contactBody.payload, createdByUserId: userId },
+    { ...contactBody.payload, offence: 'unrestricted field' },
+  ]) {
+    let called = false;
+    const response = await handleProgrammeHubSave(request({ ...contactBody, payload }), dependencies(async () => { called = true; return {}; }));
+    assert.equal(response.status, 400); assert.equal(called, false);
+  }
+});
+test('allows optional contact fields to be cleared without deleting the record', async () => {
+  const response = await handleProgrammeHubSave(request({ ...contactBody, recordId, expectedVersion: 2, payload: { participantId: recordId, phone: '', email: '', addressLine1: '', addressLine2: '', town: '', postcode: '' } }), dependencies());
+  assert.equal(response.status, 200);
+});
+test('classifies database contact authority refusal as definitive without exposing data', () => {
+  const failure = classifyProgrammeHubDatabaseError('participant_contact', { code: '42501', message: 'Private details must not be returned' });
+  assert.equal(failure.status, 403); assert.equal(failure.errorCode, 'workspace_access_denied');
+  assert(!failure.message.includes('Private'));
+});
+
+test('identifies a stale contact edit as a definitive version conflict', () => {
+  const failure = classifyProgrammeHubDatabaseError('participant_contact', { code: 'P0001', message: 'Participant contact unavailable or changed' });
+  assert.equal(failure.status, 409); assert.equal(failure.errorCode, 'participant_contact_changed');
+});

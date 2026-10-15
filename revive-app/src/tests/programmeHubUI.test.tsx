@@ -15,6 +15,7 @@ const savedId = '66666666-6666-4666-8666-666666666666';
 const mocks = vi.hoisted(() => ({
   rows: {} as Record<string, unknown[]>,
   notesReadFails: false,
+  contactReadFails: false,
   selections: {} as Record<string, string>,
   invoke: vi.fn(),
   discoveryStatus: vi.fn(),
@@ -27,7 +28,7 @@ vi.mock('@/data/supabaseClient', () => ({
       const filters: Array<[string, unknown]> = [];
       const result = () => ({
         data: (mocks.rows[table] ?? []).filter((row) => filters.every(([column, value]) => (row as Record<string, unknown>)[column] === value)),
-        error: mocks.notesReadFails && table === 'programme_hub_participant_notes' ? new Error('read unavailable') : null,
+        error: (mocks.notesReadFails && table === 'programme_hub_participant_notes') || (mocks.contactReadFails && table === 'programme_hub_participant_contacts') ? new Error('read unavailable') : null,
       });
       const query = {
         select: (columns: string) => { mocks.selections[table] = columns; return query; },
@@ -101,6 +102,7 @@ const setRows = (role: 'owner' | 'member', includeParticipant = false) => {
     programme_hub_participants: includeParticipant ? [participantRow] : [],
     programme_hub_participant_advisers: includeParticipant ? [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, adviser_user_id: adviserId, active: true, version: 1 }] : [],
     programme_hub_participant_notes: [],
+    programme_hub_participant_contacts: [],
     programme_hub_employer_discovery_searches: [],
     programme_hub_outreach_settings: [],
     programme_hub_employer_engagements: [],
@@ -115,6 +117,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   window.localStorage.clear();
   mocks.notesReadFails = false;
+  mocks.contactReadFails = false;
   mocks.selections = {};
   mocks.invoke.mockReset();
   mocks.discoveryStatus.mockReset().mockResolvedValue({ data: { available: false, provider: 'Companies House' }, error: null });
@@ -738,6 +741,106 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.queryByRole('article', { name: 'Alex — Employment Support record' })).toBeNull();
     const sam = screen.getByRole('article', { name: 'Sam — Youth Employment record' });
     expect(within(sam).getByText(/^Case notes/).closest('details')).not.toHaveAttribute('open');
+  });
+
+  it('saves optional contact details through the trusted boundary and reads them after remount', async () => {
+    setRows('owner', true);
+    mocks.invoke.mockImplementation(async (_name: string, { body }: { body: Record<string, unknown> }) => {
+      const p = body.payload as Record<string, string>;
+      mocks.rows.programme_hub_participant_contacts = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, phone: p.phone, email: p.email, address_line_1: p.addressLine1, address_line_2: p.addressLine2 || null, town: p.town, postcode: p.postcode, version: 1 }];
+      return { data: { operation: body.operation, recordId: savedId, workspaceId, programmeId, version: 1 }, error: null };
+    });
+    const first = render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    fireEvent.click(await within(card).findByRole('button', { name: 'Add contact details' }));
+    fireEvent.change(within(card).getByLabelText('Phone number'), { target: { value: '0121 555 0100' } });
+    fireEvent.change(within(card).getByLabelText('Email address'), { target: { value: 'alex@example.test' } });
+    fireEvent.change(within(card).getByLabelText('Address line 1'), { target: { value: '1 Test Road' } });
+    fireEvent.change(within(card).getByLabelText('UK postcode'), { target: { value: ' b11aa ' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Save contact details' }));
+    expect(await within(card).findByText('Contact details saved.')).toBeVisible();
+    expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({ operation: 'participant_contact', recordId: null, expectedVersion: 0, payload: { participantId, postcode: 'B1 1AA', phone: '0121 555 0100' } });
+    expect(await within(card).findByText('alex@example.test')).toBeVisible();
+    first.unmount();
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    expect(await screen.findByText('alex@example.test')).toBeVisible();
+    expect(screen.getByText('B1 1AA')).toBeVisible();
+  });
+
+  it('keeps a failed contact read separate from profiles and notes', async () => {
+    setRows('owner', true); mocks.contactReadFails = true;
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    expect(await within(card).findByRole('alert')).toHaveTextContent('Contact details are unavailable');
+    expect(within(card).queryByText('No contact details added.')).toBeNull();
+    expect(within(card).getByText('customer_service')).toBeVisible();
+    expect(within(card).getByLabelText('Add a note')).toBeVisible();
+  });
+
+  it('retains and retries the exact contact request after an uncertain save', async () => {
+    setRows('owner', true);
+    mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('network unavailable') });
+    const first = render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    fireEvent.click(await within(card).findByRole('button', { name: 'Add contact details' }));
+    fireEvent.change(within(card).getByLabelText('Phone number'), { target: { value: '0121 555 0200' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Save contact details' }));
+    expect(await within(card).findByRole('alert')).toHaveTextContent('outcome is unknown');
+    const original = mocks.invoke.mock.calls[0][1].body;
+    first.unmount();
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const restoredCard = await screen.findByRole('article', { name: 'Alex — Employment Support record' });
+    expect(await within(restoredCard).findByLabelText('Phone number')).toHaveValue('0121 555 0200');
+    expect(within(restoredCard).getByLabelText('Phone number')).toHaveValue('0121 555 0200');
+    mocks.invoke.mockResolvedValueOnce({ data: { operation: 'participant_contact', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
+    fireEvent.click(within(restoredCard).getByRole('button', { name: 'Retry same change' }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
+    expect(mocks.invoke.mock.calls[1][1].body).toEqual(original);
+  });
+
+  it('validates contact details locally without invoking a save', async () => {
+    setRows('owner', true);
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    fireEvent.click(await within(card).findByRole('button', { name: 'Add contact details' }));
+    fireEvent.change(within(card).getByLabelText('UK postcode'), { target: { value: 'unknown' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Save contact details' }));
+    expect(await within(card).findByRole('alert')).toHaveTextContent('Enter a UK postcode');
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('lets an assigned ES edit the loaded contact version without changing the employment profile', async () => {
+    setRows('member', true);
+    mocks.rows.programme_hub_participant_contacts = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, phone: '0121 555 0100', email: null, address_line_1: null, address_line_2: null, town: null, postcode: null, version: 3 }];
+    mocks.invoke.mockImplementation(async (_name: string, { body }: { body: Record<string, unknown> }) => ({ data: { operation: body.operation, recordId: savedId, workspaceId, programmeId, version: 4 }, error: null }));
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+    const card = (await screen.findByRole('heading', { name: 'Alex' })).closest('article')!;
+    fireEvent.click(within(card).getByRole('button', { name: 'Open Service-user record' }));
+    fireEvent.click(await within(card).findByRole('button', { name: 'Edit contact details' }));
+    fireEvent.change(within(card).getByLabelText('Phone number'), { target: { value: '0121 555 0200' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Save contact details' }));
+    expect(await within(card).findByText('Contact details saved.')).toBeVisible();
+    expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({ operation: 'participant_contact', recordId: savedId, expectedVersion: 3, payload: { participantId, phone: '0121 555 0200' } });
+    expect(mocks.invoke.mock.calls[0][1].body.payload).not.toHaveProperty('skillKeys');
+  });
+
+  it('clears contact details when another programme is selected', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_programmes = [programmeRow, secondProgrammeRow];
+    mocks.rows.programme_hub_participants = [participantRow, secondParticipantRow];
+    mocks.rows.programme_hub_participant_contacts = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, phone: '0121 555 0100', email: null, address_line_1: null, address_line_2: null, town: null, postcode: null, version: 1 }];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    expect(await screen.findByText('0121 555 0100')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Choose a programme'), { target: { value: secondProgrammeId } });
+    fireEvent.click(within(screen.getByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    expect(await screen.findByText('No contact details added.')).toBeVisible();
+    expect(screen.queryByText('0121 555 0100')).toBeNull();
   });
 
 });

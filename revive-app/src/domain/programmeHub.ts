@@ -6,7 +6,8 @@ export type ProgrammeHubOperation =
   | 'vacancy'
   | 'participant'
   | 'participant_adviser'
-  | 'participant_note';
+  | 'participant_note'
+  | 'participant_contact';
 
 export interface ProgrammeHubProgramme {
   id: string;

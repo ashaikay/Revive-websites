@@ -181,6 +181,49 @@ check('DIRECT_BROWSER_INSERT_DENIED', (await request(owner.token, 'POST', '/rest
 check('AUTHENTICATED_RPC_DENIED', (await save(owner.id, workspaceId, 'programme', null, null, 0, programmePayload, randomUUID(), owner.token)).status >= 400);
 check('CROSS_WORKSPACE_ACTOR_DENIED', (await save(owner.id, otherWorkspaceId, 'programme', null, null, 0, programmePayload)).status >= 400);
 
+// Contact details are tested against isolated local Supabase, never a hosted project.
+const contactPayload = { participantId, phone: '0121 555 0100', email: 'synthetic@example.test', addressLine1: '1 Test Road', addressLine2: '', town: 'Birmingham', postcode: 'B1 1AA' };
+const saveParticipantContact = (actorId, ws, programme, recordId, version, payload, requestId = randomUUID(), token = serviceKey) => rpc(token, 'save_rev_programme_hub_participant_contact', {
+  target_workspace_id: ws, initiating_user_id: actorId, target_request_id: requestId, target_programme_id: programme,
+  target_record_id: recordId, expected_version: version, target_payload: payload,
+});
+const contactRequestId = randomUUID();
+const contactsCreated = await Promise.all([
+  saveParticipantContact(adviser.id, workspaceId, programmeId, null, 0, contactPayload, contactRequestId),
+  saveParticipantContact(adviser.id, workspaceId, programmeId, null, 0, contactPayload, contactRequestId),
+]);
+check('CONTACT_CONCURRENT_EXACT_REPLAY', contactsCreated.every((value) => value.status === 200) && contactsCreated[0].payload?.record_id === contactsCreated[1].payload?.record_id);
+if (!contactsCreated.every((value) => value.status === 200)) throw new Error('Contact fixture save failed; inspect isolated database logs without publishing contact payloads.');
+const participantContactId = id(contactsCreated[0].payload.record_id);
+check('CONTACT_CHANGED_RETRY_DENIED', (await saveParticipantContact(adviser.id, workspaceId, programmeId, null, 0, { ...contactPayload, phone: '0121 555 0200' }, contactRequestId)).status >= 400);
+const contactRead = await read(adviser.token, 'programme_hub_participant_contacts', workspaceId);
+check('CONTACT_ASSIGNED_ADVISER_READS', contactRead.status === 200 && contactRead.rows.length === 1 && contactRead.rows[0].postcode === 'B1 1AA');
+check('CONTACT_SERVER_AUTHOR_TIMESTAMP', contactRead.rows[0]?.created_by_user_id === adviser.id && Number.isFinite(Date.parse(contactRead.rows[0]?.created_at)));
+check('CONTACT_OWNER_READS', (await read(owner.token, 'programme_hub_participant_contacts', workspaceId)).rows.length === 1);
+check('CONTACT_UNASSIGNED_MEMBER_READS_NONE', (await read(otherMember.token, 'programme_hub_participant_contacts', workspaceId)).rows.length === 0);
+check('CONTACT_OUTSIDER_READS_NONE', (await read(outsider.token, 'programme_hub_participant_contacts', workspaceId)).rows.length === 0);
+check('CONTACT_UNASSIGNED_CASELOAD_WRITE_DENIED', (await saveParticipantContact(adviser.id, workspaceId, programmeId, null, 0, { ...contactPayload, participantId: unassignedId })).status >= 400);
+check('CONTACT_CROSS_PROGRAMME_DENIED', (await saveParticipantContact(owner.id, workspaceId, randomUUID(), null, 0, contactPayload)).status >= 400);
+check('CONTACT_CROSS_WORKSPACE_DENIED', (await saveParticipantContact(owner.id, otherWorkspaceId, programmeId, null, 0, contactPayload)).status >= 400);
+check('CONTACT_AUTHENTICATED_RPC_DENIED', (await saveParticipantContact(owner.id, workspaceId, programmeId, null, 0, contactPayload, randomUUID(), owner.token)).status >= 400);
+check('CONTACT_DIRECT_INSERT_DENIED', (await request(owner.token, 'POST', '/rest/v1/programme_hub_participant_contacts', { workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, created_by_user_id: owner.id, updated_by_user_id: owner.id })).status >= 400);
+check('CONTACT_DIRECT_UPDATE_DENIED', (await request(owner.token, 'PATCH', `/rest/v1/programme_hub_participant_contacts?id=eq.${participantContactId}`, { phone: '0121 555 0300' })).status >= 400);
+check('CONTACT_INVALID_POSTCODE_DENIED', (await saveParticipantContact(owner.id, workspaceId, programmeId, participantContactId, 1, { ...contactPayload, postcode: 'UNKNOWN' })).status >= 400);
+const updatedContact = await saveParticipantContact(owner.id, workspaceId, programmeId, participantContactId, 1, { ...contactPayload, email: '', addressLine2: '' });
+check('CONTACT_OWNER_UPDATE_AND_CLEAR', updatedContact.status === 200 && updatedContact.payload?.version === 2 && (await read(owner.token, 'programme_hub_participant_contacts', workspaceId)).rows[0]?.email === null);
+check('CONTACT_STALE_VERSION_DENIED', (await saveParticipantContact(adviser.id, workspaceId, programmeId, participantContactId, 1, contactPayload)).status >= 400);
+const contactRace = await Promise.all([
+  saveParticipantContact(adviser.id, workspaceId, programmeId, participantContactId, 2, { ...contactPayload, phone: '0121 555 0400' }),
+  saveParticipantContact(adviser.id, workspaceId, programmeId, participantContactId, 2, { ...contactPayload, phone: '0121 555 0500' }),
+]);
+check('CONTACT_CONCURRENT_DIFFERENT_UPDATE_ONCE', contactRace.filter((value) => value.status === 200).length === 1 && contactRace.filter((value) => value.status >= 400).length === 1);
+await request(serviceKey, 'PATCH', `/rest/v1/programme_hub_participant_advisers?workspace_id=eq.${workspaceId}&participant_id=eq.${participantId}&adviser_user_id=eq.${adviser.id}`, { active: false });
+check('CONTACT_REVOKED_CASELOAD_READ_DENIED', (await read(adviser.token, 'programme_hub_participant_contacts', workspaceId)).rows.length === 0);
+check('CONTACT_REVOKED_CASELOAD_REPLAY_DENIED', (await saveParticipantContact(adviser.id, workspaceId, programmeId, null, 0, contactPayload, contactRequestId)).status >= 400);
+await request(serviceKey, 'PATCH', `/rest/v1/programme_hub_participant_advisers?workspace_id=eq.${workspaceId}&participant_id=eq.${participantId}&adviser_user_id=eq.${adviser.id}`, { active: true });
+const contactAudits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=eq.programme_hub.participant_contact.saved&select=metadata`);
+check('CONTACT_AUDIT_EXCLUDES_CONTACT_CONTENT', contactAudits.status === 200 && contactAudits.rows.length === 3 && contactAudits.rows.every((row) => Object.keys(row.metadata).sort().join(',') === 'participant_id,programme_id,request_id,version'));
+
 const contracts = await read(owner.token, 'programme_hub_contracts', workspaceId);
 check('NO_FABRICATED_PROGRAMME_CONTRACTS', contracts.status === 200 && contracts.rows.length === 0);
 const audits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=like.programme_hub.*&select=action,resource_type,metadata`);
@@ -189,6 +232,8 @@ check('AUDIT_HISTORY_RECORDED', audits.status === 200 && audits.rows.length >= 8
 await request(serviceKey, 'PATCH', `/rest/v1/workspace_members?workspace_id=eq.${workspaceId}&user_id=eq.${adviser.id}`, { status: 'suspended' });
 check('SUSPENDED_ADVISER_WRITE_DENIED', (await save(adviser.id, workspaceId, 'employer', programmeId, null, 0, { ...employerPayload, employerKey: 'EMP-003' })).status >= 400);
 check('SUSPENDED_ADVISER_READ_DENIED', (await read(adviser.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
+check('CONTACT_SUSPENDED_ADVISER_READ_DENIED', (await read(adviser.token, 'programme_hub_participant_contacts', workspaceId)).rows.length === 0);
+check('CONTACT_SUSPENDED_ADVISER_REPLAY_DENIED', (await saveParticipantContact(adviser.id, workspaceId, programmeId, null, 0, contactPayload, contactRequestId)).status >= 400);
 
 if (failures) throw new Error(`${failures} Programme Hub validation check(s) failed.`);
 console.log('PROGRAMME_HUB_LOCAL_VALIDATION=PASS');

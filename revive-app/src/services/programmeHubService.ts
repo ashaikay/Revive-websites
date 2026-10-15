@@ -166,6 +166,7 @@ export async function submitProgrammeHubAttempt(attempt: ProgrammeHubSaveAttempt
       : {};
     const errorCode = typeof raw.errorCode === 'string' ? raw.errorCode : 'programme_record_rejected';
     if ([400, 403, 409].includes(response.status)) {
+      if (errorCode === 'participant_contact_changed') throw new ProgrammeHubSaveRejectedError('These contact details changed. Cancel editing to load the latest saved details.', response.status, errorCode);
       const message = errorCode === 'workspace_access_denied' || errorCode === 'programme_manager_required'
         ? 'You do not have permission to save this Programme Hub change.'
         : errorCode === 'active_adviser_required'
