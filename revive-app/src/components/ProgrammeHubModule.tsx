@@ -65,6 +65,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const busyRef = useRef(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [feedbackTarget, setFeedbackTarget] = useState('');
   const [pending, setPending] = useState<ProgrammeHubSaveAttempt | null>(null);
   const [programmeEdit, setProgrammeEdit] = useState<ProgrammeHubProgramme | null>(null);
   const [programmeDraft, setProgrammeDraft] = useState(blankProgramme);
@@ -128,8 +129,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setNotesError('');
     setNoteDrafts({});
     setError('');
+    setMessage('');
+    setFeedbackTarget('');
     try {
-      setPending(restoreProgrammeHubAttempt(window.sessionStorage, workspaceId, userId));
+      const retained = restoreProgrammeHubAttempt(window.sessionStorage, workspaceId, userId);
+      setPending(retained);
+      setFeedbackTarget(retained ? saveTarget(retained) : '');
     } catch {
       setError('A retained Programme Hub save could not be read. Contact support before making another change.');
     }
@@ -161,7 +166,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       })
       .catch(() => {
         if (!active) return;
-        setNotesError('Participant notes are unavailable until the reviewed database migration and trusted function update are applied.');
+        setNotesError('Case notes could not be loaded. Your saved notes have not been removed. Refresh the page to try again.');
         setNotesReady(true);
       });
     return () => { active = false; };
@@ -187,12 +192,14 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const saveAttempt = async (attempt: ProgrammeHubSaveAttempt, success: string): Promise<boolean> => {
     if (busyRef.current) return false;
     busyRef.current = true;
+    const capturedIdentity = identityKey;
     setBusy(true);
+    setFeedbackTarget(saveTarget(attempt));
     setError('');
     setMessage('');
-    rememberProgrammeHubAttempt(window.sessionStorage, userId, attempt);
-    setPending(attempt);
     try {
+      rememberProgrammeHubAttempt(window.sessionStorage, userId, attempt);
+      setPending(attempt);
       const client = supabaseClient;
       if (!client) throw new Error('Programme Hub is unavailable.');
       await submitProgrammeHubAttempt(attempt, {
@@ -209,11 +216,17 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
         },
       });
       clearProgrammeHubAttempt(window.sessionStorage, workspaceId, userId);
+      if (identityRef.current !== capturedIdentity) return false;
       setPending(null);
-      await load();
       setMessage(success);
+      try {
+        await load(capturedIdentity);
+      } catch {
+        if (identityRef.current === capturedIdentity) setMessage(`${success} The record list could not refresh. Refresh the page before editing again.`);
+      }
       return true;
     } catch (saveError) {
+      if (identityRef.current !== capturedIdentity) return false;
       if (saveError instanceof ProgrammeHubSaveRejectedError) {
         clearProgrammeHubAttempt(window.sessionStorage, workspaceId, userId);
         setPending(null);
@@ -222,11 +235,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       return false;
     } finally {
       busyRef.current = false;
-      setBusy(false);
+      if (identityRef.current === capturedIdentity) setBusy(false);
     }
   };
 
   const validateForm = (form: HTMLFormElement, required: Array<[string, string]>) => {
+    setFeedbackTarget(form.dataset.saveTarget ?? '');
     const missing = required.find(([value]) => !value.trim());
     if (missing) {
       setMessage('');
@@ -266,6 +280,9 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       }
     });
   };
+  const renderSaveFeedback = (target: string) => feedbackTarget === target ? <SaveFeedback
+    busy={busy} error={error} message={message} pending={!!pending} retry={retryPending}
+  /> : null;
   const resetProgramme = () => { setProgrammeEdit(null); setProgrammeDraft(blankProgramme); };
   const resetEmployer = () => { setEmployerEdit(null); setEmployerDraft(blankEmployer); };
   const resetContact = () => { setContactEdit(null); setContactDraft({ ...blankContact, employerId: programmeEmployers[0]?.id ?? '' }); };
@@ -285,6 +302,8 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setAssignmentAdviserId('');
     setNoteDrafts({});
     setMessage('');
+    setError('');
+    setFeedbackTarget('');
   };
 
   const saveProgramme = (event: FormEvent) => {
@@ -386,6 +405,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setParticipantDraft({ participantKey: participant.participantKey, preferredName: participant.preferredName, caseReference: participant.caseReference, desiredRoleKeys: joinKeys(participant.desiredRoleKeys), skillKeys: joinKeys(participant.skillKeys), vacancySearchGeographyKeys: joinKeys(participant.vacancySearchGeographyKeys), residencyEvidenceReference: participant.residencyEvidenceReference ?? '', active: participant.active });
   };
 
+  const localFeedbackAvailable = feedbackTarget === 'programme' ? isManager
+    : feedbackTarget === 'adviser' || feedbackTarget === 'participant_adviser' ? !!selectedProgramme && isManager
+    : feedbackTarget === 'participant' ? !!selectedProgramme && (isManager || !!participantEdit)
+    : feedbackTarget.startsWith('participant_note:') ? programmeParticipants.some((participant) => feedbackTarget === `participant_note:${participant.id}`)
+    : !!selectedProgramme && canMaintainEmployerRecords;
+
   if (!ready && !error) return <main className="p-8 text-neutral-600">Loading Outcomes / Programme Hub...</main>;
 
   return (
@@ -396,23 +421,20 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
         <p className="mt-2 max-w-3xl text-neutral-600">Tenant-neutral employment-support records. This is separate from commercial GROWTH leads and worker Scheduling.</p>
       </header>
 
-      {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}{pending && <button className="btn-secondary ml-3" disabled={busy} onClick={retryPending}>{busy ? 'Retrying...' : 'Retry same change'}</button>}</div>}
-      {message && <div role="status" className="rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-800">{message}</div>}
-      {busy && <div role="status" className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Saving this Programme Hub change. Please wait.</div>}
-      {pending && !error && <div role="status" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">A retained save must be confirmed before another change.<button className="btn-secondary ml-3" disabled={busy} onClick={retryPending}>{busy ? 'Retrying...' : 'Retry same change'}</button></div>}
+      {(!feedbackTarget || !localFeedbackAvailable) && <SaveFeedback busy={busy} error={error} message={message} pending={!!pending} retry={retryPending} />}
 
       {isManager && (
-        <details className="card p-5" open={data.programmes.length === 0}>
+        <details className="card p-5" open={data.programmes.length === 0 || (feedbackTarget === 'programme' && (busy || !!pending || !!error || !!message))}>
           <summary className="cursor-pointer font-semibold">Programme configuration</summary>
-          <form className="mt-4 grid gap-4 md:grid-cols-2" noValidate onSubmit={saveProgramme}>
-            <Field label="Programme name"><input required className={inputClass} value={programmeDraft.name} onChange={(event) => setProgrammeDraft({ ...programmeDraft, name: event.target.value })} /></Field>
-            <Field label="Timezone"><input required className={inputClass} value={programmeDraft.timezone} onChange={(event) => setProgrammeDraft({ ...programmeDraft, timezone: event.target.value })} /></Field>
-            <Field label="Tenant branding name"><input className={inputClass} value={programmeDraft.brandingName} onChange={(event) => setProgrammeDraft({ ...programmeDraft, brandingName: event.target.value })} /></Field>
-            <Field label="Sender display name"><input className={inputClass} value={programmeDraft.senderDisplayName} onChange={(event) => setProgrammeDraft({ ...programmeDraft, senderDisplayName: event.target.value })} /></Field>
-            <Field label="Sender reply address"><input type="email" className={inputClass} value={programmeDraft.senderReplyTo} onChange={(event) => setProgrammeDraft({ ...programmeDraft, senderReplyTo: event.target.value })} /></Field>
-            <div className="flex items-end gap-2"><button className="btn-primary" disabled={busy || !!pending}>{programmeEdit ? 'Save programme changes' : 'Create programme'}</button>{programmeEdit && <button type="button" className="btn-secondary" onClick={resetProgramme}>Cancel</button>}</div>
-          </form>
-          {data.programmes.length > 0 && <ul className="mt-4 space-y-2">{data.programmes.map((programme) => <li key={programme.id} className="flex items-center justify-between rounded border p-3"><span>{programme.name}</span><button className="btn-secondary" disabled={!!pending} onClick={() => editProgramme(programme)}>Edit</button></li>)}</ul>}
+          <form className="mt-4 grid gap-4 md:grid-cols-2" data-save-target="programme" noValidate onSubmit={saveProgramme}>
+            <Field label="Programme name"><input disabled={busy || !!pending} required className={inputClass} value={programmeDraft.name} onChange={(event) => setProgrammeDraft({ ...programmeDraft, name: event.target.value })} /></Field>
+            <Field label="Timezone"><input disabled={busy || !!pending} required className={inputClass} value={programmeDraft.timezone} onChange={(event) => setProgrammeDraft({ ...programmeDraft, timezone: event.target.value })} /></Field>
+            <Field label="Tenant branding name"><input disabled={busy || !!pending} className={inputClass} value={programmeDraft.brandingName} onChange={(event) => setProgrammeDraft({ ...programmeDraft, brandingName: event.target.value })} /></Field>
+            <Field label="Sender display name"><input disabled={busy || !!pending} className={inputClass} value={programmeDraft.senderDisplayName} onChange={(event) => setProgrammeDraft({ ...programmeDraft, senderDisplayName: event.target.value })} /></Field>
+            <Field label="Sender reply address"><input disabled={busy || !!pending} type="email" className={inputClass} value={programmeDraft.senderReplyTo} onChange={(event) => setProgrammeDraft({ ...programmeDraft, senderReplyTo: event.target.value })} /></Field>
+            <div className="flex items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !!pending}>{busy && feedbackTarget === 'programme' ? 'Saving...' : programmeEdit ? 'Save programme changes' : 'Create programme'}</button>{programmeEdit && <button type="button" className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={resetProgramme}>Cancel</button>}</div>
+          {renderSaveFeedback('programme')}</form>
+          {data.programmes.length > 0 && <ul className="mt-4 space-y-2">{data.programmes.map((programme) => <li key={programme.id} className="flex items-center justify-between rounded border p-3"><span>{programme.name}</span><button className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!!pending} onClick={() => editProgramme(programme)}>Edit</button></li>)}</ul>}
         </details>
       )}
 
@@ -438,21 +460,21 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
           <h2 id="adviser-heading" className="text-xl font-semibold">Employment Specialists and caseload</h2>
           <p className="mt-1 text-sm text-neutral-600">Employment Specialists can see programme employer records and only Service user profiles assigned to their caseload.</p>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-            <select aria-label="Workspace member" className={inputClass} value={adviserUserId} onChange={(event) => setAdviserUserId(event.target.value)}>
+            <select disabled={busy || !!pending} aria-label="Workspace member" className={inputClass} value={adviserUserId} onChange={(event) => setAdviserUserId(event.target.value)}>
               <option value="">Select an active workspace member</option>
               {data.members.filter((member) => member.status === 'active' && !programmeAdvisers.some((adviser) => adviser.userId === member.userId && adviser.active)).map((member) => <option key={member.userId} value={member.userId}>{adviserLabel(member.userId, data, userId)}</option>)}
             </select>
-            <button className="btn-primary" disabled={!adviserUserId || busy || !!pending} onClick={() => void saveAttempt(attempt('adviser', selectedProgramme.id, null, 0, { userId: adviserUserId, active: true }), 'Programme adviser added.').then((confirmed) => { if (confirmed) setAdviserUserId(''); })}>Add adviser</button>
+            <button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!adviserUserId || busy || !!pending} onClick={() => void saveAttempt(attempt('adviser', selectedProgramme.id, null, 0, { userId: adviserUserId, active: true }), 'Programme adviser added.').then((confirmed) => { if (confirmed) setAdviserUserId(''); })}>{busy && feedbackTarget === 'adviser' ? 'Saving...' : 'Add adviser'}</button>{renderSaveFeedback('adviser')}
           </div>
           {!adviserUserId && <p className="mt-2 text-sm text-neutral-600">Choose an active workspace member to enable Add adviser.</p>}
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <select aria-label="Service user for caseload" className={inputClass} value={assignmentParticipantId} onChange={(event) => setAssignmentParticipantId(event.target.value)}>
+            <select disabled={busy || !!pending} aria-label="Service user for caseload" className={inputClass} value={assignmentParticipantId} onChange={(event) => setAssignmentParticipantId(event.target.value)}>
               <option value="">Select Service user</option>{programmeParticipants.map((participant) => <option key={participant.id} value={participant.id}>{participant.preferredName} - {participant.caseReference}</option>)}
             </select>
-            <select aria-label="Employment Specialist for caseload" className={inputClass} value={assignmentAdviserId} onChange={(event) => setAssignmentAdviserId(event.target.value)}>
+            <select disabled={busy || !!pending} aria-label="Employment Specialist for caseload" className={inputClass} value={assignmentAdviserId} onChange={(event) => setAssignmentAdviserId(event.target.value)}>
               <option value="">Select Employment Specialist</option>{programmeAdvisers.filter((adviser) => adviser.active).map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)}</option>)}
             </select>
-            <button className="btn-primary" disabled={!assignmentParticipantId || !assignmentAdviserId || selectedCaseloadAssignment?.active || busy || !!pending} onClick={() => void saveAttempt(attempt(
+            <button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!assignmentParticipantId || !assignmentAdviserId || selectedCaseloadAssignment?.active || busy || !!pending} onClick={() => void saveAttempt(attempt(
               'participant_adviser',
               selectedProgramme.id,
               selectedCaseloadAssignment?.id ?? null,
@@ -463,7 +485,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
                 setAssignmentParticipantId('');
                 setAssignmentAdviserId('');
               }
-            })}>{selectedCaseloadAssignment?.active ? 'Already assigned' : selectedCaseloadAssignment ? 'Reactivate caseload' : 'Assign caseload'}</button>
+            })}>{busy && feedbackTarget === 'participant_adviser' ? 'Saving...' : selectedCaseloadAssignment?.active ? 'Already assigned' : selectedCaseloadAssignment ? 'Reactivate caseload' : 'Assign caseload'}</button>{renderSaveFeedback('participant_adviser')}
           </div>
           {(!assignmentParticipantId || !assignmentAdviserId) && <p className="mt-2 text-sm text-neutral-600">Choose both a Service user and an Employment Specialist to enable Assign caseload.</p>}
           {assignmentAdviserId === userId && <p className="mt-2 text-sm text-neutral-600">“You” is available because your account has an active Employment Specialist registration for this programme. Workspace ownership alone does not satisfy this prerequisite.</p>}
@@ -491,66 +513,79 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             onEmployersChanged={load}
           />
           <h3 className="text-lg font-semibold">Manual employer and contact records</h3>
-          <RecordSection title="Employers" empty="No employers have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" noValidate onSubmit={saveEmployer}>
-            <Field label="Employer reference (for example, EMP-001)"><input required className={inputClass} value={employerDraft.employerKey} onChange={(event) => setEmployerDraft({ ...employerDraft, employerKey: event.target.value })} /></Field>
-            <Field label="Employer name"><input required className={inputClass} value={employerDraft.displayName} onChange={(event) => setEmployerDraft({ ...employerDraft, displayName: event.target.value })} /></Field>
-            <Field label="Sector (for example, retail)"><input className={inputClass} value={employerDraft.sectorKey} onChange={(event) => setEmployerDraft({ ...employerDraft, sectorKey: event.target.value })} /></Field>
-            <Field label="Primary work area reference"><input className={inputClass} value={employerDraft.primaryGeographyKey} onChange={(event) => setEmployerDraft({ ...employerDraft, primaryGeographyKey: event.target.value })} /></Field>
-            <FormActions editing={!!employerEdit} busy={busy || !!pending} cancel={resetEmployer} />
-          </form>}>
-            {programmeEmployers.map((employer) => <RecordRow key={employer.id} title={employer.displayName} detail={employer.employerKey} edit={() => editEmployer(employer)} />)}
+          <RecordSection title="Employers" empty="No employers have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="employer" noValidate onSubmit={saveEmployer}>
+            <Field label="Employer reference (for example, EMP-001)"><input disabled={busy || !!pending} required className={inputClass} value={employerDraft.employerKey} onChange={(event) => setEmployerDraft({ ...employerDraft, employerKey: event.target.value })} /></Field>
+            <Field label="Employer name"><input disabled={busy || !!pending} required className={inputClass} value={employerDraft.displayName} onChange={(event) => setEmployerDraft({ ...employerDraft, displayName: event.target.value })} /></Field>
+            <Field label="Sector (for example, retail)"><input disabled={busy || !!pending} className={inputClass} value={employerDraft.sectorKey} onChange={(event) => setEmployerDraft({ ...employerDraft, sectorKey: event.target.value })} /></Field>
+            <Field label="Primary work area reference"><input disabled={busy || !!pending} className={inputClass} value={employerDraft.primaryGeographyKey} onChange={(event) => setEmployerDraft({ ...employerDraft, primaryGeographyKey: event.target.value })} /></Field>
+            <FormActions editing={!!employerEdit} saving={busy && feedbackTarget === 'employer'} busy={busy || !!pending} cancel={resetEmployer} />
+          {renderSaveFeedback('employer')}</form>}>
+            {programmeEmployers.map((employer) => <RecordRow key={employer.id} title={employer.displayName} detail={employer.employerKey} edit={() => editEmployer(employer)} fields={[
+              ['Employer reference', employer.employerKey], ['Sector', employer.sectorKey],
+              ['Work area', employer.primaryGeographyKey], ['Record status', employer.active ? 'Active' : 'Inactive'],
+            ]} />)}
           </RecordSection>
 
-          <RecordSection title="Employer contacts" empty="No employer contacts have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" noValidate onSubmit={saveContact}>
-            <Field label="Employer"><select required className={inputClass} value={contactDraft.employerId} onChange={(event) => setContactDraft({ ...contactDraft, employerId: event.target.value })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
-            <Field label="Contact reference (for example, CONTACT-001)"><input required className={inputClass} value={contactDraft.contactKey} onChange={(event) => setContactDraft({ ...contactDraft, contactKey: event.target.value })} /></Field>
-            <Field label="Preferred name"><input required className={inputClass} value={contactDraft.preferredName} onChange={(event) => setContactDraft({ ...contactDraft, preferredName: event.target.value })} /></Field>
-            <Field label="Role title"><input className={inputClass} value={contactDraft.roleTitle} onChange={(event) => setContactDraft({ ...contactDraft, roleTitle: event.target.value })} /></Field>
-            <Field label="Business email"><input type="email" className={inputClass} value={contactDraft.businessEmail} onChange={(event) => setContactDraft({ ...contactDraft, businessEmail: event.target.value })} /></Field>
-            <Field label="Business phone"><input className={inputClass} value={contactDraft.businessPhone} onChange={(event) => setContactDraft({ ...contactDraft, businessPhone: event.target.value })} /></Field>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={contactDraft.suppressed} onChange={(event) => setContactDraft({ ...contactDraft, suppressed: event.target.checked })} />Suppress engagement preparation</label>
-            {contactDraft.suppressed && <Field label="Reason for suppression"><input required className={inputClass} value={contactDraft.suppressionReasonKey} onChange={(event) => setContactDraft({ ...contactDraft, suppressionReasonKey: event.target.value })} /></Field>}
-            <FormActions editing={!!contactEdit} busy={busy || !!pending} cancel={resetContact} />
-          </form>}>
-            {programmeContacts.map((contact) => <RecordRow key={contact.id} title={contact.preferredName} detail={`${programmeEmployers.find((employer) => employer.id === contact.employerId)?.displayName ?? 'Employer'}${contact.suppressed ? ' - Suppressed' : ''}`} edit={() => editContact(contact)} />)}
+          <RecordSection title="Employer contacts" empty="No employer contacts have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="contact" noValidate onSubmit={saveContact}>
+            <Field label="Employer"><select disabled={busy || !!pending} required className={inputClass} value={contactDraft.employerId} onChange={(event) => setContactDraft({ ...contactDraft, employerId: event.target.value })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
+            <Field label="Contact reference (for example, CONTACT-001)"><input disabled={busy || !!pending} required className={inputClass} value={contactDraft.contactKey} onChange={(event) => setContactDraft({ ...contactDraft, contactKey: event.target.value })} /></Field>
+            <Field label="Preferred name"><input disabled={busy || !!pending} required className={inputClass} value={contactDraft.preferredName} onChange={(event) => setContactDraft({ ...contactDraft, preferredName: event.target.value })} /></Field>
+            <Field label="Role title"><input disabled={busy || !!pending} className={inputClass} value={contactDraft.roleTitle} onChange={(event) => setContactDraft({ ...contactDraft, roleTitle: event.target.value })} /></Field>
+            <Field label="Business email"><input disabled={busy || !!pending} type="email" className={inputClass} value={contactDraft.businessEmail} onChange={(event) => setContactDraft({ ...contactDraft, businessEmail: event.target.value })} /></Field>
+            <Field label="Business phone"><input disabled={busy || !!pending} className={inputClass} value={contactDraft.businessPhone} onChange={(event) => setContactDraft({ ...contactDraft, businessPhone: event.target.value })} /></Field>
+            <label className="flex items-center gap-2 text-sm"><input disabled={busy || !!pending} type="checkbox" checked={contactDraft.suppressed} onChange={(event) => setContactDraft({ ...contactDraft, suppressed: event.target.checked })} />Suppress engagement preparation</label>
+            {contactDraft.suppressed && <Field label="Reason for suppression"><input disabled={busy || !!pending} required className={inputClass} value={contactDraft.suppressionReasonKey} onChange={(event) => setContactDraft({ ...contactDraft, suppressionReasonKey: event.target.value })} /></Field>}
+            <FormActions editing={!!contactEdit} saving={busy && feedbackTarget === 'contact'} busy={busy || !!pending} cancel={resetContact} />
+          {renderSaveFeedback('contact')}</form>}>
+            {programmeContacts.map((contact) => <RecordRow key={contact.id} title={contact.preferredName} detail={`${programmeEmployers.find((employer) => employer.id === contact.employerId)?.displayName ?? 'Employer'}${contact.suppressed ? ' - Suppressed' : ''}`} edit={() => editContact(contact)} fields={[
+              ['Contact reference', contact.contactKey], ['Employer', programmeEmployers.find((employer) => employer.id === contact.employerId)?.displayName],
+              ['Role title', contact.roleTitle], ['Business email', contact.businessEmail], ['Business phone', contact.businessPhone],
+              ['Engagement preparation', contact.suppressed ? 'Suppressed' : 'Not suppressed'],
+              ['Record status', contact.active ? 'Active' : 'Inactive'],
+            ]} />)}
           </RecordSection>
 
-          <RecordSection title="Job opportunities" empty="No Job opportunities have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" noValidate onSubmit={saveVacancy}>
-            <Field label="Employer"><select required className={inputClass} value={vacancyDraft.employerId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerId: event.target.value, employerContactId: '' })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
-            <Field label="Employer contact"><select className={inputClass} value={vacancyDraft.employerContactId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerContactId: event.target.value })}><option value="">No contact selected</option>{programmeContacts.filter((contact) => contact.employerId === vacancyDraft.employerId).map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}</option>)}</select></Field>
-            <Field label="Vacancy reference (for example, VAC-001)"><input required className={inputClass} value={vacancyDraft.vacancyKey} onChange={(event) => setVacancyDraft({ ...vacancyDraft, vacancyKey: event.target.value })} /></Field>
-            <Field label="Vacancy title"><input required className={inputClass} value={vacancyDraft.title} onChange={(event) => setVacancyDraft({ ...vacancyDraft, title: event.target.value })} /></Field>
-            <Field label="Work area reference"><input className={inputClass} value={vacancyDraft.workGeographyKey} onChange={(event) => setVacancyDraft({ ...vacancyDraft, workGeographyKey: event.target.value })} /></Field>
-            <Field label="Required skills (comma separated)"><input className={inputClass} value={vacancyDraft.requiredSkillKeys} onChange={(event) => setVacancyDraft({ ...vacancyDraft, requiredSkillKeys: event.target.value })} /></Field>
-            <Field label="Helpful skills (comma separated)"><input className={inputClass} value={vacancyDraft.desiredSkillKeys} onChange={(event) => setVacancyDraft({ ...vacancyDraft, desiredSkillKeys: event.target.value })} /></Field>
-            <FormActions editing={!!vacancyEdit} busy={busy || !!pending} cancel={resetVacancy} />
-          </form>}>
-            {programmeVacancies.map((vacancy) => <RecordRow key={vacancy.id} title={vacancy.title} detail={vacancy.workGeographyKey ? `Work area: ${vacancy.workGeographyKey}` : 'Work area needs review'} edit={() => editVacancy(vacancy)} />)}
+          <RecordSection title="Job opportunities" empty="No Job opportunities have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="vacancy" noValidate onSubmit={saveVacancy}>
+            <Field label="Employer"><select disabled={busy || !!pending} required className={inputClass} value={vacancyDraft.employerId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerId: event.target.value, employerContactId: '' })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
+            <Field label="Employer contact"><select disabled={busy || !!pending} className={inputClass} value={vacancyDraft.employerContactId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerContactId: event.target.value })}><option value="">No contact selected</option>{programmeContacts.filter((contact) => contact.employerId === vacancyDraft.employerId).map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}</option>)}</select></Field>
+            <Field label="Vacancy reference (for example, VAC-001)"><input disabled={busy || !!pending} required className={inputClass} value={vacancyDraft.vacancyKey} onChange={(event) => setVacancyDraft({ ...vacancyDraft, vacancyKey: event.target.value })} /></Field>
+            <Field label="Vacancy title"><input disabled={busy || !!pending} required className={inputClass} value={vacancyDraft.title} onChange={(event) => setVacancyDraft({ ...vacancyDraft, title: event.target.value })} /></Field>
+            <Field label="Work area reference"><input disabled={busy || !!pending} className={inputClass} value={vacancyDraft.workGeographyKey} onChange={(event) => setVacancyDraft({ ...vacancyDraft, workGeographyKey: event.target.value })} /></Field>
+            <Field label="Required skills (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={vacancyDraft.requiredSkillKeys} onChange={(event) => setVacancyDraft({ ...vacancyDraft, requiredSkillKeys: event.target.value })} /></Field>
+            <Field label="Helpful skills (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={vacancyDraft.desiredSkillKeys} onChange={(event) => setVacancyDraft({ ...vacancyDraft, desiredSkillKeys: event.target.value })} /></Field>
+            <FormActions editing={!!vacancyEdit} saving={busy && feedbackTarget === 'vacancy'} busy={busy || !!pending} cancel={resetVacancy} />
+          {renderSaveFeedback('vacancy')}</form>}>
+            {programmeVacancies.map((vacancy) => <RecordRow key={vacancy.id} title={vacancy.title} detail={vacancy.workGeographyKey ? `Work area: ${vacancy.workGeographyKey}` : 'Work area needs review'} edit={() => editVacancy(vacancy)} fields={[
+              ['Job opportunity reference', vacancy.vacancyKey], ['Employer', programmeEmployers.find((employer) => employer.id === vacancy.employerId)?.displayName],
+              ['Employer contact', programmeContacts.find((contact) => contact.id === vacancy.employerContactId)?.preferredName],
+              ['Work area', vacancy.workGeographyKey], ['Required skills', vacancy.requiredSkillKeys], ['Helpful skills', vacancy.desiredSkillKeys],
+              ['Record status', vacancy.active ? 'Active' : 'Inactive'],
+            ]} />)}
           </RecordSection>
         </>
       )}
 
       {selectedProgramme && isManager && (
-        <RecordSection title="Service users" empty="No Service users have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" noValidate onSubmit={saveParticipant}>
-          <Field label="Participant reference (for example, PART-001)"><input required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
-          <Field label="Preferred name"><input required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
-          <Field label="Tenant case reference"><input required className={inputClass} value={participantDraft.caseReference} onChange={(event) => setParticipantDraft({ ...participantDraft, caseReference: event.target.value })} /></Field>
-          <Field label="Desired roles (comma separated)"><input className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field>
-          <Field label="Employment skills (comma separated)"><input className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field>
-          <Field label="Vacancy search areas (comma separated)"><input className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field>
-          <Field label="Residency evidence reference"><input className={inputClass} value={participantDraft.residencyEvidenceReference} onChange={(event) => setParticipantDraft({ ...participantDraft, residencyEvidenceReference: event.target.value })} /></Field>
-          <FormActions editing={!!participantEdit} busy={busy || !!pending} cancel={resetParticipant} />
-        </form>}>
-          {programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}
+        <RecordSection title="Service users" empty="No Service users have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}>
+          <Field label="Participant reference (for example, PART-001)"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
+          <Field label="Preferred name"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
+          <Field label="Tenant case reference"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.caseReference} onChange={(event) => setParticipantDraft({ ...participantDraft, caseReference: event.target.value })} /></Field>
+          <Field label="Desired roles (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field>
+          <Field label="Employment skills (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field>
+          <Field label="Vacancy search areas (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field>
+          <Field label="Residency evidence reference"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.residencyEvidenceReference} onChange={(event) => setParticipantDraft({ ...participantDraft, residencyEvidenceReference: event.target.value })} /></Field>
+          <FormActions editing={!!participantEdit} saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />
+        {renderSaveFeedback('participant')}</form>}>
+          {programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}
         </RecordSection>
       )}
 
       {selectedProgramme && isAdviser && !isManager && (
         <section className="card p-5">
           <h2 className="text-xl font-semibold">My assigned Service users</h2>
-          <div className="mt-3 space-y-3">{programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}</div>
+          <div className="mt-3 space-y-3">{programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}</div>
           {programmeParticipants.length === 0 && <p className="mt-3 text-sm text-neutral-600">No Service users are currently assigned to your caseload in this programme.</p>}
-          {participantEdit && <form className="mt-4 grid gap-3 md:grid-cols-2" noValidate onSubmit={saveParticipant}><Field label="Preferred name"><input required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field><Field label="Desired roles"><input className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field><Field label="Employment skills"><input className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field><Field label="Vacancy search areas"><input className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field><FormActions editing busy={busy || !!pending} cancel={resetParticipant} /></form>}
+          {participantEdit && <form className="mt-4 grid gap-3 md:grid-cols-2" data-save-target="participant" noValidate onSubmit={saveParticipant}><Field label="Preferred name"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field><Field label="Desired roles"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field><Field label="Employment skills"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field><Field label="Vacancy search areas"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field><FormActions editing saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />{renderSaveFeedback('participant')}</form>}
         </section>
       )}
 
@@ -575,11 +610,32 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function RecordSection({ title, empty, form, children }: { title: string; empty: string; form: React.ReactNode; children: React.ReactNode }) {
   return <section className="card p-5"><h2 className="text-xl font-semibold">{title}</h2><div className="mt-4">{form}</div><div className="mt-5 space-y-2">{Children.count(children) ? children : <p className="text-sm text-neutral-600">{empty}</p>}</div></section>;
 }
-function RecordRow({ title, detail, edit }: { title: string; detail: string; edit: () => void }) {
-  return <article className="flex flex-wrap items-center justify-between gap-3 rounded border border-neutral-200 p-3"><div><h3 className="font-medium">{title}</h3><p className="text-sm text-neutral-600">{detail}</p></div><button className="btn-secondary" onClick={edit}>Edit</button></article>;
+type DetailValue = string | string[] | null | undefined;
+function DetailFields({ fields }: { fields: Array<[string, DetailValue]> }) {
+  return <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">{fields.map(([label, value]) => {
+    const display = Array.isArray(value) ? value.join(', ') : value;
+    return <div key={label}><dt className="font-medium text-neutral-700">{label}</dt><dd className="whitespace-pre-wrap break-words text-neutral-600">{display?.trim() || 'Not provided'}</dd></div>;
+  })}</dl>;
 }
-function FormActions({ editing, busy, cancel }: { editing: boolean; busy: boolean; cancel: () => void }) {
-  return <div className="flex items-end gap-2"><button className="btn-primary" disabled={busy}>{editing ? 'Save changes' : 'Add record'}</button>{editing && <button type="button" className="btn-secondary" onClick={cancel}>Cancel</button>}</div>;
+function RecordRow({ title, detail, edit, fields }: { title: string; detail: string; edit: () => void; fields: Array<[string, DetailValue]> }) {
+  return <article className="rounded border border-neutral-200 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium">{title}</h3><p className="text-sm text-neutral-600">{detail}</p></div><button type="button" className="btn-secondary focus-visible:ring-2 active:scale-[0.98]" onClick={edit}>Edit</button></div>
+    <details className="mt-3"><summary className="cursor-pointer font-medium text-primary-700 focus-visible:ring-2">View details</summary><DetailFields fields={fields} /></details>
+  </article>;
+}
+function FormActions({ editing, busy, saving, cancel }: { editing: boolean; busy: boolean; saving: boolean; cancel: () => void }) {
+  return <div className="flex items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy}>{saving ? 'Saving...' : editing ? 'Save changes' : 'Add record'}</button>{editing && <button type="button" disabled={busy} className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={cancel}>Cancel</button>}</div>;
+}
+function saveTarget(attempt: ProgrammeHubSaveAttempt) {
+  return attempt.operation === 'participant_note' ? `participant_note:${attempt.payload.participantId}` : attempt.operation;
+}
+function SaveFeedback({ busy, error, message, pending, retry }: { busy: boolean; error: string; message: string; pending: boolean; retry: () => void }) {
+  return <div className="col-span-full mt-2" aria-live="polite" aria-atomic="true">
+    {busy ? <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Saving this Programme Hub change. Please wait.</p>
+      : error ? <div role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}{pending && <button type="button" className="btn-secondary ml-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={retry}>Retry same change</button>}</div>
+      : pending ? <div role="status" className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">A retained save must be confirmed before another change.<button type="button" className="btn-secondary ml-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={retry}>Retry same change</button></div>
+      : message ? <p role="status" className="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</p> : null}
+  </div>;
 }
 
 function adviserLabel(adviserUserId: string, data: ProgrammeHubData, currentUserId: string) {
@@ -606,7 +662,7 @@ function formatProgrammeDate(value: string, timeZone: string) {
 }
 
 function ParticipantRecord({
-  participant, notes, programme, data, userId, noteDraft, notesReady, notesError, busy, edit, setNote, saveNote,
+  participant, notes, programme, data, userId, noteDraft, notesReady, notesError, busy, saving, feedback, keepNotesOpen, edit, setNote, saveNote,
 }: {
   participant: ProgrammeHubParticipant;
   notes: ProgrammeHubParticipantNote[];
@@ -617,10 +673,15 @@ function ParticipantRecord({
   notesReady: boolean;
   notesError: string;
   busy: boolean;
+  saving: boolean;
+  feedback: React.ReactNode;
+  keepNotesOpen: boolean;
   edit: () => void;
   setNote: (body: string) => void;
   saveNote: () => void;
 }) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const notesDisclosureOpen = notesOpen || !!noteDraft.trim() || keepNotesOpen;
   return <article className="rounded border border-neutral-200 p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
@@ -628,10 +689,18 @@ function ParticipantRecord({
         <p className="text-sm text-neutral-600">Case reference: {participant.caseReference}</p>
         <p className="text-sm text-amber-800">{participant.residencyEvidenceReference ? 'Eligibility evidence still requires review against configured rules.' : 'Needs review - residency evidence is missing.'}</p>
       </div>
-      <button className="btn-secondary" disabled={busy} onClick={edit}>Edit employment profile</button>
+      <button className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy} onClick={edit}>Edit employment profile</button>
     </div>
-    <div className="mt-4 border-t border-neutral-200 pt-4">
-      <h4 className="font-medium">Programme notes</h4>
+    <details className="mt-3"><summary className="cursor-pointer font-medium text-primary-700">View employment profile</summary>
+      <DetailFields fields={[
+        ['Service user reference', participant.participantKey], ['Case reference', participant.caseReference],
+        ['Desired roles', participant.desiredRoleKeys], ['Employment skills', participant.skillKeys],
+        ['Job search areas', participant.vacancySearchGeographyKeys], ['Residency evidence reference', participant.residencyEvidenceReference],
+        ['Record status', participant.active ? 'Active' : 'Inactive'],
+      ]} />
+    </details>
+    <details className="mt-4 border-t border-neutral-200 pt-4" open={notesDisclosureOpen} onToggle={(event) => { if (!event.currentTarget.open && (noteDraft.trim() || keepNotesOpen)) event.currentTarget.open = true; setNotesOpen(event.currentTarget.open); }}>
+      <summary className="cursor-pointer font-medium">Case notes ({notesError ? 'could not load' : !notesReady ? 'loading' : notes.length}){!notesError && notesReady && notes[0] ? ` · Latest: ${formatProgrammeDate(notes[0].createdAt, programme.timezone)}` : ''}</summary>
       <p className="mt-1 text-xs text-neutral-600">Record employment-support facts, agreed actions and relevant progress. Avoid diagnoses and unnecessary sensitive details.</p>
       {notesError && <p className="mt-2 text-sm text-amber-800">{notesError}</p>}
       {!notesError && !notesReady && <p className="mt-2 text-sm text-neutral-600">Loading notes...</p>}
@@ -644,7 +713,8 @@ function ParticipantRecord({
         <textarea className={`${inputClass} mt-1 min-h-24`} maxLength={2000} value={noteDraft} onChange={(event) => setNote(event.target.value)} disabled={!!notesError || busy} />
       </label>
       {!notesError && !noteDraft.trim() && <p className="mt-1 text-xs text-neutral-600">Enter an employment-support note to enable Save note.</p>}
-      <button type="button" className="btn-primary mt-2" disabled={!!notesError || busy || !noteDraft.trim()} onClick={saveNote}>Save note</button>
-    </div>
+      <button type="button" className="btn-primary mt-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!!notesError || busy || !noteDraft.trim()} onClick={saveNote}>{saving ? 'Saving...' : 'Save note'}</button>
+      {feedback}
+    </details>
   </article>;
 }

@@ -94,7 +94,7 @@ export function ProgrammeEmployerEngagement({
   const [pendingDraft, setPendingDraft] = useState<EmployerOutreachAttempt | null>(null);
   const [selectedEmployerId, setSelectedEmployerId] = useState('');
   const [offerSummary, setOfferSummary] = useState('');
-  const [showOfferFeedback, setShowOfferFeedback] = useState(false);
+  const [feedbackTarget, setFeedbackTarget] = useState('');
   const [engagementDraft, setEngagementDraft] = useState({ stage: 'to_review', responsibleAdviserUserId: '', nextAction: '', followUpDate: '' });
   const [historyDraft, setHistoryDraft] = useState({ contactId: '', eventType: 'manual_contact', channel: 'email', summary: '' });
   const [draftContactId, setDraftContactId] = useState('');
@@ -126,7 +126,7 @@ export function ProgrammeEmployerEngagement({
   useEffect(() => {
     let active = true;
     const captured = contextKey;
-    setShowOfferFeedback(false);
+    setFeedbackTarget('');
     setReady(false);
     setError('');
     setMessage('');
@@ -185,17 +185,23 @@ export function ProgrammeEmployerEngagement({
     setBusy(true);
     setError('');
     setMessage('');
-    setShowOfferFeedback(attempt.operation === 'outreach_settings');
+    setFeedbackTarget(attempt.operation === 'discovery_employer' ? `discovery_employer:${attempt.payload.sourceIdentity}` : attempt.operation);
+    if (typeof attempt.payload.employerId === 'string') setSelectedEmployerId(attempt.payload.employerId);
     setPendingSave(attempt);
     try {
       rememberEmployerAttempt(window.sessionStorage, 'save', workspaceId, userId, programme.id, attempt);
       const saved = await submitEmployerEngagementSave(attempt, gateway);
       clearEmployerAttempt(window.sessionStorage, 'save', workspaceId, userId, programme.id);
       setPendingSave(null);
-      if (attempt.operation === 'discovery_employer') await onEmployersChanged();
-      await load();
       if (contextRef.current !== captured) return;
-      setMessage(saved.duplicate ? 'This Companies House employer is already saved. The existing record was left unchanged.' : success);
+      const confirmedMessage = saved.duplicate ? 'This Companies House employer is already saved. The existing record was left unchanged.' : success;
+      setMessage(confirmedMessage);
+      try {
+        if (attempt.operation === 'discovery_employer') await onEmployersChanged();
+        await load(captured);
+      } catch {
+        if (contextRef.current === captured) setMessage(`${confirmedMessage} The record list could not refresh. Refresh the page before editing again.`);
+      }
     } catch (saveError) {
       if (saveError instanceof EmployerEngagementSaveRejected) {
         try {
@@ -211,7 +217,7 @@ export function ProgrammeEmployerEngagement({
       if (contextRef.current === captured) setError(saveError instanceof Error ? saveError.message : 'Employer engagement save not confirmed.');
     } finally {
       busyRef.current = false;
-      if (contextRef.current === contextKey) setBusy(false);
+      if (contextRef.current === captured) setBusy(false);
     }
   };
 
@@ -220,6 +226,7 @@ export function ProgrammeEmployerEngagement({
     busyRef.current = true;
     const captured = contextKey;
     setBusy(true);
+    setFeedbackTarget('search');
     setError('');
     setMessage('');
     setPendingSearch(attempt);
@@ -236,7 +243,7 @@ export function ProgrammeEmployerEngagement({
       if (contextRef.current === captured) setError(searchError instanceof Error ? searchError.message : 'Employer discovery outcome is unconfirmed.');
     } finally {
       busyRef.current = false;
-      if (contextRef.current === contextKey) setBusy(false);
+      if (contextRef.current === captured) setBusy(false);
     }
   };
 
@@ -245,6 +252,7 @@ export function ProgrammeEmployerEngagement({
     busyRef.current = true;
     const captured = contextKey;
     setBusy(true);
+    setFeedbackTarget('draft');
     setError('');
     setMessage('');
     setPendingDraft(attempt);
@@ -261,7 +269,7 @@ export function ProgrammeEmployerEngagement({
       if (contextRef.current === captured) setError(draftError instanceof Error ? draftError.message : 'Outreach draft outcome is unconfirmed.');
     } finally {
       busyRef.current = false;
-      if (contextRef.current === contextKey) setBusy(false);
+      if (contextRef.current === captured) setBusy(false);
     }
   };
 
@@ -297,16 +305,20 @@ export function ProgrammeEmployerEngagement({
     ? 'Controls are paused until the exact retained request is retried.'
     : busy ? 'The current request is still being confirmed.' : '';
 
-  return <div className="space-y-5" aria-label="Employer discovery and engagement">
-    {error && <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900">{error}</div>}
-    {message && <div role="status" className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-900">{message}</div>}
-    {busy && <div role="status" className="rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">Confirming this employer engagement request. Please wait.</div>}
-    {(pendingSearch || pendingSave || pendingDraft) && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+  const renderFeedback = (target: string) => feedbackTarget === target ? <div className="col-span-full mt-2" aria-live="polite" aria-atomic="true">
+      {error && <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900">{error}</div>}
+      {message && <div role="status" className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-900">{message}</div>}
+      {busy && <div role="status" className="rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">Confirming this employer engagement request. Please wait.</div>}
+      {!busy && (pendingSearch || pendingSave || pendingDraft) && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
       <p>An earlier request is not confirmed. Other changes are paused until the exact retained request is retried.</p>
-      {pendingSearch && <button className="btn-secondary mt-2" disabled={busy} onClick={() => void runSearch(pendingSearch)}>Retry exact employer search</button>}
-      {pendingSave && <button className="btn-secondary mt-2" disabled={busy} onClick={() => void retainAndSave(pendingSave, 'The retained employer engagement change was confirmed.')}>Retry exact saved change</button>}
-      {pendingDraft && <button className="btn-secondary mt-2" disabled={busy} onClick={() => void runDraft(pendingDraft)}>Retry exact draft request</button>}
+        {pendingSearch && <button className="btn-secondary mt-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy} onClick={() => void runSearch(pendingSearch)}>Retry exact employer search</button>}
+        {pendingSave && <button className="btn-secondary mt-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy} onClick={() => void retainAndSave(pendingSave, 'The retained employer engagement change was confirmed.')}>Retry exact saved change</button>}
+        {pendingDraft && <button className="btn-secondary mt-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy} onClick={() => void runDraft(pendingDraft)}>Retry exact draft request</button>}
     </div>}
+    </div> : null;
+
+  return <div className="space-y-5" aria-label="Employer discovery and engagement">
+    {renderFeedback('')}
 
     <section className="rounded-lg border p-4" aria-labelledby="find-employers-heading">
       <h3 id="find-employers-heading" className="text-lg font-semibold">Find employers</h3>
@@ -317,6 +329,7 @@ export function ProgrammeEmployerEngagement({
       </div>}
       <form className="mt-3 space-y-3" noValidate onSubmit={(event) => {
         event.preventDefault();
+        setFeedbackTarget('search');
         const location = filters.location.trim();
         const excludeTerms = split(excludeTermsInput);
         if (location.length < 2 || location.length > 120) {
@@ -343,7 +356,7 @@ export function ProgrammeEmployerEngagement({
           <input className={fieldClass} value={excludeTermsInput} onChange={(event) => setExcludeTermsInput(event.target.value)} disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} />
           <span className="block text-xs text-neutral-600">Editable pilot default: barbering.</span>
         </label>
-        <button className="btn-primary" disabled={busy || !discoveryAvailability?.available || filters.sectors.length === 0 || !!pendingSearch || !!pendingSave || !!pendingDraft}>SEARCH COMPANIES HOUSE</button>
+        <button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !discoveryAvailability?.available || filters.sectors.length === 0 || !!pendingSearch || !!pendingSave || !!pendingDraft}>{busy && feedbackTarget === 'search' ? 'Searching...' : 'SEARCH COMPANIES HOUSE'}</button>{renderFeedback('search')}
         {unavailableReason && <p className="text-sm text-amber-800">{unavailableReason}</p>}
       </form>
       {!ready && <p className="mt-3 text-sm">Loading employer discovery…</p>}
@@ -359,8 +372,9 @@ export function ProgrammeEmployerEngagement({
             <strong>{item.kind === 'verified_fact' ? 'Verified fact' : item.kind === 'unknown' ? 'Unknown' : 'AI suggestion'} — {item.label}:</strong> {item.value}
           </li>)}</ul>
           {duplicate && <p className={`mt-2 text-sm ${duplicate.reliable ? 'text-green-800' : 'text-amber-800'}`}>{duplicate.label}</p>}
-          <button className="btn-secondary mt-2" disabled={busy || duplicate?.reliable || !!pendingSearch || !!pendingSave || !!pendingDraft}
+          <button className="btn-secondary mt-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || duplicate?.reliable || !!pendingSearch || !!pendingSave || !!pendingDraft}
             onClick={() => {
+              setFeedbackTarget(`discovery_employer:${candidate.sourceIdentity}`);
               const searchId = data.searches.find((search) => search.results?.some((item) => item.sourceIdentity === candidate.sourceIdentity))?.searchId;
               if (!searchId) {
                 invalid('This discovery result is no longer linked to a confirmed search. Run the search again before saving.');
@@ -371,7 +385,7 @@ export function ProgrammeEmployerEngagement({
               requestId: crypto.randomUUID(), expectedVersion: 0,
               payload: { searchId, sourceIdentity: candidate.sourceIdentity },
             }, `${candidate.name} was saved to ${programme.name} for review.`);
-            }}>SAVE EMPLOYER TO PROGRAMME</button>
+            }}>{busy && feedbackTarget === `discovery_employer:${candidate.sourceIdentity}` ? 'Saving...' : 'SAVE EMPLOYER TO PROGRAMME'}</button>{renderFeedback(`discovery_employer:${candidate.sourceIdentity}`)}
         </article>;
       })}</div>
       <p className="mt-3 text-xs text-neutral-600">Contains public sector information licensed under the Open Government Licence v3.0.</p>
@@ -382,7 +396,7 @@ export function ProgrammeEmployerEngagement({
       <p className="mt-1 text-sm text-neutral-600">Manual contact records are not messages sent by REV. No sending, scheduling or automatic follow-up is enabled.</p>
       {employers.length === 0 ? <p className="mt-3 text-sm text-neutral-600">Add or save an employer to start an engagement record.</p> : <>
         <label className="mt-3 block text-sm font-medium">Employer
-          <select className={fieldClass} value={selectedEmployerId} onChange={(event) => setSelectedEmployerId(event.target.value)}>
+          <select className={fieldClass} value={selectedEmployerId} disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} onChange={(event) => { setSelectedEmployerId(event.target.value); setFeedbackTarget(''); setError(''); setMessage(''); }}>
             {employers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}
           </select>
         </label>
@@ -394,6 +408,7 @@ export function ProgrammeEmployerEngagement({
           </div>
           <form className="grid gap-3 md:grid-cols-2" noValidate onSubmit={(event: FormEvent) => {
             event.preventDefault();
+            setFeedbackTarget('engagement');
             void retainAndSave({
               operation: 'engagement', workspaceId, programmeId: programme.id,
               recordId: selectedEngagement?.id ?? null, requestId: crypto.randomUUID(),
@@ -401,14 +416,16 @@ export function ProgrammeEmployerEngagement({
               payload: { employerId: selectedEmployer.id, ...engagementDraft },
             }, 'Employer engagement plan saved.');
           }}>
-            <label className="text-sm font-medium">Engagement stage<select className={fieldClass} value={engagementDraft.stage} onChange={(event) => setEngagementDraft({ ...engagementDraft, stage: event.target.value })}>{employerEngagementStages.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-            <label className="text-sm font-medium">Responsible Employment Specialist<select className={fieldClass} value={engagementDraft.responsibleAdviserUserId} onChange={(event) => setEngagementDraft({ ...engagementDraft, responsibleAdviserUserId: event.target.value })}><option value="">Not assigned</option>{activeAdvisers.map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviser.label}</option>)}</select></label>
-            <label className="text-sm font-medium">Next action<input className={fieldClass} value={engagementDraft.nextAction} onChange={(event) => setEngagementDraft({ ...engagementDraft, nextAction: event.target.value })} /></label>
-            <label className="text-sm font-medium">Follow-up date<input type="date" className={fieldClass} value={engagementDraft.followUpDate} onChange={(event) => setEngagementDraft({ ...engagementDraft, followUpDate: event.target.value })} /></label>
-            <button className="btn-primary md:col-span-2" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>SAVE ENGAGEMENT PLAN</button>
+            <label className="text-sm font-medium">Engagement stage<select disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={engagementDraft.stage} onChange={(event) => setEngagementDraft({ ...engagementDraft, stage: event.target.value })}>{employerEngagementStages.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+            <label className="text-sm font-medium">Responsible Employment Specialist<select disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={engagementDraft.responsibleAdviserUserId} onChange={(event) => setEngagementDraft({ ...engagementDraft, responsibleAdviserUserId: event.target.value })}><option value="">Not assigned</option>{activeAdvisers.map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviser.label}</option>)}</select></label>
+            <label className="text-sm font-medium">Next action<input disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={engagementDraft.nextAction} onChange={(event) => setEngagementDraft({ ...engagementDraft, nextAction: event.target.value })} /></label>
+            <label className="text-sm font-medium">Follow-up date<input disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} type="date" className={fieldClass} value={engagementDraft.followUpDate} onChange={(event) => setEngagementDraft({ ...engagementDraft, followUpDate: event.target.value })} /></label>
+            <button className="btn-primary md:col-span-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>{busy && feedbackTarget === 'engagement' ? 'Saving...' : 'SAVE ENGAGEMENT PLAN'}</button>
+            {renderFeedback('engagement')}
           </form>
           <form className="grid gap-3 md:grid-cols-2" noValidate onSubmit={(event) => {
             event.preventDefault();
+            setFeedbackTarget('engagement_event');
             if (!historyDraft.summary.trim()) {
               invalid('Describe what happened before adding engagement history.');
               return;
@@ -420,11 +437,12 @@ export function ProgrammeEmployerEngagement({
             }, 'Engagement history added as a manual record. Nothing was sent by REV.');
           }}>
             <h5 className="font-medium md:col-span-2">Record engagement history</h5>
-            <label className="text-sm font-medium">Record type<select className={fieldClass} value={historyDraft.eventType} onChange={(event) => setHistoryDraft({ ...historyDraft, eventType: event.target.value })}><option value="manual_contact">Manually recorded contact</option><option value="note">Engagement note</option></select></label>
-            <label className="text-sm font-medium">Contact<select className={fieldClass} value={historyDraft.contactId} onChange={(event) => setHistoryDraft({ ...historyDraft, contactId: event.target.value })}><option value="">No named contact</option>{selectedContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}{contact.suppressed ? ' — suppressed' : ''}</option>)}</select></label>
-            <label className="text-sm font-medium">Channel<select className={fieldClass} value={historyDraft.channel} onChange={(event) => setHistoryDraft({ ...historyDraft, channel: event.target.value })}><option value="email">Email</option><option value="phone">Phone</option><option value="meeting">Meeting</option><option value="in_person">In person</option><option value="other">Other</option></select></label>
-            <label className="text-sm font-medium">What happened<textarea required className={fieldClass} value={historyDraft.summary} onChange={(event) => setHistoryDraft({ ...historyDraft, summary: event.target.value })} /></label>
-            <button className="btn-secondary md:col-span-2" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>ADD MANUAL HISTORY</button>
+            <label className="text-sm font-medium">Record type<select disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={historyDraft.eventType} onChange={(event) => setHistoryDraft({ ...historyDraft, eventType: event.target.value })}><option value="manual_contact">Manually recorded contact</option><option value="note">Engagement note</option></select></label>
+            <label className="text-sm font-medium">Contact<select disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={historyDraft.contactId} onChange={(event) => setHistoryDraft({ ...historyDraft, contactId: event.target.value })}><option value="">No named contact</option>{selectedContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}{contact.suppressed ? ' — suppressed' : ''}</option>)}</select></label>
+            <label className="text-sm font-medium">Channel<select disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={historyDraft.channel} onChange={(event) => setHistoryDraft({ ...historyDraft, channel: event.target.value })}><option value="email">Email</option><option value="phone">Phone</option><option value="meeting">Meeting</option><option value="in_person">In person</option><option value="other">Other</option></select></label>
+            <label className="text-sm font-medium">What happened<textarea disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} required className={fieldClass} value={historyDraft.summary} onChange={(event) => setHistoryDraft({ ...historyDraft, summary: event.target.value })} /></label>
+            <button className="btn-secondary md:col-span-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>{busy && feedbackTarget === 'engagement_event' ? 'Saving...' : 'ADD MANUAL HISTORY'}</button>
+            {renderFeedback('engagement_event')}
           </form>
           <div><h5 className="font-medium">Engagement history</h5>{selectedEvents.length ? <ol className="mt-2 space-y-2">{selectedEvents.map((item) => <li key={item.id} className="rounded bg-neutral-50 p-2 text-sm"><strong>{item.origin === 'manual' ? 'Manually recorded' : 'Prepared by REV — not sent'}</strong> · {new Date(item.createdAt).toLocaleString()}<br />{item.summary}</li>)}</ol> : <p className="text-sm text-neutral-600">No engagement history recorded.</p>}</div>
         </div>}
@@ -437,7 +455,7 @@ export function ProgrammeEmployerEngagement({
       <p className="text-sm text-neutral-600">Drafts use saved employer evidence and the programme offer. They contain no Service user information and require Employment Specialist review.</p>
       {isManager && <form className="mt-3 space-y-2" noValidate onSubmit={(event) => {
         event.preventDefault();
-        setShowOfferFeedback(true);
+        setFeedbackTarget('outreach_settings');
         if (offerSummary.trim().length < 20) {
           invalid('Enter a programme offer of at least 20 characters before saving.');
           return;
@@ -448,25 +466,17 @@ export function ProgrammeEmployerEngagement({
           expectedVersion: data.settings?.version ?? 0, payload: { offerSummary: offerSummary.trim() },
         }, 'Programme offer summary saved.');
       }}>
-        <label className="block text-sm font-medium">Programme offer for employer outreach<textarea className={fieldClass} minLength={20} maxLength={2000} required value={offerSummary} onChange={(event) => setOfferSummary(event.target.value)} /></label>
+        <label className="block text-sm font-medium">Programme offer for employer outreach<textarea disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} minLength={20} maxLength={2000} required value={offerSummary} onChange={(event) => setOfferSummary(event.target.value)} /></label>
         <p className="text-sm text-neutral-600">Enter 20 to 2,000 characters describing your programme's offer to employers.</p>
-        <button className="btn-secondary" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>SAVE PROGRAMME OFFER</button>
-        <div aria-live="polite" aria-atomic="true" className="text-sm">
-          {showOfferFeedback && <>
-          {busy && <p>Saving employer engagement change?</p>}
-          {error && <p className="text-red-900">{error}</p>}
-          {message && <p className="text-green-900">{message}</p>}
-          {pendingSave?.operation === 'outreach_settings' && !busy &&
-            <p>Use ?Retry exact saved change? above to confirm the retained offer request.</p>}
-          </>}
-        </div>
+        <button className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>{busy && feedbackTarget === 'outreach_settings' ? 'Saving...' : 'SAVE PROGRAMME OFFER'}</button>
+        {renderFeedback('outreach_settings')}
       </form>}
       {outreachAvailability && !outreachAvailability.available && <div role="status" className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
         AI draft preparation is unavailable. Configure server-side <code>OPENAI_API_KEY</code>, set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_AI_ENABLED=true</code>, and optionally set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_DAILY_LIMIT</code> (default 10, maximum 50). No browser key or fallback draft is used.
       </div>}
       {selectedEmployer && <div className="mt-3 space-y-3">
-        <label className="block text-sm font-medium">Employer contact for the draft<select className={fieldClass} value={draftContactId} onChange={(event) => setDraftContactId(event.target.value)}><option value="">No named contact</option>{selectedContacts.map((contact) => <option key={contact.id} value={contact.id} disabled={contact.suppressed}>{contact.preferredName}{contact.suppressed ? ' — suppressed' : ''}</option>)}</select></label>
-        <button className="btn-primary" disabled={busy || !outreachAvailability?.available || !data.settings || !programme.brandingName || !programme.senderDisplayName || !programme.senderReplyTo || !selectedEmployer.sourceEvidence || !!pendingSearch || !!pendingSave || !!pendingDraft}
+        <label className="block text-sm font-medium">Employer contact for the draft<select disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={draftContactId} onChange={(event) => setDraftContactId(event.target.value)}><option value="">No named contact</option>{selectedContacts.map((contact) => <option key={contact.id} value={contact.id} disabled={contact.suppressed}>{contact.preferredName}{contact.suppressed ? ' — suppressed' : ''}</option>)}</select></label>
+        <button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !outreachAvailability?.available || !data.settings || !programme.brandingName || !programme.senderDisplayName || !programme.senderReplyTo || !selectedEmployer.sourceEvidence || !!pendingSearch || !!pendingSave || !!pendingDraft}
           onClick={() => {
             const contact = selectedContacts.find((item) => item.id === draftContactId) ?? null;
             void runDraft({
@@ -475,10 +485,11 @@ export function ProgrammeEmployerEngagement({
               employerVersion: selectedEmployer.version, settingsVersion: data.settings?.version ?? 0,
               contactVersion: contact?.version ?? null,
             });
-          }}>PREPARE DRAFT FOR REVIEW</button>
+          }}>{busy && feedbackTarget === 'draft' ? 'Preparing...' : 'PREPARE DRAFT FOR REVIEW'}</button>{renderFeedback('draft')}
         {(!data.settings || !programme.brandingName || !programme.senderDisplayName || !programme.senderReplyTo || !selectedEmployer.sourceEvidence) && <p className="text-sm text-amber-800">Draft preparation needs the programme offer, branding, sender identity and verified employer source evidence.</p>}
         {draftEdit.draftId ? <form className="space-y-2" noValidate onSubmit={(event) => {
           event.preventDefault();
+            setFeedbackTarget('draft_revision');
           if (!draftEdit.subject.trim() || draftEdit.body.trim().length < 20) {
             invalid('Enter a subject and an email body of at least 20 characters before saving the reviewed draft.');
             return;
@@ -490,9 +501,10 @@ export function ProgrammeEmployerEngagement({
           }, 'Outreach draft revision saved. Nothing was sent.');
         }}>
           <p className="rounded border border-blue-300 bg-blue-50 p-2 text-sm"><strong>Prepared — not sent.</strong> Review and edit before any separately authorised future sending workflow.</p>
-          <label className="block text-sm font-medium">Subject<input required maxLength={200} className={fieldClass} value={draftEdit.subject} onChange={(event) => setDraftEdit({ ...draftEdit, subject: event.target.value })} /></label>
-          <label className="block text-sm font-medium">Email body<textarea required minLength={20} maxLength={5000} className={fieldClass} rows={9} value={draftEdit.body} onChange={(event) => setDraftEdit({ ...draftEdit, body: event.target.value })} /></label>
-          <button className="btn-secondary" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>SAVE REVIEWED DRAFT</button>
+          <label className="block text-sm font-medium">Subject<input disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} required maxLength={200} className={fieldClass} value={draftEdit.subject} onChange={(event) => setDraftEdit({ ...draftEdit, subject: event.target.value })} /></label>
+          <label className="block text-sm font-medium">Email body<textarea disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} required minLength={20} maxLength={5000} className={fieldClass} rows={9} value={draftEdit.body} onChange={(event) => setDraftEdit({ ...draftEdit, body: event.target.value })} /></label>
+          <button className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>{busy && feedbackTarget === 'draft_revision' ? 'Saving...' : 'SAVE REVIEWED DRAFT'}</button>
+            {renderFeedback('draft_revision')}
         </form> : <p className="text-sm text-neutral-600">No outreach draft has been prepared for this employer.</p>}
       </div>}
     </section>

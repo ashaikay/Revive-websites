@@ -240,4 +240,41 @@ describe('Programme Hub employer discovery and engagement', () => {
     expect(within(outreach).getByRole('option', { name: 'Suppressed Contact — suppressed' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /^send/i })).toBeNull();
   });
+  it.each([
+    ['SAVE ENGAGEMENT PLAN', 'engagement', 'Employer engagement plan saved.'],
+    ['ADD MANUAL HISTORY', 'engagement_event', 'Engagement history added as a manual record. Nothing was sent by REV.'],
+    ['SAVE PROGRAMME OFFER', 'outreach_settings', 'Programme offer summary saved.'],
+    ['SAVE REVIEWED DRAFT', 'draft_revision', 'Outreach draft revision saved. Nothing was sent.'],
+  ])('shows saving and confirmation inside the %s form', async (buttonName, operation, confirmation) => {
+    const draftId = '77777777-7777-4777-8777-777777777777';
+    mocks.rows.programme_hub_employer_outreach_drafts = [{ id: draftId, root_draft_id: draftId, workspace_id: workspaceId, programme_id: programmeId, employer_id: employerId, employer_contact_id: null, revision: 1, subject: 'Introduction', body: 'Our programme helps local employers with suitable introductions.', status: 'prepared_not_sent', current: true, created_at: '2026-10-10T00:00:00.000Z' }];
+    let resolveSave!: (value: unknown) => void;
+    const statuses = mocks.invoke.getMockImplementation()!;
+    mocks.invoke.mockImplementation((name: string, options: { body: Record<string, unknown> }) => name === 'rev-programme-employer-engagement-save'
+      ? new Promise((resolve) => { resolveSave = resolve; }) : statuses(name, options));
+    render(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
+    const button = await screen.findByRole('button', { name: buttonName });
+    const form = button.closest('form')!;
+    if (operation === 'engagement_event') fireEvent.change(within(form).getByLabelText('What happened'), { target: { value: 'Discussed recruitment needs.' } });
+    if (operation === 'outreach_settings') fireEvent.change(within(form).getByLabelText('Programme offer for employer outreach'), { target: { value: 'We support employers with suitable candidate introductions.' } });
+    fireEvent.click(button);
+    expect(await within(form).findByRole('button', { name: 'Saving...' })).toBeDisabled();
+    const call = mocks.invoke.mock.calls.find(([name]) => name === 'rev-programme-employer-engagement-save');
+    expect(call?.[1].body.operation).toBe(operation);
+    resolveSave({ data: { operation, recordId: draftId, workspaceId, programmeId, version: 1, duplicate: false }, error: null });
+    expect(await within(form).findByText(confirmation)).toBeVisible();
+    expect(screen.getAllByText(confirmation)).toHaveLength(1);
+    expect(within(form).getByRole('button', { name: buttonName })).toBeEnabled();
+  });
+
+  it('keeps short-offer validation next to the offer button without invoking a save', async () => {
+    render(<ProgrammeEmployerEngagement {...props()} />);
+    const button = await screen.findByRole('button', { name: 'SAVE PROGRAMME OFFER' });
+    const form = button.closest('form')!;
+    fireEvent.change(within(form).getByLabelText('Programme offer for employer outreach'), { target: { value: 'Too short' } });
+    fireEvent.click(button);
+    expect(await within(form).findByRole('alert')).toHaveTextContent('at least 20 characters');
+    expect(mocks.invoke.mock.calls.filter(([name]) => name === 'rev-programme-employer-engagement-save')).toHaveLength(0);
+  });
+
 });

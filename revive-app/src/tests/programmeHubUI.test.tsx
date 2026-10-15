@@ -14,6 +14,7 @@ const savedId = '66666666-6666-4666-8666-666666666666';
 
 const mocks = vi.hoisted(() => ({
   rows: {} as Record<string, unknown[]>,
+  notesReadFails: false,
   invoke: vi.fn(),
   discoveryStatus: vi.fn(),
   outreachStatus: vi.fn(),
@@ -25,7 +26,7 @@ vi.mock('@/data/supabaseClient', () => ({
       const filters: Array<[string, unknown]> = [];
       const result = () => ({
         data: (mocks.rows[table] ?? []).filter((row) => filters.every(([column, value]) => (row as Record<string, unknown>)[column] === value)),
-        error: null,
+        error: mocks.notesReadFails && table === 'programme_hub_participant_notes' ? new Error('read unavailable') : null,
       });
       const query = {
         select: () => query,
@@ -112,6 +113,7 @@ const setRows = (role: 'owner' | 'member', includeParticipant = false) => {
 beforeEach(() => {
   window.sessionStorage.clear();
   window.localStorage.clear();
+  mocks.notesReadFails = false;
   mocks.invoke.mockReset();
   mocks.discoveryStatus.mockReset().mockResolvedValue({ data: { available: false, provider: 'Companies House' }, error: null });
   mocks.outreachStatus.mockReset().mockResolvedValue({ data: { available: false, model: null }, error: null });
@@ -171,7 +173,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
         active: true,
       },
     });
-    expect(await screen.findByText('Employer created.')).toBeVisible();
+    expect(await within(section).findByText('Employer created.')).toBeVisible();
     expect(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`)).toBeNull();
   });
 
@@ -201,9 +203,10 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     fireEvent.click(add);
     fireEvent.click(add);
     expect(mocks.invoke).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('Saving this Programme Hub change. Please wait.')).toBeVisible();
+    expect(await within(section).findByText('Saving this Programme Hub change. Please wait.')).toBeVisible();
+    expect(within(section).getByRole('button', { name: 'Saving...' })).toBeDisabled();
     resolveSave({ data: { operation: 'employer', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
-    expect(await screen.findByText('Employer created.')).toBeVisible();
+    expect(await within(section).findByText('Employer created.')).toBeVisible();
   });
 
   it('shows an unknown save outcome and preserves the submitted form values', async () => {
@@ -244,7 +247,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
     expect(await screen.findByRole('heading', { name: 'My assigned Service users' })).toBeVisible();
     expect(screen.getByText(/Alex/)).toBeVisible();
-    expect(screen.getByText(/CASE-001/)).toBeVisible();
+    expect(screen.getByText('Case reference: CASE-001')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Advisers and caseload' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Participant employment profiles' })).toBeNull();
     expect(screen.queryByText('Programme settings')).toBeNull();
@@ -437,6 +440,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
       { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', workspace_id: workspaceId, programme_id: secondProgrammeId, participant_id: secondParticipantId, body: 'Other programme note', author_user_id: ownerId, created_at: '2026-10-09T10:00:00.000Z', version: 1 },
     ];
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const summary = await screen.findByText(/^Case notes \(2\)/);
+    fireEvent.click(summary);
     expect(await screen.findByText('Newest action')).toBeVisible();
     const timeline = screen.getByText('Newest action').closest('ol');
     if (!timeline) throw new Error('Note timeline missing');
@@ -453,6 +458,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     setRows('owner', true);
     mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('network unavailable') });
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(await screen.findByText(/^Case notes \(0\)/));
     const note = await screen.findByLabelText('Add a note');
     fireEvent.change(note, { target: { value: '  Agreed to update the CV this week.  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
@@ -476,4 +482,109 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(await screen.findByText('The retained Programme Hub change was confirmed.')).toBeVisible();
     expect(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`)).toBeNull();
   });
+  it('shows authorised saved contact, opportunity and profile fields without entering edit mode', async () => {
+    setRows('owner', true);
+    const employerId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const contactId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    mocks.rows.programme_hub_employers = [{ id: employerId, workspace_id: workspaceId, programme_id: programmeId, employer_key: 'EMP-READ', display_name: 'Read Only Employer', sector_key: 'hospitality', primary_geography_key: 'Birmingham', active: true, version: 1 }];
+    mocks.rows.programme_hub_employer_contacts = [{ id: contactId, workspace_id: workspaceId, programme_id: programmeId, employer_id: employerId, contact_key: 'CONTACT-READ', preferred_name: 'Taylor', role_title: 'Hiring manager', business_email: 'taylor@example.org', business_phone: null, suppressed: false, suppression_reason_key: null, active: true, version: 1 }];
+    mocks.rows.programme_hub_vacancies = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, employer_id: employerId, employer_contact_id: contactId, vacancy_key: 'VAC-READ', title: 'Chef opportunity', work_geography_key: 'Birmingham', required_skill_keys: ['food_safety'], desired_skill_keys: ['teamwork'], active: true, version: 1 }];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const contact = (await screen.findByRole('heading', { name: 'Taylor' })).closest('article')!;
+    fireEvent.click(within(contact).getByText('View details'));
+    expect(within(contact).getByText('taylor@example.org')).toBeVisible();
+    expect(within(contact).getByText('Hiring manager')).toBeVisible();
+    expect(within(contact).getByText('Not provided')).toBeVisible();
+    const opportunity = screen.getByRole('heading', { name: 'Chef opportunity' }).closest('article')!;
+    fireEvent.click(within(opportunity).getByText('View details'));
+    expect(within(opportunity).getByText('food_safety')).toBeVisible();
+    expect(within(opportunity).getByText('teamwork')).toBeVisible();
+    const participant = screen.getByRole('heading', { name: 'Alex' }).closest('article')!;
+    fireEvent.click(within(participant).getByText('View employment profile'));
+    expect(within(participant).getByText('customer_service')).toBeVisible();
+    expect(within(participant).getByText('configured-area')).toBeVisible();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('keeps case notes independently collapsed and preserves an open unsaved draft', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_participants = [participantRow, { ...secondParticipantRow, programme_id: programmeId }];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const alex = (await screen.findByRole('heading', { name: 'Alex' })).closest('article')!;
+    const sam = screen.getByRole('heading', { name: 'Sam' }).closest('article')!;
+    const alexSummary = within(alex).getByText(/^Case notes/);
+    const samSummary = within(sam).getByText(/^Case notes/);
+    expect(alexSummary.closest('details')).not.toHaveAttribute('open');
+    expect(samSummary.closest('details')).not.toHaveAttribute('open');
+    fireEvent.click(alexSummary);
+    fireEvent.change(within(alex).getByLabelText('Add a note'), { target: { value: 'Keep my draft' } });
+    fireEvent.click(alexSummary);
+    await waitFor(() => expect(alexSummary.closest('details')).toHaveAttribute('open'));
+    expect(within(alex).getByLabelText('Add a note')).toHaveValue('Keep my draft');
+    expect(samSummary.closest('details')).not.toHaveAttribute('open');
+  });
+
+  it('shows contact validation beside its save action rather than at the top of the page', async () => {
+    setRows('owner');
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const section = (await screen.findByRole('heading', { name: 'Employer contacts' })).closest('section')!;
+    fireEvent.click(within(section).getByRole('button', { name: 'Add record' }));
+    expect(await within(section).findByRole('alert')).toHaveTextContent('Enter an employer');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Employers', 'employer', [['Employer reference (for example, EMP-001)', 'EMP-SAVE'], ['Employer name', 'Local employer']], 'Employer created.'],
+    ['Employer contacts', 'contact', [['Employer', savedId], ['Contact reference (for example, CONTACT-001)', 'CONTACT-SAVE'], ['Preferred name', 'Taylor']], 'Employer contact created.'],
+    ['Job opportunities', 'vacancy', [['Employer', savedId], ['Vacancy reference (for example, VAC-001)', 'VAC-SAVE'], ['Vacancy title', 'Local opportunity']], 'Vacancy created.'],
+    ['Service users', 'participant', [['Participant reference (for example, PART-001)', 'PART-SAVE'], ['Preferred name', 'Robin'], ['Tenant case reference', 'CASE-SAVE']], 'Participant employment profile created.'],
+  ])('shows progress and confirmation beside the %s form', async (heading, operation, values, confirmation) => {
+    setRows('owner');
+    mocks.rows.programme_hub_employers = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, employer_key: 'EMP-EXISTING', display_name: 'Existing employer', sector_key: null, primary_geography_key: null, active: true, version: 1 }];
+    let resolveSave!: (value: unknown) => void;
+    mocks.invoke.mockImplementation(() => new Promise((resolve) => { resolveSave = resolve; }));
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const section = (await screen.findByRole('heading', { name: heading })).closest('section')!;
+    const form = within(section).getByRole('button', { name: 'Add record' }).closest('form')!;
+    for (const [label, value] of values as string[][]) fireEvent.change(within(form).getByLabelText(label), { target: { value } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Add record' }));
+    expect(await within(form).findByRole('button', { name: 'Saving...' })).toBeDisabled();
+    expect(mocks.invoke.mock.calls[0][1].body.operation).toBe(operation);
+    resolveSave({ data: { operation, recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
+    expect(await within(form).findByText(confirmation)).toBeVisible();
+    expect(screen.getAllByText(confirmation)).toHaveLength(1);
+  });
+
+  it('shows programme and adviser registration progress at their own controls', async () => {
+    setRows('owner');
+    let resolveSave!: (value: unknown) => void;
+    mocks.invoke.mockImplementation(() => new Promise((resolve) => { resolveSave = resolve; }));
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(await screen.findByText('Programme configuration'));
+    const configuration = screen.getByText('Programme configuration').closest('details')!;
+    fireEvent.change(within(configuration).getByLabelText('Programme name'), { target: { value: 'New programme' } });
+    fireEvent.click(within(configuration).getByRole('button', { name: 'Create programme' }));
+    expect(await within(configuration).findByRole('button', { name: 'Saving...' })).toBeDisabled();
+    resolveSave({ data: { operation: 'programme', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
+    expect(await within(configuration).findByText('Programme created.')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Workspace member'), { target: { value: ownerId } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add adviser' }));
+    const caseload = screen.getByRole('heading', { name: 'Employment Specialists and caseload' }).closest('section')!;
+    expect(await within(caseload).findByRole('button', { name: 'Saving...' })).toBeDisabled();
+    resolveSave({ data: { operation: 'adviser', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
+    expect(await within(caseload).findByText('Programme adviser added.')).toBeVisible();
+  });
+
+  it('does not show a failed notes read as an empty timeline', async () => {
+    setRows('owner', true);
+    mocks.notesReadFails = true;
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const summary = await screen.findByText(/^Case notes \(could not load\)/);
+    fireEvent.click(summary);
+    expect(screen.getByText(/Case notes could not be loaded/)).toBeVisible();
+    expect(screen.queryByText(/No notes have been added/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save note' })).toBeDisabled();
+  });
+
 });
