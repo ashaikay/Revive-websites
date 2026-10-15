@@ -23,7 +23,8 @@ Deno.serve((request) => handleEmployerEngagementSave(request, {
   },
   save: async (input) => {
     const { data, error } = await service.rpc('save_rev_programme_employer_engagement', input);
-    if (error || !data) throw new Error('save unavailable');
+    if (error) throw error;
+    if (!data) throw new Error('Save outcome unknown.');
     const raw = data as Record<string, unknown>;
     return {
       operation: raw.operation,

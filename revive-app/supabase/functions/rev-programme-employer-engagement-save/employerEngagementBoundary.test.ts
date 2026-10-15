@@ -68,3 +68,26 @@ test('rejects an invented sent event type', async () => {
   const response = await handleEmployerEngagementSave(request({ ...body, payload: { ...body.payload, eventType: 'sent' } }), dependencies());
   assert.equal(response.status, 400);
 });
+
+
+test('marks a database constraint rejection as definitive without exposing details', async () => {
+  const response = await handleEmployerEngagementSave(request(body), dependencies({
+    save: async () => {
+      throw { code: '23505', message: 'PRIVATE database detail', details: 'PRIVATE record' };
+    },
+  }));
+  assert.equal(response.status, 409);
+  const result = await response.json();
+  assert.equal(result.outcome, 'rejected');
+  assert.equal(JSON.stringify(result).includes('PRIVATE'), false);
+});
+
+test('keeps transport and unclassified failures unknown', async () => {
+  for (const failure of [new Error('connection lost'), { code: 'PGRST000' }]) {
+    const response = await handleEmployerEngagementSave(request(body), dependencies({
+      save: async () => { throw failure; },
+    }));
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).outcome, 'unknown');
+  }
+});

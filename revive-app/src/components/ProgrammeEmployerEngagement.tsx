@@ -21,6 +21,7 @@ import type {
   ProgrammeHubProgramme,
 } from '@/domain/programmeHub';
 import {
+  EmployerEngagementSaveRejected,
   checkEmployerDiscoveryAvailability,
   checkEmployerOutreachAvailability,
   clearEmployerAttempt,
@@ -93,6 +94,7 @@ export function ProgrammeEmployerEngagement({
   const [pendingDraft, setPendingDraft] = useState<EmployerOutreachAttempt | null>(null);
   const [selectedEmployerId, setSelectedEmployerId] = useState('');
   const [offerSummary, setOfferSummary] = useState('');
+  const [showOfferFeedback, setShowOfferFeedback] = useState(false);
   const [engagementDraft, setEngagementDraft] = useState({ stage: 'to_review', responsibleAdviserUserId: '', nextAction: '', followUpDate: '' });
   const [historyDraft, setHistoryDraft] = useState({ contactId: '', eventType: 'manual_contact', channel: 'email', summary: '' });
   const [draftContactId, setDraftContactId] = useState('');
@@ -124,6 +126,7 @@ export function ProgrammeEmployerEngagement({
   useEffect(() => {
     let active = true;
     const captured = contextKey;
+    setShowOfferFeedback(false);
     setReady(false);
     setError('');
     setMessage('');
@@ -182,9 +185,10 @@ export function ProgrammeEmployerEngagement({
     setBusy(true);
     setError('');
     setMessage('');
+    setShowOfferFeedback(attempt.operation === 'outreach_settings');
     setPendingSave(attempt);
-    rememberEmployerAttempt(window.sessionStorage, 'save', workspaceId, userId, programme.id, attempt);
     try {
+      rememberEmployerAttempt(window.sessionStorage, 'save', workspaceId, userId, programme.id, attempt);
       const saved = await submitEmployerEngagementSave(attempt, gateway);
       clearEmployerAttempt(window.sessionStorage, 'save', workspaceId, userId, programme.id);
       setPendingSave(null);
@@ -193,6 +197,17 @@ export function ProgrammeEmployerEngagement({
       if (contextRef.current !== captured) return;
       setMessage(saved.duplicate ? 'This Companies House employer is already saved. The existing record was left unchanged.' : success);
     } catch (saveError) {
+      if (saveError instanceof EmployerEngagementSaveRejected) {
+        try {
+          clearEmployerAttempt(window.sessionStorage, 'save', workspaceId, userId, programme.id);
+          if (contextRef.current === captured) setPendingSave(null);
+        } catch {
+          if (contextRef.current === captured) {
+            setError('The change was rejected, but its retained request could not be cleared. Keep this page open and contact support.');
+          }
+          return;
+        }
+      }
       if (contextRef.current === captured) setError(saveError instanceof Error ? saveError.message : 'Employer engagement save not confirmed.');
     } finally {
       busyRef.current = false;
@@ -422,6 +437,7 @@ export function ProgrammeEmployerEngagement({
       <p className="text-sm text-neutral-600">Drafts use saved employer evidence and the programme offer. They contain no Service user information and require Employment Specialist review.</p>
       {isManager && <form className="mt-3 space-y-2" noValidate onSubmit={(event) => {
         event.preventDefault();
+        setShowOfferFeedback(true);
         if (offerSummary.trim().length < 20) {
           invalid('Enter a programme offer of at least 20 characters before saving.');
           return;
@@ -429,11 +445,21 @@ export function ProgrammeEmployerEngagement({
         void retainAndSave({
           operation: 'outreach_settings', workspaceId, programmeId: programme.id,
           recordId: data.settings?.id ?? null, requestId: crypto.randomUUID(),
-          expectedVersion: data.settings?.version ?? 0, payload: { offerSummary },
+          expectedVersion: data.settings?.version ?? 0, payload: { offerSummary: offerSummary.trim() },
         }, 'Programme offer summary saved.');
       }}>
         <label className="block text-sm font-medium">Programme offer for employer outreach<textarea className={fieldClass} minLength={20} maxLength={2000} required value={offerSummary} onChange={(event) => setOfferSummary(event.target.value)} /></label>
+        <p className="text-sm text-neutral-600">Enter 20 to 2,000 characters describing your programme's offer to employers.</p>
         <button className="btn-secondary" disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft}>SAVE PROGRAMME OFFER</button>
+        <div aria-live="polite" aria-atomic="true" className="text-sm">
+          {showOfferFeedback && <>
+          {busy && <p>Saving employer engagement change?</p>}
+          {error && <p className="text-red-900">{error}</p>}
+          {message && <p className="text-green-900">{message}</p>}
+          {pendingSave?.operation === 'outreach_settings' && !busy &&
+            <p>Use ?Retry exact saved change? above to confirm the retained offer request.</p>}
+          </>}
+        </div>
       </form>}
       {outreachAvailability && !outreachAvailability.available && <div role="status" className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
         AI draft preparation is unavailable. Configure server-side <code>OPENAI_API_KEY</code>, set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_AI_ENABLED=true</code>, and optionally set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_DAILY_LIMIT</code> (default 10, maximum 50). No browser key or fallback draft is used.

@@ -203,12 +203,27 @@ export async function submitEmployerDiscovery(
   return publicSearch(response.data, attempt);
 }
 
+export class EmployerEngagementSaveRejected extends Error {
+  constructor() {
+    super('The change was rejected. Refresh the programme before editing and saving again.');
+    this.name = 'EmployerEngagementSaveRejected';
+  }
+}
+
 export async function submitEmployerEngagementSave(
   attempt: EmployerEngagementSaveAttempt,
   gateway: EmployerEngagementInvokeGateway,
 ) {
   const response = await gateway.invoke('rev-programme-employer-engagement-save', { ...attempt });
-  if (response.status !== 200) throw new Error('Employer engagement save not confirmed. Retry the exact same change.');
+  if (response.status !== 200) {
+    const rejected = response.data !== null && typeof response.data === 'object' &&
+      !Array.isArray(response.data) &&
+      (response.data as Record<string, unknown>).outcome === 'rejected';
+    if ([400, 403, 409].includes(response.status) && rejected) {
+      throw new EmployerEngagementSaveRejected();
+    }
+    throw new Error('Employer engagement save not confirmed. Retry the exact same change.');
+  }
   const raw = object(response.data);
   if (Object.keys(raw).sort().join(',') !== 'duplicate,operation,programmeId,recordId,version,workspaceId' ||
     raw.operation !== attempt.operation || raw.workspaceId !== attempt.workspaceId ||

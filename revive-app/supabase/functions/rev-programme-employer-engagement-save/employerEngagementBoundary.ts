@@ -104,7 +104,22 @@ export async function handleEmployerEngagementSave(request: Request, dependencie
       target_payload: body.payload as Record<string, unknown>,
     });
     return reply(200, result);
-  } catch {
-    return reply(409, { error: 'Employer engagement change unavailable or changed.' });
+  } catch (error: unknown) {
+    const code = error && typeof error === 'object' && 'code' in error
+      ? (error as { code?: unknown }).code : null;
+    if (typeof code === 'string' &&
+      (code === 'P0001' || code === '42501' || /^(22|23)[0-9A-Z]{3}$/.test(code))) {
+      const status = code === '42501' ? 403 : code.startsWith('22') ? 400 : 409;
+      return reply(status, {
+        error: status === 403
+          ? 'This change is not permitted.'
+          : 'The change was rejected. Refresh the programme before editing and saving again.',
+        outcome: 'rejected',
+      });
+    }
+    return reply(503, {
+      error: 'Save outcome is unknown. Retry the exact same change.',
+      outcome: 'unknown',
+    });
   }
 }
