@@ -101,6 +101,8 @@ export interface ProgrammeHubParticipantAdviser {
   adviserUserId: string;
   active: boolean;
   version: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface ProgrammeHubParticipantNote {

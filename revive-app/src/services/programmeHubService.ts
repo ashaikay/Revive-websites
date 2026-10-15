@@ -23,6 +23,13 @@ const text = (value: unknown): value is string => typeof value === 'string' && v
 const nullableText = (value: unknown): value is string | null => value === null || typeof value === 'string';
 const version = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 1;
 const tags = (value: unknown): value is string[] => Array.isArray(value) && value.every(text);
+const assignmentTimestamp = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}[T ]/.test(value) || !Number.isFinite(Date.parse(value))) {
+    throw new Error('Invalid Programme Hub assignment timestamp.');
+  }
+  return value;
+};
 const common = (row: Record<string, unknown>, workspaceId: string) =>
   id(row.id) && row.workspace_id === workspaceId && typeof row.active === 'boolean' && version(row.version);
 const rows = (value: unknown): Record<string, unknown>[] => {
@@ -37,7 +44,7 @@ export const programmeHubColumns = {
   contacts: 'id,workspace_id,programme_id,employer_id,contact_key,preferred_name,role_title,business_email,business_phone,suppressed,suppression_reason_key,active,version',
   vacancies: 'id,workspace_id,programme_id,employer_id,employer_contact_id,vacancy_key,title,work_geography_key,required_skill_keys,desired_skill_keys,active,version',
   participants: 'id,workspace_id,programme_id,participant_key,preferred_name,case_reference,desired_role_keys,skill_keys,vacancy_search_geography_keys,residency_evidence_reference,active,version',
-  participantAdvisers: 'id,workspace_id,programme_id,participant_id,adviser_user_id,active,version',
+  participantAdvisers: 'id,workspace_id,programme_id,participant_id,adviser_user_id,active,version,created_at,updated_at',
   participantNotes: 'id,workspace_id,programme_id,participant_id,body,author_user_id,created_at,version',
   contracts: 'id,workspace_id,programme_id,contract_type,contract_version,effective_from,effective_to,active',
   members: 'user_id,role,status',
@@ -112,7 +119,7 @@ export async function loadProgrammeHubData(workspaceId: string, gateway: Program
   });
   const participantAdvisers = rows(assignmentRows).map((row): ProgrammeHubParticipantAdviser => {
     if (!common(row, workspaceId) || !id(row.programme_id) || !id(row.participant_id) || !id(row.adviser_user_id)) throw new Error('Invalid Programme Hub caseload assignment.');
-    return { id: row.id as string, workspaceId, programmeId: row.programme_id, participantId: row.participant_id, adviserUserId: row.adviser_user_id, active: row.active as boolean, version: row.version as number };
+    return { id: row.id as string, workspaceId, programmeId: row.programme_id, participantId: row.participant_id, adviserUserId: row.adviser_user_id, active: row.active as boolean, version: row.version as number, createdAt: assignmentTimestamp(row.created_at), updatedAt: assignmentTimestamp(row.updated_at) };
   });
   const contractTypes = ['residency_eligibility', 'vacancy_search_geography', 'service_delivery_geography', 'outcome_vocabulary', 'spreadsheet_mapping'];
   const contracts = rows(contractRows).map((row): ProgrammeHubContract => {

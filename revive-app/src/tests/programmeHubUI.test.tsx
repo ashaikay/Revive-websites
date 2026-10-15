@@ -15,6 +15,7 @@ const savedId = '66666666-6666-4666-8666-666666666666';
 const mocks = vi.hoisted(() => ({
   rows: {} as Record<string, unknown[]>,
   notesReadFails: false,
+  selections: {} as Record<string, string>,
   invoke: vi.fn(),
   discoveryStatus: vi.fn(),
   outreachStatus: vi.fn(),
@@ -29,7 +30,7 @@ vi.mock('@/data/supabaseClient', () => ({
         error: mocks.notesReadFails && table === 'programme_hub_participant_notes' ? new Error('read unavailable') : null,
       });
       const query = {
-        select: () => query,
+        select: (columns: string) => { mocks.selections[table] = columns; return query; },
         eq: (column: string, value: unknown) => { filters.push([column, value]); return query; },
         order: async () => result(),
         then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(result()).then(resolve, reject),
@@ -114,6 +115,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   window.localStorage.clear();
   mocks.notesReadFails = false;
+  mocks.selections = {};
   mocks.invoke.mockReset();
   mocks.discoveryStatus.mockReset().mockResolvedValue({ data: { available: false, provider: 'Companies House' }, error: null });
   mocks.outreachStatus.mockReset().mockResolvedValue({ data: { available: false, model: null }, error: null });
@@ -266,8 +268,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
     fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
     fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
-    expect(screen.getByText(/Workspace ownership alone does not satisfy this prerequisite/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Assign caseload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Assign ES' }));
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(1));
     expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({
       operation: 'participant_adviser',
@@ -276,14 +277,14 @@ describe('Outcomes / Programme Hub employer foundation', () => {
       expectedVersion: 0,
       payload: { participantId, adviserUserId: ownerId, active: true },
     });
-    expect(await screen.findByText('Service user assigned to Employment Specialist.')).toBeVisible();
+    expect(await screen.findByText('Assigned.')).toBeVisible();
   });
 
   it('explains when no active programme adviser registration exists', async () => {
     setRows('owner', true);
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
-    expect(await screen.findByText(/Add an active Employment Specialist registration/)).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Assign caseload' })).toBeDisabled();
+    expect(await screen.findByText(/Add an Employment Specialist under Manage team first/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Assign ES' })).toBeDisabled();
   });
 
   it('reactivates an inactive assignment with its loaded version and treats stale rejection as definitive', async () => {
@@ -306,8 +307,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
     fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
     fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
-    expect(screen.getByText(/will use its current version/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Reactivate caseload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore assignment' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('changed after it was loaded');
     expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({
       operation: 'participant_adviser',
@@ -335,7 +335,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
     fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
     fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
-    fireEvent.click(screen.getByRole('button', { name: 'Assign caseload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Assign ES' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('do not have permission');
     expect(screen.queryByRole('button', { name: 'Retry same change' })).toBeNull();
     expect(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${ownerId}`)).toBeNull();
@@ -350,7 +350,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
     fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
     fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: ownerId } });
-    fireEvent.click(screen.getByRole('button', { name: 'Assign caseload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Assign ES' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('outcome is unknown');
     const original = mocks.invoke.mock.calls[0][1].body;
     mocks.invoke.mockResolvedValueOnce({
@@ -568,12 +568,13 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(await within(configuration).findByRole('button', { name: 'Saving...' })).toBeDisabled();
     resolveSave({ data: { operation: 'programme', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
     expect(await within(configuration).findByText('Programme created.')).toBeVisible();
-    fireEvent.change(screen.getByLabelText('Workspace member'), { target: { value: ownerId } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add adviser' }));
+    fireEvent.click(screen.getByText(/^Manage team/));
+    fireEvent.change(screen.getByLabelText('Organisation member to add as Employment Specialist'), { target: { value: ownerId } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Employment Specialist' }));
     const caseload = screen.getByRole('heading', { name: 'Employment Specialists and caseload' }).closest('section')!;
     expect(await within(caseload).findByRole('button', { name: 'Saving...' })).toBeDisabled();
     resolveSave({ data: { operation: 'adviser', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
-    expect(await within(caseload).findByText('Programme adviser added.')).toBeVisible();
+    expect(await within(caseload).findByText('Employment Specialist added.')).toBeVisible();
   });
 
   it('does not show a failed notes read as an empty timeline', async () => {
@@ -585,6 +586,158 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.getByText(/Case notes could not be loaded/)).toBeVisible();
     expect(screen.queryByText(/No notes have been added/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Save note' })).toBeDisabled();
+  });
+
+  it('shows all active ES connections with server dates in the programme timezone', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [ownerId, adviserId].map((id, index) => ({ id: index === 0 ? savedId : participantId, workspace_id: workspaceId, programme_id: programmeId, user_id: id, active: true, version: 1 }));
+    mocks.rows.workspace_members.push({ workspace_id: workspaceId, user_id: adviserId, role: 'member', status: 'active' });
+    mocks.rows.programme_hub_participant_advisers = [ownerId, adviserId].map((id, index) => ({ id: index === 0 ? savedId : participantId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, adviser_user_id: id, active: true, version: 2, created_at: '2026-10-09T08:00:00.000Z', updated_at: '2026-10-10T09:00:00.000Z' }));
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const overview = await screen.findByLabelText('Caseload overview');
+    expect(within(overview).getByText('Assigned to You')).toBeVisible();
+    expect(within(overview).getByText(/Assigned to Employment Specialist ending 333333/)).toBeVisible();
+    expect(within(overview).getAllByText('First assigned: 09 Oct 2026, 09:00 BST')).toHaveLength(2);
+    expect(within(overview).getAllByText('Last updated: 10 Oct 2026, 10:00 BST')).toHaveLength(2);
+    expect(mocks.selections.programme_hub_participant_advisers).toContain('created_at,updated_at');
+    expect(mocks.selections.workspace_members).toBe('user_id,role,status');
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('searches the selected programme caseload without changing assignments', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_participants = [participantRow, { ...secondParticipantRow, programme_id: programmeId }];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const overview = await screen.findByLabelText('Caseload overview');
+    fireEvent.change(within(overview).getByLabelText('Search caseload'), { target: { value: 'CASE-002' } });
+    expect(within(overview).getByText('Sam · CASE-002')).toBeVisible();
+    expect(within(overview).queryByText('Alex · CASE-001')).toBeNull();
+    fireEvent.change(within(overview).getByLabelText('Search caseload'), { target: { value: 'no such person' } });
+    expect(within(overview).getByText('No Service users match this search.')).toBeVisible();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('does not describe inactive or suspended ES registrations as active assignments', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, user_id: adviserId, active: true, version: 1 }];
+    mocks.rows.workspace_members.push({ workspace_id: workspaceId, user_id: adviserId, role: 'member', status: 'suspended' });
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const overview = await screen.findByLabelText('Caseload overview');
+    expect(within(overview).getByText('No active Employment Specialist assigned.')).toBeVisible();
+    expect(screen.getByLabelText('Employment Specialist for caseload')).not.toHaveTextContent('333333');
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('keeps dates unavailable when absent instead of generating assignment dates', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, user_id: adviserId, active: true, version: 1 }];
+    mocks.rows.workspace_members.push({ workspace_id: workspaceId, user_id: adviserId, role: 'member', status: 'active' });
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const overview = await screen.findByLabelText('Caseload overview');
+    fireEvent.click(within(overview).getByText('View dates'));
+    expect(within(overview).getByText('First assigned: Date unavailable')).toBeVisible();
+    expect(within(overview).getByText('Last updated: Date unavailable')).toBeVisible();
+  });
+
+  it('clears caseload search and old connections when switching programmes', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_programmes = [programmeRow, secondProgrammeRow];
+    mocks.rows.programme_hub_participants = [participantRow, secondParticipantRow];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const overview = await screen.findByLabelText('Caseload overview');
+    fireEvent.change(within(overview).getByLabelText('Search caseload'), { target: { value: 'Alex' } });
+    fireEvent.change(screen.getByLabelText('Choose a programme'), { target: { value: secondProgrammeId } });
+    expect(within(overview).getByLabelText('Search caseload')).toHaveValue('');
+    expect(within(overview).getByText('Sam · CASE-002')).toBeVisible();
+    expect(within(overview).queryByText('Alex · CASE-001')).toBeNull();
+  });
+
+  it('shows an assigned ES the connection on the Service-user record without manager controls', async () => {
+    setRows('member', true);
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+    const card = (await screen.findByRole('heading', { name: 'Alex' })).closest('article')!;
+    expect(within(card).getByText('Assigned to You')).toBeVisible();
+    expect(screen.queryByLabelText('Caseload overview')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Employment Specialist' })).toBeNull();
+  });
+
+  it('keeps team setup collapsed and removes technical assignment explanations', async () => {
+    setRows('owner', true);
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const team = (await screen.findByText(/^Manage team/)).closest('details')!;
+    expect(team).not.toHaveAttribute('open');
+    expect(screen.queryByText(/Workspace ownership alone/)).toBeNull();
+    expect(screen.queryByText(/signed-in actor/)).toBeNull();
+    fireEvent.click(within(team).getByText(/^Manage team/));
+    expect(within(team).getByRole('button', { name: 'Add Employment Specialist' })).toBeVisible();
+  });
+
+  it('shows a short already-assigned state and keeps assignment dates collapsed', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_advisers = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, user_id: adviserId, active: true, version: 1 }];
+    mocks.rows.workspace_members.push({ workspace_id: workspaceId, user_id: adviserId, role: 'member', status: 'active' });
+    mocks.rows.programme_hub_participant_advisers[0] = { ...mocks.rows.programme_hub_participant_advisers[0] as Record<string, unknown>, created_at: '2026-10-09T08:00:00.000Z', updated_at: '2026-10-10T09:00:00.000Z' };
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.change(await screen.findByLabelText('Service user for caseload'), { target: { value: participantId } });
+    fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'), { target: { value: adviserId } });
+    expect(screen.getByRole('button', { name: 'Already assigned' })).toBeDisabled();
+    expect(screen.queryByText(/no duplicate assignment will be submitted/)).toBeNull();
+    const overview = screen.getByLabelText('Caseload overview');
+    expect(within(overview).getByText('1 Service user · All assigned')).toBeVisible();
+    const dates = within(overview).getByText('View dates').closest('details')!;
+    expect(dates).not.toHaveAttribute('open');
+    expect(within(dates).getByText('First assigned: 09 Oct 2026, 09:00 BST')).not.toBeVisible();
+    fireEvent.click(within(dates).getByText('View dates'));
+    expect(within(dates).getByText('First assigned: 09 Oct 2026, 09:00 BST')).toBeVisible();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('opens the existing record and all its programme notes directly from the caseload', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_participant_notes = [
+      { id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, body: 'First agreed action', author_user_id: ownerId, created_at: '2026-10-09T08:00:00.000Z', version: 1 },
+      { id: '99999999-9999-4999-8999-999999999999', workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, body: 'Latest agreed action', author_user_id: ownerId, created_at: '2026-10-10T08:00:00.000Z', version: 1 },
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', workspace_id: workspaceId, programme_id: secondProgrammeId, participant_id: secondParticipantId, body: 'Other programme private note', author_user_id: ownerId, created_at: '2026-10-10T09:00:00.000Z', version: 1 },
+    ];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const overview = await screen.findByLabelText('Caseload overview');
+    fireEvent.click(within(overview).getByRole('button', { name: 'Open Service-user record' }));
+    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    await waitFor(() => expect(card).toHaveFocus());
+    expect(within(card).getByText('Programme: Employment Support')).toBeVisible();
+    expect(within(card).getByText('customer_service')).toBeVisible();
+    expect(await within(card).findByText('Latest agreed action')).toBeVisible();
+    expect(within(card).getByText('First agreed action')).toBeVisible();
+    expect(screen.getAllByText('Latest agreed action')).toHaveLength(1);
+    expect(screen.queryByText('Other programme private note')).toBeNull();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('lets an assigned ES search names with spaces and open their existing record', async () => {
+    setRows('member', true);
+    mocks.rows.programme_hub_participants = [{ ...participantRow, preferred_name: 'Alex Jordan' }];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+    fireEvent.change(await screen.findByLabelText('Search Service users'), { target: { value: ' alex   jordan ' } });
+    const card = screen.getByRole('article', { name: 'Alex Jordan — Employment Support record' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Open Service-user record' }));
+    await waitFor(() => expect(card).toHaveFocus());
+    expect(within(card).getByText('customer_service')).toBeVisible();
+    expect(within(card).getByLabelText('Add a note')).toBeVisible();
+    expect(screen.queryByLabelText('Caseload overview')).toBeNull();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('does not carry an opened record or its notes into another programme', async () => {
+    setRows('owner', true);
+    mocks.rows.programme_hub_programmes = [programmeRow, secondProgrammeRow];
+    mocks.rows.programme_hub_participants = [participantRow, secondParticipantRow];
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
+    expect(screen.getByRole('article', { name: 'Alex — Employment Support record' })).toHaveFocus();
+    fireEvent.change(screen.getByLabelText('Choose a programme'), { target: { value: secondProgrammeId } });
+    expect(screen.queryByRole('article', { name: 'Alex — Employment Support record' })).toBeNull();
+    const sam = screen.getByRole('article', { name: 'Sam — Youth Employment record' });
+    expect(within(sam).getByText(/^Case notes/).closest('details')).not.toHaveAttribute('open');
   });
 
 });
