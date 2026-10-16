@@ -10,7 +10,10 @@ import type {
   ProgrammeHubSaveAttempt,
   ProgrammeHubVacancy,
 } from '@/domain/programmeHub';
+import { activeCaseloadConnections, specialistLabel, filterCaseload, readCompleteProgrammeRows, caseloadExportRows, caseloadColumns, downloadCaseloadWorkbook } from '@/services/programmeCaseloadReporting';
 import { programmeNeedsReview } from '@/domain/programmeHub';
+import { WorkspaceTeamPanel } from '@/components/WorkspaceTeamPanel';
+import { loadWorkspaceStaffNames } from '@/services/workspaceTeam';
 import { ParticipantContactDetails } from '@/components/ParticipantContactDetails';
 import type { ParticipantContactDraft, ParticipantContactRecord } from '@/services/programmeParticipantContacts';
 import { ProgrammeEmployerEngagement } from '@/components/ProgrammeEmployerEngagement';
@@ -23,6 +26,8 @@ import {
   ProgrammeHubSaveRejectedError,
   submitProgrammeHubAttempt,
 } from '@/services/programmeHubService';
+
+type ProgrammeArea = 'team' | 'caseload' | 'employers' | 'jobs' | 'settings';
 
 const emptyData: ProgrammeHubData = {
   programmes: [], advisers: [], employers: [], contacts: [], vacancies: [],
@@ -60,6 +65,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const identityKey = `${workspaceId}:${userId}`;
   const identityRef = useRef(identityKey);
   identityRef.current = identityKey;
+  const [area, setArea] = useState<ProgrammeArea | null>(null);
+  const [employerLocked, setEmployerLocked] = useState(false);
+  const [teamLocked, setTeamLocked] = useState(false);
+  const [staffOpen, setStaffOpen] = useState(false);
+  useEffect(() => { if (teamLocked) setStaffOpen(true); }, [teamLocked]);
+  const areaHeading = useRef<HTMLHeadingElement>(null);
   const [data, setData] = useState<ProgrammeHubData>(emptyData);
   const [selectedProgrammeId, setSelectedProgrammeId] = useState('');
   const [ready, setReady] = useState(false);
@@ -83,6 +94,14 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const [assignmentParticipantId, setAssignmentParticipantId] = useState('');
   const [assignmentAdviserId, setAssignmentAdviserId] = useState('');
   const [caseloadSearch, setCaseloadSearch] = useState('');
+  const [caseloadPage, setCaseloadPage] = useState(1);
+  const [specialistFilter, setSpecialistFilter] = useState('all');
+  const [recordStatusFilter, setRecordStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [exportPreview, setExportPreview] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState('');
+  const exportContext = useRef({ key: '', generation: 0 });
+  const [contactEditing, setContactEditing] = useState(false);
   const [openRecordRequest, setOpenRecordRequest] = useState<{ programmeId: string; participantId: string; sequence: number } | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [notesReady, setNotesReady] = useState(false);
@@ -92,14 +111,24 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const readGateway = useMemo(() => ({
     read: async (table: string, columns: string, ws: string) => {
       if (!supabaseClient) throw new Error('Programme Hub is unavailable.');
-      const { data: rows, error: readError } = await supabaseClient.from(table).select(columns).eq('workspace_id', ws);
-      if (readError) throw new Error('Programme Hub could not be loaded.');
-      return rows;
+      const client = supabaseClient;
+      const key = table === 'workspace_members' ? 'user_id' : 'id';
+      return readCompleteProgrammeRows(async (from, to) => {
+        const { data: rows, error: readError, count } = await client.from(table).select(columns, { count: 'exact' }).eq('workspace_id', ws).order(key).range(from, to);
+        return { data: rows, error: readError, count };
+      }, key);
     },
   }), []);
 
-  const load = async (capturedIdentity = identityKey) => {
+  const loadCurrentProgrammeData = async () => {
     const loaded = await loadProgrammeHubData(workspaceId, readGateway);
+    const names = await loadWorkspaceStaffNames(workspaceId);
+    loaded.members = loaded.members.map((member) => ({ ...member, displayName: names.find((name) => name.userId === member.userId)?.displayName }));
+    return loaded;
+  };
+
+  const load = async (capturedIdentity = identityKey) => {
+    const loaded = await loadCurrentProgrammeData();
     if (identityRef.current !== capturedIdentity) return;
     setData((current) => ({ ...loaded, participantNotes: current.participantNotes }));
     setSelectedProgrammeId((current) => {
@@ -128,6 +157,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     let active = true;
     const capturedIdentity = identityKey;
     setReady(false);
+    setArea(null);
+    setEmployerLocked(false);
+    setTeamLocked(false);
+    setStaffOpen(false);
+    setParticipantEdit(null);
+    setParticipantDraft(blankParticipant);
     setData(emptyData);
     setSelectedProgrammeId('');
     setNotesReady(false);
@@ -135,6 +170,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setNoteDrafts({});
     setContactRefreshKeys({});
     setCaseloadSearch('');
+    setCaseloadPage(1);
+    setSpecialistFilter('all');
+    setRecordStatusFilter('all');
+    setExportPreview(false);
+    setExportMessage('');
+    setContactEditing(false);
     setOpenRecordRequest(null);
     setError('');
     setMessage('');
@@ -192,9 +233,32 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const programmeAdvisers = data.advisers.filter((item) => item.programmeId === selectedProgrammeId);
   const activeProgrammeAdvisers = programmeAdvisers.filter((adviser) => adviser.active && data.members.some((member) => member.userId === adviser.userId && member.status === 'active'));
   const eligibleMembers = data.members.filter((member) => member.status === 'active' && !programmeAdvisers.some((adviser) => adviser.userId === member.userId && adviser.active));
-  const searchText = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-GB');
-  const caseloadQuery = searchText(caseloadSearch);
-  const visibleCaseload = programmeParticipants.filter((participant) => [participant.preferredName, participant.caseReference, ...currentCaseload(participant, data).map((assignment) => adviserLabel(assignment.adviserUserId, data, userId))].some((value) => searchText(value).includes(caseloadQuery)));
+  const effectiveSpecialist = isManager ? specialistFilter : userId;
+  const caseloadFilters = { specialist: effectiveSpecialist, status: recordStatusFilter, search: caseloadSearch };
+  const visibleCaseload = filterCaseload(programmeParticipants, data, userId, caseloadFilters);
+  const exportKey = JSON.stringify([identityKey, selectedProgrammeId, effectiveSpecialist, recordStatusFilter, caseloadSearch, busy, !!pending, area]);
+  if (exportContext.current.key !== exportKey) exportContext.current = { key: exportKey, generation: exportContext.current.generation + 1 };
+  useEffect(() => () => { exportContext.current.generation++; }, []);
+  useEffect(() => { setExportPreview(false); setExportMessage(''); }, [exportKey]);
+  const pageCount = Math.max(1, Math.ceil(visibleCaseload.length / 10));
+  const currentPage = Math.min(caseloadPage, pageCount);
+  const pageParticipants = visibleCaseload.slice((currentPage - 1) * 10, currentPage * 10);
+  const pendingParticipantId = pending?.programmeId === selectedProgrammeId &&
+    (pending.operation === 'participant_note' || pending.operation === 'participant_contact') ? String(pending.payload.participantId) : null;
+  const selectedParticipantId = pendingParticipantId ?? (openRecordRequest?.programmeId === selectedProgrammeId ? openRecordRequest.participantId : null);
+  const selectedParticipants = programmeParticipants.filter((participant) => participant.id === selectedParticipantId);
+  const recordNavigationLocked = busy || !!pending || !!participantEdit || contactEditing || employerLocked || teamLocked;
+  const pendingArea: ProgrammeArea | null = !pending ? null : pending.operation === 'programme' ? 'settings' : pending.operation === 'adviser' || pending.operation === 'participant_adviser' ? 'team' : pending.operation === 'vacancy' ? 'jobs' : pending.operation === 'employer' || pending.operation === 'contact' ? 'employers' : 'caseload';
+  const currentArea: ProgrammeArea = teamLocked ? 'team' : employerLocked ? 'employers' : pendingArea ?? area ?? (isManager ? data.programmes.length ? 'team' : 'settings' : 'caseload');
+  const changeArea = (next: ProgrammeArea) => {
+    if (recordNavigationLocked || ((next === 'settings' || next === 'team') && !isManager)) return;
+    setArea(next);
+  };
+  useEffect(() => { areaHeading.current?.focus({ preventScroll: true }); }, [currentArea]);
+  useEffect(() => {
+    if (!pendingParticipantId || !programmeParticipants.some((participant) => participant.id === pendingParticipantId)) return;
+    setOpenRecordRequest((current) => current?.programmeId === selectedProgrammeId && current.participantId === pendingParticipantId ? current : { programmeId: selectedProgrammeId, participantId: pendingParticipantId, sequence: (current?.sequence ?? 0) + 1 });
+  }, [pendingParticipantId, selectedProgrammeId, data.participants]);
   const programmeNotes = data.participantNotes.filter((item) => item.programmeId === selectedProgrammeId);
   const selectedCaseloadAssignment = data.participantAdvisers.find((item) =>
     item.programmeId === selectedProgrammeId &&
@@ -203,7 +267,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   ) ?? null;
 
   const openParticipantRecord = (participant: ProgrammeHubParticipant) => {
-    if (!selectedProgramme || participant.workspaceId !== workspaceId || participant.programmeId !== selectedProgramme.id || !programmeParticipants.some((item) => item.id === participant.id)) return;
+    if (recordNavigationLocked || !selectedProgramme || participant.workspaceId !== workspaceId || participant.programmeId !== selectedProgramme.id || !programmeParticipants.some((item) => item.id === participant.id)) return;
     setOpenRecordRequest((current) => ({ programmeId: selectedProgramme.id, participantId: participant.id, sequence: (current?.sequence ?? 0) + 1 }));
   };
 
@@ -312,7 +376,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const resetVacancy = () => { setVacancyEdit(null); setVacancyDraft({ ...blankVacancy, employerId: programmeEmployers[0]?.id ?? '' }); };
   const resetParticipant = () => { setParticipantEdit(null); setParticipantDraft(blankParticipant); };
   const selectProgramme = (programmeId: string) => {
+    if (recordNavigationLocked) return;
     if (!data.programmes.some((programme) => programme.id === programmeId)) return;
+    setArea(null);
+    setEmployerLocked(false);
+    setTeamLocked(false);
+    setStaffOpen(false);
     storeProgrammeId(workspaceId, userId, programmeId);
     setSelectedProgrammeId(programmeId);
     resetEmployer();
@@ -326,6 +395,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setNoteDrafts({});
     setContactRefreshKeys({});
     setCaseloadSearch('');
+    setCaseloadPage(1);
+    setSpecialistFilter('all');
+    setRecordStatusFilter('all');
+    setExportPreview(false);
+    setExportMessage('');
+    setContactEditing(false);
     setOpenRecordRequest(null);
     setMessage('');
     setError('');
@@ -376,7 +451,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const saveParticipant = (event: FormEvent) => {
     event.preventDefault();
     if (!selectedProgramme) return;
-    if (!validateForm(event.currentTarget as HTMLFormElement, [[participantDraft.participantKey, 'a Service user reference'], [participantDraft.preferredName, 'a preferred name'], [participantDraft.caseReference, 'a tenant case reference']])) return;
+    if (!validateForm(event.currentTarget as HTMLFormElement, [[participantDraft.participantKey, 'a Service user ID'], [participantDraft.preferredName, 'the name the Service user is known by'], [participantDraft.caseReference, 'a case reference']])) return;
     const payload = {
       ...participantDraft,
       desiredRoleKeys: splitKeys(participantDraft.desiredRoleKeys),
@@ -385,7 +460,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     };
     void saveAttempt(
       attempt('participant', selectedProgramme.id, participantEdit?.id ?? null, participantEdit?.version ?? 0, payload),
-      participantEdit ? 'Participant employment profile updated.' : 'Participant employment profile created.',
+      participantEdit ? 'Employment profile saved.' : 'Service user added.',
     ).then((confirmed) => { if (confirmed) resetParticipant(); });
   };
   const saveParticipantContact = (participant: ProgrammeHubParticipant, record: ParticipantContactRecord | null, draft: ParticipantContactDraft) => {
@@ -435,11 +510,52 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setParticipantDraft({ participantKey: participant.participantKey, preferredName: participant.preferredName, caseReference: participant.caseReference, desiredRoleKeys: joinKeys(participant.desiredRoleKeys), skillKeys: joinKeys(participant.skillKeys), vacancySearchGeographyKeys: joinKeys(participant.vacancySearchGeographyKeys), residencyEvidenceReference: participant.residencyEvidenceReference ?? '', active: participant.active });
   };
 
-  const localFeedbackAvailable = feedbackTarget === 'programme' ? isManager
-    : feedbackTarget === 'adviser' || feedbackTarget === 'participant_adviser' ? !!selectedProgramme && isManager
-    : feedbackTarget === 'participant' ? !!selectedProgramme && (isManager || !!participantEdit)
-    : (feedbackTarget.startsWith('participant_note:') || feedbackTarget.startsWith('participant_contact:')) ? programmeParticipants.some((participant) => feedbackTarget === `participant_note:${participant.id}` || feedbackTarget === `participant_contact:${participant.id}`)
-    : !!selectedProgramme && canMaintainEmployerRecords;
+  const exportCaseload = async () => {
+    if (exporting || busy || pending || !selectedProgramme) return;
+    const generation = exportContext.current.generation;
+    setExporting(true); setExportMessage('');
+    try {
+      const previewRows = caseloadExportRows(data, workspaceId, selectedProgramme.id, userId, caseloadFilters);
+      const fresh = await loadCurrentProgrammeData();
+      if (exportContext.current.generation !== generation) return;
+      const rows = caseloadExportRows(fresh, workspaceId, selectedProgramme.id, userId, caseloadFilters);
+      if (JSON.stringify(rows) !== JSON.stringify(previewRows)) {
+        setData((current) => ({ ...fresh, participantNotes: current.participantNotes }));
+        setExportPreview(false);
+        throw new Error('Caseload changed. Review the updated list, then export again.');
+      }
+      downloadCaseloadWorkbook(rows);
+      setExportMessage(`Excel download started: ${rows.length} ${rows.length === 1 ? 'Service user' : 'Service users'}.`);
+      setExportPreview(false);
+    } catch (failure: unknown) {
+      if (exportContext.current.generation === generation) setExportMessage(failure instanceof Error ? failure.message : 'Export failed. No file was downloaded.');
+    } finally { setExporting(false); }
+  };
+  const summaryParticipants = filterCaseload(programmeParticipants, data, userId, { specialist: effectiveSpecialist, status: 'all', search: '' });
+  const caseloadTools = selectedProgramme && (isManager || isAdviser) ? <div className="mt-4 space-y-3" aria-label="Employment Specialist overview">
+    <p className="font-medium">{isManager ? 'Active Service users' : 'My active caseload'}: {summaryParticipants.filter((participant) => participant.active).length}{isManager && specialistFilter === 'all' ? ` · Unassigned: ${programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).length === 0).length}` : ''}</p>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {isManager && <label className="text-sm font-medium">View ES caseload<select className={`${inputClass} mt-1`} value={specialistFilter} onChange={(event) => { setSpecialistFilter(event.target.value); setCaseloadPage(1); }}>
+        <option value="all">All Employment Specialists</option><option value="unassigned">Unassigned Service users</option>
+        {activeProgrammeAdvisers.map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)} · {programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).some((assignment) => assignment.adviserUserId === adviser.userId)).length} active</option>)}
+      </select></label>}
+      <label className="text-sm font-medium">Record status<select className={`${inputClass} mt-1`} value={recordStatusFilter} onChange={(event) => { setRecordStatusFilter(event.target.value as 'all' | 'active' | 'inactive'); setCaseloadPage(1); }}><option value="all">All records</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+    </div>
+    <button type="button" className="btn-secondary" disabled={busy || !!pending || exporting || !visibleCaseload.length} onClick={() => { setExportMessage(''); setExportPreview((value) => !value); }}>Export caseload</button>
+    {exportPreview && <div className="rounded border border-neutral-200 p-3 text-sm" aria-label="Caseload export preview">
+      <p className="font-medium">{visibleCaseload.length} filtered {visibleCaseload.length === 1 ? 'Service user' : 'Service users'} · Excel (.xlsx) · All matching pages</p>
+      <p className="mt-2">Includes: {caseloadColumns.join('; ')}.</p>
+      <p className="mt-2">Excludes case notes, contact details, address evidence and restricted information. Active means an active record, not an employment outcome.</p>
+      <button type="button" className="btn-primary mt-3" disabled={busy || !!pending || exporting} onClick={() => void exportCaseload()}>{exporting ? 'Checking access...' : 'Download Excel'}</button>
+    </div>}
+    {exportMessage && <p className="text-sm" role="status">{exportMessage}</p>}
+  </div> : null;
+
+  const localFeedbackAvailable = feedbackTarget === 'programme' ? isManager && currentArea === 'settings'
+    : feedbackTarget === 'adviser' || feedbackTarget === 'participant_adviser' ? !!selectedProgramme && isManager && currentArea === 'team'
+    : feedbackTarget === 'participant' ? !!selectedProgramme && currentArea === 'caseload' && (isManager || !!participantEdit)
+    : (feedbackTarget.startsWith('participant_note:') || feedbackTarget.startsWith('participant_contact:')) ? currentArea === 'caseload' && selectedParticipants.some((participant) => feedbackTarget === `participant_note:${participant.id}` || feedbackTarget === `participant_contact:${participant.id}`)
+    : !!selectedProgramme && canMaintainEmployerRecords && currentArea === (feedbackTarget === 'vacancy' ? 'jobs' : 'employers');
 
   if (!ready && !error) return <main className="p-8 text-neutral-600">Loading Outcomes / Programme Hub...</main>;
 
@@ -447,19 +563,38 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-600">Outcomes / Programme Hub</p>
-        <h1 className="mt-1 text-3xl font-bold text-neutral-900">Employer Engagement</h1>
-        <p className="mt-2 max-w-3xl text-neutral-600">Tenant-neutral employment-support records. This is separate from commercial GROWTH leads and worker Scheduling.</p>
+        <h1 className="mt-1 text-3xl font-bold text-neutral-900">Employment support</h1>
       </header>
 
       {(!feedbackTarget || !localFeedbackAvailable) && <SaveFeedback busy={busy} error={error} message={message} pending={!!pending} retry={retryPending} />}
 
+
+      {data.programmes.length > 0 && (
+        <section className="card border-primary-200 bg-primary-50 p-5" aria-label="Programme selection">
+          <Field label="Choose a programme">
+          <select className={inputClass} value={selectedProgrammeId} disabled={recordNavigationLocked} onChange={(event) => selectProgramme(event.target.value)}>
+            {data.programmes.map((programme) => <option key={programme.id} value={programme.id}>{programme.name}</option>)}
+          </select>
+          </Field>
+          {selectedProgramme && <p className="mt-3 text-sm text-neutral-700">You are viewing <strong>{selectedProgramme.name}</strong>. Records below belong only to this programme.</p>}
+        </section>
+      )}
+
+      {ready && (isManager || isAdviser) && <>
+        <nav className="flex flex-wrap gap-2" aria-label="Employment support areas">
+          {(isManager ? [['team', 'My team'], ['caseload', 'Caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities'], ['settings', 'Settings']] : [['caseload', 'My caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities']]).map(([key, label]) => <button key={key} type="button" aria-current={currentArea === key ? 'page' : undefined} className={currentArea === key ? 'btn-primary' : 'btn-secondary'} disabled={recordNavigationLocked && currentArea !== key} onClick={() => changeArea(key as ProgrammeArea)}>{label}</button>)}
+        </nav>
+        {recordNavigationLocked && <p className="text-sm" role="status">{busy || pending || employerLocked || teamLocked ? 'Finish or confirm the current request before changing areas.' : 'Save or cancel your edit before changing areas.'}</p>}
+        <h2 ref={areaHeading} tabIndex={-1} className="sr-only">{currentArea === 'team' ? 'Team workspace' : currentArea === 'caseload' ? 'Caseload workspace' : currentArea === 'employers' ? 'Employer workspace' : currentArea === 'jobs' ? 'Job opportunities workspace' : 'Programme settings workspace'}</h2>
+      </>}
+      <div hidden={currentArea !== 'settings'} className="space-y-6">
       {isManager && (
-        <details className="card p-5" open={data.programmes.length === 0 || (feedbackTarget === 'programme' && (busy || !!pending || !!error || !!message))}>
+        <details className="card p-5" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'programme' && (busy || pending)) event.currentTarget.open = true; }} open={data.programmes.length === 0 || (feedbackTarget === 'programme' && (busy || !!pending || !!error || !!message))}>
           <summary className="cursor-pointer font-semibold">Programme configuration</summary>
           <form className="mt-4 grid gap-4 md:grid-cols-2" data-save-target="programme" noValidate onSubmit={saveProgramme}>
             <Field label="Programme name"><input disabled={busy || !!pending} required className={inputClass} value={programmeDraft.name} onChange={(event) => setProgrammeDraft({ ...programmeDraft, name: event.target.value })} /></Field>
             <Field label="Timezone"><input disabled={busy || !!pending} required className={inputClass} value={programmeDraft.timezone} onChange={(event) => setProgrammeDraft({ ...programmeDraft, timezone: event.target.value })} /></Field>
-            <Field label="Tenant branding name"><input disabled={busy || !!pending} className={inputClass} value={programmeDraft.brandingName} onChange={(event) => setProgrammeDraft({ ...programmeDraft, brandingName: event.target.value })} /></Field>
+            <Field label="Programme branding name"><input disabled={busy || !!pending} className={inputClass} value={programmeDraft.brandingName} onChange={(event) => setProgrammeDraft({ ...programmeDraft, brandingName: event.target.value })} /></Field>
             <Field label="Sender display name"><input disabled={busy || !!pending} className={inputClass} value={programmeDraft.senderDisplayName} onChange={(event) => setProgrammeDraft({ ...programmeDraft, senderDisplayName: event.target.value })} /></Field>
             <Field label="Sender reply address"><input disabled={busy || !!pending} type="email" className={inputClass} value={programmeDraft.senderReplyTo} onChange={(event) => setProgrammeDraft({ ...programmeDraft, senderReplyTo: event.target.value })} /></Field>
             <div className="flex items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !!pending}>{busy && feedbackTarget === 'programme' ? 'Saving...' : programmeEdit ? 'Save programme changes' : 'Create programme'}</button>{programmeEdit && <button type="button" className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={resetProgramme}>Cancel</button>}</div>
@@ -467,29 +602,23 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
           {data.programmes.length > 0 && <ul className="mt-4 space-y-2">{data.programmes.map((programme) => <li key={programme.id} className="flex items-center justify-between rounded border p-3"><span>{programme.name}</span><button className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!!pending} onClick={() => editProgramme(programme)}>Edit</button></li>)}</ul>}
         </details>
       )}
-
-      {data.programmes.length > 0 && (
-        <section className="card border-primary-200 bg-primary-50 p-5" aria-label="Programme selection">
-          <Field label="Choose a programme">
-          <select className={inputClass} value={selectedProgrammeId} disabled={busy || !!pending} onChange={(event) => selectProgramme(event.target.value)}>
-            {data.programmes.map((programme) => <option key={programme.id} value={programme.id}>{programme.name}</option>)}
-          </select>
-          </Field>
-          {(busy || pending) && <p className="mt-2 text-sm text-amber-800">Programme switching is paused until the current save is confirmed, so its exact programme and payload cannot change.</p>}
-          {selectedProgramme && <p className="mt-3 text-sm text-neutral-700">You are viewing <strong>{selectedProgramme.name}</strong>. Records below belong only to this programme.</p>}
-        </section>
-      )}
-
       {selectedProgramme && isManager && <details className="card p-5">
         <summary className="cursor-pointer font-semibold">Programme settings</summary>
         <ConfigurationState programme={selectedProgramme} data={data} />
       </details>}
 
+      </div>
+
+      <div hidden={currentArea !== 'team'} className="space-y-6">
       {selectedProgramme && isManager && (
         <section className="card p-5" aria-labelledby="adviser-heading">
-          <h2 id="adviser-heading" className="text-xl font-semibold">Employment Specialists and caseload</h2>
-          <details className="mt-4 rounded-lg border border-neutral-200 p-4" open={feedbackTarget === 'adviser' && (busy || !!pending || !!error || !!message)}>
-            <summary className="cursor-pointer font-medium">Manage team ({activeProgrammeAdvisers.length})</summary>
+          <h2 id="adviser-heading" className="text-xl font-semibold">My team</h2>
+          <details className="mt-4" open={staffOpen || teamLocked} onToggle={(event) => { if (!event.currentTarget.open && teamLocked) event.currentTarget.open = true; setStaffOpen(event.currentTarget.open); }}><summary className="cursor-pointer font-semibold">Invite or manage staff</summary><WorkspaceTeamPanel key={`${workspaceId}:${userId}`} workspaceId={workspaceId} userId={userId} onChanged={load} onLocked={setTeamLocked} /></details>
+          <div className="mt-4 flex flex-wrap gap-3"><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => { setSpecialistFilter('all'); setCaseloadPage(1); changeArea('caseload'); }}>View all Service users</button><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => { setSpecialistFilter('unassigned'); setCaseloadPage(1); changeArea('caseload'); }}>View unassigned</button></div>
+          {activeProgrammeAdvisers.length === 0 ? <p className="mt-4 text-sm">No Employment Specialists added yet.</p> : <ul className="mt-4 divide-y divide-neutral-200" aria-label="Programme Employment Specialists">{activeProgrammeAdvisers.map((adviser) => <li key={adviser.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-semibold">{adviserLabel(adviser.userId, data, userId)}</p><p className="text-sm text-neutral-600">{programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).some((assignment) => assignment.adviserUserId === adviser.userId)).length} active {programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).some((assignment) => assignment.adviserUserId === adviser.userId)).length === 1 ? 'Service user' : 'Service users'}</p></div><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => { setSpecialistFilter(adviser.userId); setCaseloadPage(1); changeArea('caseload'); }}>Open caseload</button></li>)}</ul>}
+
+          <details className="mt-4 rounded-lg border border-neutral-200 p-4" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'adviser' && (busy || pending)) event.currentTarget.open = true; }} open={feedbackTarget === 'adviser' && (busy || !!pending || !!error || !!message)}>
+            <summary className="cursor-pointer font-medium">Add ES to programme ({activeProgrammeAdvisers.length})</summary>
             {eligibleMembers.length > 0 && <>
             <p className="mt-3 text-sm text-neutral-600">Choose a team member to add as an Employment Specialist.</p>
           <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
@@ -500,11 +629,11 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             <button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!adviserUserId || busy || !!pending} onClick={() => void saveAttempt(attempt('adviser', selectedProgramme.id, null, 0, { userId: adviserUserId, active: true }), 'Employment Specialist added.').then((confirmed) => { if (confirmed) setAdviserUserId(''); })}>{busy && feedbackTarget === 'adviser' ? 'Saving...' : 'Add Employment Specialist'}</button>
           </div>
             </>}
-            {eligibleMembers.length === 0 && <p className="mt-2 text-sm text-neutral-600">All available team members have been added.</p>}
+            {eligibleMembers.length === 0 && <p className="mt-2 text-sm text-neutral-600">No other staff accounts are available. Invite a team member above, then add them to this programme after they accept.</p>}
             {renderSaveFeedback('adviser')}
           {activeProgrammeAdvisers.length > 0 && <ul aria-label="Active programme Employment Specialists" className="mt-3 flex flex-wrap gap-2 text-sm">{activeProgrammeAdvisers.map((adviser) => <li key={adviser.id} className="rounded bg-neutral-100 px-3 py-2">{adviserLabel(adviser.userId, data, userId)}</li>)}</ul>}
           </details>
-          <h3 className="mt-5 font-semibold">Assign an Employment Specialist</h3>
+          <details className="mt-4 rounded border p-4" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'participant_adviser' && (busy || pending)) event.currentTarget.open = true; }} open={feedbackTarget === 'participant_adviser' && (busy || !!pending || !!error || !!message)}><summary className="cursor-pointer font-medium">Assign an Employment Specialist</summary>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <select disabled={busy || !!pending} aria-label="Service user for caseload" className={inputClass} value={assignmentParticipantId} onChange={(event) => setAssignmentParticipantId(event.target.value)}>
               <option value="">Select Service user</option>{programmeParticipants.map((participant) => <option key={participant.id} value={participant.id}>{participant.preferredName} - {participant.caseReference}</option>)}
@@ -525,25 +654,54 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
               }
             })}>{busy && feedbackTarget === 'participant_adviser' ? 'Saving...' : selectedCaseloadAssignment?.active ? 'Already assigned' : selectedCaseloadAssignment ? 'Restore assignment' : 'Assign ES'}</button>{renderSaveFeedback('participant_adviser')}
           </div>
-          {activeProgrammeAdvisers.length === 0 && <p className="mt-2 text-sm text-neutral-600">Add an Employment Specialist under Manage team first.</p>}
-          <div className="mt-5 border-t border-neutral-200 pt-4" aria-label="Caseload overview">
-            <h3 className="font-semibold">Caseload overview</h3>
-            <p className="mt-1 text-sm text-neutral-600">{programmeParticipants.length} {programmeParticipants.length === 1 ? 'Service user' : 'Service users'}{programmeParticipants.length > 0 && (programmeParticipants.some((participant) => currentCaseload(participant, data).length === 0) ? ` · ${programmeParticipants.filter((participant) => currentCaseload(participant, data).length === 0).length} unassigned` : ' · All assigned')}</p>
-            <label className="mt-3 block text-sm font-medium">Search caseload<input className={`${inputClass} mt-1`} value={caseloadSearch} onChange={(event) => setCaseloadSearch(event.target.value)} placeholder="Name, case reference or ES" /></label>
-            {programmeParticipants.length === 0 ? <p className="mt-3 text-sm text-neutral-600">Add a Service user to this programme before assigning a caseload.</p>
-              : visibleCaseload.length === 0 ? <p className="mt-3 text-sm text-neutral-600">No Service users match this search.</p>
-              : <ul className="mt-3 space-y-3">{visibleCaseload.map((participant) => <li key={participant.id} className="rounded border border-neutral-200 p-3">
-                <p className="font-medium">{participant.preferredName} · {participant.caseReference}{!participant.active ? ' · Inactive record' : ''}</p>
-                <CaseloadDetails participant={participant} data={data} userId={userId} programme={selectedProgramme} />
-                <p className="mt-2 text-sm text-neutral-600">Desired work: {participant.desiredRoleKeys.join(', ') || 'Not added'}</p>
-                <p className="text-sm text-neutral-600">Job search areas: {participant.vacancySearchGeographyKeys.join(', ') || 'Not added'}</p>
-                <p className="mt-1 text-sm text-neutral-600">{notesError ? 'Case notes unavailable' : !notesReady ? 'Loading case notes...' : programmeNotes.find((note) => note.participantId === participant.id) ? `Latest case note: ${formatProgrammeDate(programmeNotes.find((note) => note.participantId === participant.id)!.createdAt, selectedProgramme.timezone)}` : 'No case notes yet'}</p>
-                <button type="button" className="btn-secondary mt-3 focus-visible:ring-2" onClick={() => openParticipantRecord(participant)}>Open Service-user record</button>
-              </li>)}</ul>}
-          </div>
+          {activeProgrammeAdvisers.length === 0 && <p className="mt-2 text-sm text-neutral-600">Add an ES to this programme first.</p>}
+
+          </details>
+
         </section>
       )}
 
+      </div>
+
+      <div hidden={currentArea !== 'caseload'} className="space-y-6">
+      {selectedProgramme && (isManager || isAdviser) && <section className="card p-5">
+        <h2 className="text-xl font-semibold">{!isManager ? 'My caseload' : specialistFilter === 'all' ? 'All Service users' : specialistFilter === 'unassigned' ? 'Unassigned Service users' : `${adviserLabel(specialistFilter, data, userId)} — caseload`}</h2>
+          {caseloadTools}
+          <CompactCaseload participants={programmeParticipants} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} />
+      </section>}
+      {selectedProgramme && (isManager || isAdviser) && selectedParticipants.map((participant) => <section key={participant.id} className="card p-5" aria-label="Selected Service-user record">
+        <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">Service-user record</h2><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => setOpenRecordRequest(null)}>Close record</button></div>
+        <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onEditingChange={setContactEditing} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 1} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />
+        {participantEdit && (isManager ? <form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p>
+          <Field label="Service user ID"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
+          <Field label="Known as"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
+          <Field label="Case reference"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.caseReference} onChange={(event) => setParticipantDraft({ ...participantDraft, caseReference: event.target.value })} /></Field>
+          <Field label="Jobs of interest"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field>
+          <Field label="Work skills"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field>
+          <Field label="Preferred work locations"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field>
+          <Field label="Proof of address reference (optional)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.residencyEvidenceReference} onChange={(event) => setParticipantDraft({ ...participantDraft, residencyEvidenceReference: event.target.value })} /></Field>
+          <FormActions saveLabel="Save profile" addLabel="Add Service user" editing={!!participantEdit} saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />
+        {renderSaveFeedback('participant')}</form> : <form className="mt-4 grid gap-3 md:grid-cols-2" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p><Field label="Known as"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field><Field label="Jobs of interest"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field><Field label="Work skills"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field><Field label="Preferred work locations"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field><FormActions saveLabel="Save profile" editing saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />{renderSaveFeedback('participant')}</form>)}
+      </section>)}
+
+      {selectedProgramme && isManager && !participantEdit && <details className="card p-5" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'participant' && (busy || pending)) event.currentTarget.open = true; }} open={feedbackTarget === 'participant' && (busy || !!pending || !!error || !!message)}>
+        <summary className="cursor-pointer font-semibold">New Service user</summary>
+        <h2 className="mt-3 text-xl font-semibold">Service users</h2>
+        <form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p>
+          <Field label="Service user ID"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
+          <Field label="Known as"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
+          <Field label="Case reference"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.caseReference} onChange={(event) => setParticipantDraft({ ...participantDraft, caseReference: event.target.value })} /></Field>
+          <Field label="Jobs of interest"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field>
+          <Field label="Work skills"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field>
+          <Field label="Preferred work locations"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field>
+          <Field label="Proof of address reference (optional)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.residencyEvidenceReference} onChange={(event) => setParticipantDraft({ ...participantDraft, residencyEvidenceReference: event.target.value })} /></Field>
+          <FormActions saveLabel="Save profile" addLabel="Add Service user" editing={!!participantEdit} saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />
+        {renderSaveFeedback('participant')}</form>
+      </details>}
+
+      </div>
+
+      <div hidden={currentArea !== 'employers'} className="space-y-6">
       {selectedProgramme && canMaintainEmployerRecords && (
         <>
           <h2 className="text-xl font-semibold">Employers and contacts</h2>
@@ -559,9 +717,10 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             isManager={isManager}
             canMaintain={canMaintainEmployerRecords}
             onEmployersChanged={load}
+            onNavigationLockChange={setEmployerLocked}
           />
           <h3 className="text-lg font-semibold">Manual employer and contact records</h3>
-          <RecordSection title="Employers" empty="No employers have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="employer" noValidate onSubmit={saveEmployer}>
+          <RecordSection formLocked={feedbackTarget === 'employer' && (busy || !!pending)} formLabel="Add employer" formOpen={!!employerEdit || (feedbackTarget === 'employer' && (busy || !!pending || !!error || !!message))} title="Employers" empty="No employers have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="employer" noValidate onSubmit={saveEmployer}>
             <Field label="Employer reference (for example, EMP-001)"><input disabled={busy || !!pending} required className={inputClass} value={employerDraft.employerKey} onChange={(event) => setEmployerDraft({ ...employerDraft, employerKey: event.target.value })} /></Field>
             <Field label="Employer name"><input disabled={busy || !!pending} required className={inputClass} value={employerDraft.displayName} onChange={(event) => setEmployerDraft({ ...employerDraft, displayName: event.target.value })} /></Field>
             <Field label="Sector (for example, retail)"><input disabled={busy || !!pending} className={inputClass} value={employerDraft.sectorKey} onChange={(event) => setEmployerDraft({ ...employerDraft, sectorKey: event.target.value })} /></Field>
@@ -574,7 +733,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             ]} />)}
           </RecordSection>
 
-          <RecordSection title="Employer contacts" empty="No employer contacts have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="contact" noValidate onSubmit={saveContact}>
+          <RecordSection formLocked={feedbackTarget === 'contact' && (busy || !!pending)} formLabel="Add employer contact" formOpen={!!contactEdit || (feedbackTarget === 'contact' && (busy || !!pending || !!error || !!message))} title="Employer contacts" empty="No employer contacts have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="contact" noValidate onSubmit={saveContact}>
             <Field label="Employer"><select disabled={busy || !!pending} required className={inputClass} value={contactDraft.employerId} onChange={(event) => setContactDraft({ ...contactDraft, employerId: event.target.value })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
             <Field label="Contact reference (for example, CONTACT-001)"><input disabled={busy || !!pending} required className={inputClass} value={contactDraft.contactKey} onChange={(event) => setContactDraft({ ...contactDraft, contactKey: event.target.value })} /></Field>
             <Field label="Preferred name"><input disabled={busy || !!pending} required className={inputClass} value={contactDraft.preferredName} onChange={(event) => setContactDraft({ ...contactDraft, preferredName: event.target.value })} /></Field>
@@ -593,7 +752,14 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             ]} />)}
           </RecordSection>
 
-          <RecordSection title="Job opportunities" empty="No Job opportunities have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="vacancy" noValidate onSubmit={saveVacancy}>
+
+        </>
+      )}
+
+      </div>
+      <div hidden={currentArea !== 'jobs'} className="space-y-6">
+        {selectedProgramme && canMaintainEmployerRecords && (
+          <RecordSection formLocked={feedbackTarget === 'vacancy' && (busy || !!pending)} formLabel="Add job opportunity" formOpen={!!vacancyEdit || (feedbackTarget === 'vacancy' && (busy || !!pending || !!error || !!message))} title="Job opportunities" empty="No Job opportunities have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="vacancy" noValidate onSubmit={saveVacancy}>
             <Field label="Employer"><select disabled={busy || !!pending} required className={inputClass} value={vacancyDraft.employerId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerId: event.target.value, employerContactId: '' })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
             <Field label="Employer contact"><select disabled={busy || !!pending} className={inputClass} value={vacancyDraft.employerContactId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerContactId: event.target.value })}><option value="">No contact selected</option>{programmeContacts.filter((contact) => contact.employerId === vacancyDraft.employerId).map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}</option>)}</select></Field>
             <Field label="Vacancy reference (for example, VAC-001)"><input disabled={busy || !!pending} required className={inputClass} value={vacancyDraft.vacancyKey} onChange={(event) => setVacancyDraft({ ...vacancyDraft, vacancyKey: event.target.value })} /></Field>
@@ -610,38 +776,41 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
               ['Record status', vacancy.active ? 'Active' : 'Inactive'],
             ]} />)}
           </RecordSection>
-        </>
-      )}
-
-      {selectedProgramme && isManager && (
-        <RecordSection title="Service users" empty="No Service users have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}>
-          <Field label="Participant reference (for example, PART-001)"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
-          <Field label="Preferred name"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
-          <Field label="Tenant case reference"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.caseReference} onChange={(event) => setParticipantDraft({ ...participantDraft, caseReference: event.target.value })} /></Field>
-          <Field label="Desired roles (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field>
-          <Field label="Employment skills (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field>
-          <Field label="Vacancy search areas (comma separated)"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field>
-          <Field label="Residency evidence reference"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.residencyEvidenceReference} onChange={(event) => setParticipantDraft({ ...participantDraft, residencyEvidenceReference: event.target.value })} /></Field>
-          <FormActions editing={!!participantEdit} saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />
-        {renderSaveFeedback('participant')}</form>}>
-          {programmeParticipants.map((participant) => <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 0} openRecord={() => openParticipantRecord(participant)} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}
-        </RecordSection>
-      )}
-
-      {selectedProgramme && isAdviser && !isManager && (
-        <section className="card p-5">
-          <h2 className="text-xl font-semibold">My assigned Service users</h2>
-          <label className="mt-3 block text-sm font-medium">Search Service users<input className={`${inputClass} mt-1`} disabled={busy || !!pending} value={caseloadSearch} onChange={(event) => setCaseloadSearch(event.target.value)} placeholder="Name or case reference" /></label>
-          <div className="mt-3 space-y-3">{visibleCaseload.map((participant) => <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 0} openRecord={() => openParticipantRecord(participant)} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />)}</div>
-          {programmeParticipants.length === 0 && <p className="mt-3 text-sm text-neutral-600">No Service users are currently assigned to your caseload in this programme.</p>}
-          {programmeParticipants.length > 0 && visibleCaseload.length === 0 && <p className="mt-3 text-sm text-neutral-600">No Service users match this search.</p>}
-          {participantEdit && <form className="mt-4 grid gap-3 md:grid-cols-2" data-save-target="participant" noValidate onSubmit={saveParticipant}><Field label="Preferred name"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field><Field label="Desired roles"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field><Field label="Employment skills"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field><Field label="Vacancy search areas"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field><FormActions editing saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />{renderSaveFeedback('participant')}</form>}
-        </section>
-      )}
+        )}
+      </div>
 
       {!isManager && !isAdviser && ready && <div className="card p-6 text-neutral-700">You do not have an active Programme Hub adviser assignment.</div>}
     </main>
   );
+}
+
+function CompactCaseload({ participants, visible, totalMatches, data, userId, search, onSearch, page, pages, setPage, selectedId, locked, openRecord }: {
+  participants: ProgrammeHubParticipant[]; visible: ProgrammeHubParticipant[]; totalMatches: number;
+  data: ProgrammeHubData; userId: string; search: string; onSearch: (value: string) => void;
+  page: number; pages: number; setPage: (page: number) => void; selectedId: string | null; locked: boolean;
+  openRecord: (participant: ProgrammeHubParticipant) => void;
+}) {
+  const unassigned = participants.filter((participant) => currentCaseload(participant, data).length === 0).length;
+  return <div className="mt-5 border-t border-neutral-200 pt-4" aria-label="Caseload overview">
+    <h3 className="font-semibold">Caseload overview</h3>
+    <p className="mt-1 text-sm text-neutral-600">{participants.length} {participants.length === 1 ? 'Service user' : 'Service users'}{participants.length > 0 ? unassigned ? ` · ${unassigned} unassigned` : ' · All assigned' : ''}</p>
+    <label className="mt-3 block text-sm font-medium">Search caseload<input className={`${inputClass} mt-1`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Name, case reference or ES" /></label>
+    {visible.length === 0 ? <p className="mt-3 text-sm text-neutral-600">{participants.length ? 'No Service users match this search.' : 'No Service users available in this programme.'}</p>
+      : <ul className="mt-3 divide-y divide-neutral-200">{visible.map((participant) => {
+        const assignments = currentCaseload(participant, data);
+        return <li key={participant.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div><p className="font-medium">{participant.preferredName} · {participant.caseReference}{!participant.active ? ' · Inactive record' : ''}</p>
+            <p className="text-sm text-neutral-600">{assignments.length ? `Assigned to ${assignments.map((assignment) => adviserLabel(assignment.adviserUserId, data, userId)).join(', ')}` : 'No active Employment Specialist assigned.'}</p></div>
+          <button type="button" className="btn-secondary" aria-label="Open Service-user record" aria-pressed={selectedId === participant.id} disabled={locked} onClick={() => openRecord(participant)}>{selectedId === participant.id ? 'Viewing' : 'Open'}</button>
+        </li>;
+      })}</ul>}
+    {totalMatches > 0 && <nav className="mt-3 flex flex-wrap items-center gap-3 text-sm" aria-label="Caseload pages">
+      <span>{(page - 1) * 10 + 1}–{Math.min(page * 10, totalMatches)} of {totalMatches}</span>
+      <button type="button" className="btn-secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
+      <span>Page {page} of {pages}</span>
+      <button type="button" className="btn-secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
+    </nav>}
+  </div>;
 }
 
 function ConfigurationState({ programme, data }: { programme: ProgrammeHubProgramme; data: ProgrammeHubData }) {
@@ -649,16 +818,19 @@ function ConfigurationState({ programme, data }: { programme: ProgrammeHubProgra
   return <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Programme settings status">
     <h2 className="font-medium">Configuration status</h2>
     {missing.length
-      ? <p className="mt-1 text-sm text-neutral-700">The following configuration is not available in this interface: {missing.join(', ')}. Features that depend on it remain unavailable.</p>
-      : <p className="mt-1 text-sm text-neutral-700">Required programme contracts are active. This does not enable matching, outreach sending or other unfinished features.</p>}
-    <p className="mt-2 text-xs text-neutral-600">Postcode or location overlap never proves participant residency or programme eligibility.</p>
+      ? <p className="mt-1 text-sm text-neutral-700">Advanced setup is not available here yet. You can still manage records and case notes.</p>
+      : <p className="mt-1 text-sm text-neutral-700">Required programme settings are recorded. This does not enable unfinished features.</p>}
+    <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium">View setup details</summary>
+      {missing.length > 0 && <p className="mt-2">Still to configure: {missing.join(', ')}. Features that need these settings remain unavailable.</p>}
+      <p className="mt-2 text-neutral-600">Postcode or location overlap never proves participant residency or programme eligibility.</p>
+    </details>
   </section>;
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block text-sm font-medium text-neutral-700">{label}<span className="mt-1 block">{children}</span></label>;
 }
-function RecordSection({ title, empty, form, children }: { title: string; empty: string; form: React.ReactNode; children: React.ReactNode }) {
-  return <section className="card p-5"><h2 className="text-xl font-semibold">{title}</h2><div className="mt-4">{form}</div><div className="mt-5 space-y-2">{Children.count(children) ? children : <p className="text-sm text-neutral-600">{empty}</p>}</div></section>;
+function RecordSection({ title, empty, form, children, formLabel, formOpen, formLocked }: { title: string; empty: string; form: React.ReactNode; children: React.ReactNode; formLabel: string; formOpen: boolean; formLocked: boolean }) {
+  return <section className="card p-5"><h2 className="text-xl font-semibold">{title}</h2><details className="mt-4" open={formOpen} onToggle={(event) => { if (!event.currentTarget.open && formLocked) event.currentTarget.open = true; }}><summary className="cursor-pointer font-medium">{formLabel}</summary><div className="mt-3">{form}</div></details><div className="mt-5 space-y-2">{Children.count(children) ? children : <p className="text-sm text-neutral-600">{empty}</p>}</div></section>;
 }
 type DetailValue = string | string[] | null | undefined;
 function DetailFields({ fields }: { fields: Array<[string, DetailValue]> }) {
@@ -673,8 +845,8 @@ function RecordRow({ title, detail, edit, fields }: { title: string; detail: str
     <details className="mt-3"><summary className="cursor-pointer font-medium text-primary-700 focus-visible:ring-2">View details</summary><DetailFields fields={fields} /></details>
   </article>;
 }
-function FormActions({ editing, busy, saving, cancel }: { editing: boolean; busy: boolean; saving: boolean; cancel: () => void }) {
-  return <div className="flex items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy}>{saving ? 'Saving...' : editing ? 'Save changes' : 'Add record'}</button>{editing && <button type="button" disabled={busy} className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={cancel}>Cancel</button>}</div>;
+function FormActions({ editing, busy, saving, cancel, saveLabel = 'Save changes', addLabel = 'Add record' }: { editing: boolean; busy: boolean; saving: boolean; cancel: () => void; saveLabel?: string; addLabel?: string }) {
+  return <div className="flex items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy}>{saving ? 'Saving...' : editing ? saveLabel : addLabel}</button>{editing && <button type="button" disabled={busy} className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={cancel}>Cancel</button>}</div>;
 }
 function saveTarget(attempt: ProgrammeHubSaveAttempt) {
   return attempt.operation === 'participant_note' || attempt.operation === 'participant_contact' ? `${attempt.operation}:${attempt.payload.participantId}` : attempt.operation;
@@ -688,18 +860,8 @@ function SaveFeedback({ busy, error, message, pending, retry }: { busy: boolean;
   </div>;
 }
 
-function adviserLabel(adviserUserId: string, data: ProgrammeHubData, currentUserId: string) {
-  if (adviserUserId === currentUserId) return 'You';
-  const member = data.members.find((item) => item.userId === adviserUserId);
-  const role = member?.role === 'owner' ? 'Owner' : member?.role === 'admin' ? 'Administrator' : 'Employment Specialist';
-  return `${role} ending ${adviserUserId.slice(-6)}`;
-}
-
-function currentCaseload(participant: ProgrammeHubParticipant, data: ProgrammeHubData) {
-  return data.participantAdvisers.filter((assignment) => assignment.workspaceId === participant.workspaceId && assignment.programmeId === participant.programmeId && assignment.participantId === participant.id && assignment.active
-    && data.advisers.some((adviser) => adviser.workspaceId === participant.workspaceId && adviser.programmeId === participant.programmeId && adviser.userId === assignment.adviserUserId && adviser.active)
-    && data.members.some((member) => member.userId === assignment.adviserUserId && member.status === 'active'));
-}
+const adviserLabel = specialistLabel;
+const currentCaseload = activeCaseloadConnections;
 function CaseloadDetails({ participant, data, userId, programme }: { participant: ProgrammeHubParticipant; data: ProgrammeHubData; userId: string; programme: ProgrammeHubProgramme }) {
   const assignments = currentCaseload(participant, data);
   return <div className="mt-2 text-sm" aria-label="Assigned Employment Specialists">
@@ -731,12 +893,11 @@ function formatProgrammeDate(value: string, timeZone: string) {
 }
 
 function ParticipantRecord({
-  participant, contactDetails, openRequest, openRecord, notes, programme, data, userId, noteDraft, notesReady, notesError, busy, saving, feedback, keepNotesOpen, edit, setNote, saveNote,
+  participant, contactDetails, openRequest, notes, programme, data, userId, noteDraft, notesReady, notesError, busy, saving, feedback, keepNotesOpen, edit, setNote, saveNote,
 }: {
   participant: ProgrammeHubParticipant;
   contactDetails: (openRequest: number) => React.ReactNode;
   openRequest: number;
-  openRecord: () => void;
   notes: ProgrammeHubParticipantNote[];
   programme: ProgrammeHubProgramme;
   data: ProgrammeHubData;
@@ -769,17 +930,17 @@ function ParticipantRecord({
         <h3 className="font-semibold">{participant.preferredName}</h3>
         <p className="text-sm text-neutral-600">Case reference: {participant.caseReference}</p>
         <p className="text-sm text-neutral-600">Programme: {programme.name}</p>
-        <p className="text-sm text-amber-800">{participant.residencyEvidenceReference ? 'Eligibility evidence still requires review against configured rules.' : 'Needs review - residency evidence is missing.'}</p>
+        <p className="text-sm text-amber-800">{participant.residencyEvidenceReference ? 'Address evidence recorded. Programme eligibility still needs checking.' : 'No address evidence recorded. Programme eligibility has not been confirmed.'}</p>
       </div>
-      <div className="flex flex-wrap gap-2"><button type="button" className="btn-secondary focus-visible:ring-2" onClick={openRecord}>Open Service-user record</button>
-      <button className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy} onClick={edit}>Edit employment profile</button></div>
+      <div className="flex flex-wrap gap-2">
+      <button className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy} onClick={edit}>Edit profile</button></div>
     </div>
     <CaseloadDetails participant={participant} data={data} userId={userId} programme={programme} />
-    <details ref={profileRef} className="mt-3"><summary className="cursor-pointer font-medium text-primary-700">View employment profile</summary>
+    <details ref={profileRef} className="mt-3"><summary className="cursor-pointer font-medium text-primary-700">Employment profile</summary>
       <DetailFields fields={[
-        ['Service user reference', participant.participantKey], ['Case reference', participant.caseReference],
-        ['Desired roles', participant.desiredRoleKeys], ['Employment skills', participant.skillKeys],
-        ['Job search areas', participant.vacancySearchGeographyKeys], ['Residency evidence reference', participant.residencyEvidenceReference],
+        ['Service user ID', participant.participantKey], ['Case reference', participant.caseReference],
+        ['Jobs of interest', participant.desiredRoleKeys], ['Work skills', participant.skillKeys],
+        ['Preferred work locations', participant.vacancySearchGeographyKeys], ['Proof of address reference (optional)', participant.residencyEvidenceReference],
         ['Record status', participant.active ? 'Active' : 'Inactive'],
       ]} />
     </details>
@@ -797,8 +958,8 @@ function ParticipantRecord({
       <label className="mt-3 block text-sm font-medium text-neutral-700">Add a note
         <textarea className={`${inputClass} mt-1 min-h-24`} maxLength={2000} value={noteDraft} onChange={(event) => setNote(event.target.value)} disabled={!!notesError || busy} />
       </label>
-      {!notesError && !noteDraft.trim() && <p className="mt-1 text-xs text-neutral-600">Enter an employment-support note to enable Save note.</p>}
-      <button type="button" className="btn-primary mt-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!!notesError || busy || !noteDraft.trim()} onClick={saveNote}>{saving ? 'Saving...' : 'Save note'}</button>
+      {!notesError && !noteDraft.trim() && <p className="mt-1 text-xs text-neutral-600">Write a case note before saving.</p>}
+      <button type="button" className="btn-primary mt-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!!notesError || busy || !noteDraft.trim()} onClick={saveNote}>{saving ? 'Saving...' : 'Save case note'}</button>
       {feedback}
     </details>
   </article>;

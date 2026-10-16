@@ -3,7 +3,7 @@ import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { dataProviderMode } from '@/data/provider';
 
-export const Navigation: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) => {
+export const Navigation: React.FC<{ onSignOut?: () => void; allowedPages?: string[] }> = ({ onSignOut, allowedPages }) => {
   const { currentWorkspaceId, switchWorkspace, workspaces } = useAppStore();
   const [currentPage, setCurrentPage] = React.useState<string>(() => window.location.hash.slice(1) || 'home');
 
@@ -49,7 +49,7 @@ export const Navigation: React.FC<{ onSignOut?: () => void }> = ({ onSignOut }) 
 
           {/* Navigation Items */}
           <div className="order-3 flex w-full gap-1 overflow-x-auto pb-1 sm:order-none sm:w-auto sm:pb-0">
-            {navItems.map((item) => {
+            {navItems.filter((item) => !allowedPages || allowedPages.includes(item.id)).map((item) => {
               const isActive = currentPage === item.id;
               return (
                 <button

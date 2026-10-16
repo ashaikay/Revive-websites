@@ -129,6 +129,7 @@ export interface ProgrammeHubContract {
 }
 
 export interface ProgrammeHubMember {
+  displayName?: string;
   userId: string;
   role: 'owner' | 'admin' | 'member' | 'viewer';
   status: 'invited' | 'active' | 'suspended';

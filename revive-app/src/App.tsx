@@ -14,13 +14,25 @@ import '@/styles/index.css';
 import { OutlookConnectionPanel } from '@/components/OutlookConnectionPanel';
 import { AppFooter } from '@/components/AppFooter';
 import { calendarOAuthReturn } from '@/services/calendarOAuthBrowser';
+import { WorkspaceModuleGate } from '@/components/WorkspaceModuleGate';
+import { WorkspaceInvitationPanel } from '@/components/WorkspaceInvitationPanel';
+import { invitationFromLocation } from '@/services/workspaceTeam';
 import { ProgrammeHubModule } from '@/components/ProgrammeHubModule';
 
 type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business' | 'scheduling' | 'programme';
 type LoginError = 'invalid_credentials' | 'configuration' | 'network' | 'workspace';
 
+function selectAcceptedWorkspace(workspaces: Array<{ id: string }>, select: (id: string) => void) {
+  const url = new URL(window.location.href);
+  const ids = url.searchParams.getAll('rev_team_workspace');
+  if (!ids.length) return;
+  if (ids.length === 1 && workspaces.some((workspace) => workspace.id === ids[0])) select(ids[0]);
+  url.searchParams.delete('rev_team_workspace');
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+}
+
 function App() {
-  const { currentWorkspaceId, isInitializing, initializationError, setLiveContext, setInitialization, clearTenantState } = useAppStore();
+  const { currentWorkspaceId, isInitializing, initializationError, setLiveContext, setInitialization, clearTenantState, switchWorkspace } = useAppStore();
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [liveSession, setLiveSession] = useState(authProvider.getSession());
   const [loginError, setLoginError] = useState<LoginError | null>(null);
@@ -40,7 +52,7 @@ function App() {
         }
         setLiveSession(session);
         const context = await loadLiveWorkspaceContext(session.userId, session.email);
-        if (mounted) setLiveContext(context);
+        if (mounted) { setLiveContext(context); selectAcceptedWorkspace(context.workspaces, switchWorkspace); }
       })
       .catch((error: unknown) => {
         if (mounted) setInitialization(false, error instanceof Error ? error.message : 'Unable to load live workspace context');
@@ -53,7 +65,7 @@ function App() {
       mounted = false;
       unsubscribe?.();
     };
-  }, [clearTenantState, setInitialization, setLiveContext]);
+  }, [clearTenantState, setInitialization, setLiveContext, switchWorkspace]);
 
   const handleSignIn = async (email: string, password: string) => {
     if (!authProvider.signIn) return;
@@ -65,6 +77,7 @@ function App() {
       try {
         const context = await loadLiveWorkspaceContext(session.userId, session.email);
         setLiveContext(context);
+        selectAcceptedWorkspace(context.workspaces, switchWorkspace);
       } catch {
         await authProvider.signOut();
         setLiveSession(null);
@@ -99,6 +112,11 @@ function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  const teamInvitationId = invitationFromLocation(window.location.search);
+  if (dataProviderMode === 'supabase' && teamInvitationId && !calendarOAuthReturn) {
+    return <WorkspaceInvitationPanel invitationId={teamInvitationId} onAccepted={(workspaceId) => window.location.replace(window.location.origin + window.location.pathname + '?rev_team_workspace=' + encodeURIComponent(workspaceId) + '#programme')} />;
+  }
+
   if (dataProviderMode === 'supabase' && isInitializing) {
     return <div className="min-h-screen grid place-items-center text-neutral-600">Loading your REV workspace...</div>;
   }
@@ -122,26 +140,23 @@ function App() {
     );
   }
 
-  if (dataProviderMode === 'supabase' && calendarOAuthReturn && liveSession) {
-    return <OutlookConnectionPanel workspaceId={currentWorkspaceId} userId={liveSession.userId} callback />;
-  }
 
-  return (
+  const renderWorkspace = (allowedPages?: string[], allowedPage: Page = currentPage) => (
     <div className="min-h-screen bg-neutral-50">
-      <Navigation onSignOut={dataProviderMode === 'supabase' ? handleSignOut : undefined} />
+      <Navigation allowedPages={allowedPages} onSignOut={dataProviderMode === 'supabase' ? handleSignOut : undefined} />
 
       {/* Main Content */}
       <main>
-        {dataProviderMode === 'supabase' && currentPage === 'rev' && liveSession && <OutlookConnectionPanel key={currentWorkspaceId} workspaceId={currentWorkspaceId} userId={liveSession.userId} />}
-        {currentPage === 'home' && <HomeDashboard workspaceId={currentWorkspaceId} />}
-        {currentPage === 'rev' && <REVInterface workspaceId={currentWorkspaceId} />}
-        {currentPage === 'customers' && (dataProviderMode === 'supabase' ? <LiveModeNotice /> : <CustomersModule workspaceId={currentWorkspaceId} />)}
-        {currentPage === 'growth' && <GrowthArea workspaceId={currentWorkspaceId} />}
-        {currentPage === 'business' && <BusinessModule workspaceId={currentWorkspaceId} />}
-        {currentPage === 'scheduling' && (dataProviderMode === 'supabase' && liveSession
+        {dataProviderMode === 'supabase' && allowedPage === 'rev' && liveSession && <OutlookConnectionPanel key={currentWorkspaceId} workspaceId={currentWorkspaceId} userId={liveSession.userId} />}
+        {allowedPage === 'home' && <HomeDashboard workspaceId={currentWorkspaceId} />}
+        {allowedPage === 'rev' && <REVInterface workspaceId={currentWorkspaceId} />}
+        {allowedPage === 'customers' && (dataProviderMode === 'supabase' ? <LiveModeNotice /> : <CustomersModule workspaceId={currentWorkspaceId} />)}
+        {allowedPage === 'growth' && <GrowthArea workspaceId={currentWorkspaceId} />}
+        {allowedPage === 'business' && <BusinessModule workspaceId={currentWorkspaceId} />}
+        {allowedPage === 'scheduling' && (dataProviderMode === 'supabase' && liveSession
           ? <SchedulingModule key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} />
           : <div className="p-6">Scheduling requires a signed-in business workspace.</div>)}
-        {currentPage === 'programme' && (dataProviderMode === 'supabase' && liveSession
+        {allowedPage === 'programme' && (dataProviderMode === 'supabase' && liveSession
           ? <ProgrammeHubModule key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} />
           : <div className="p-6">Outcomes / Programme Hub requires a signed-in workspace.</div>)}
       </main>
@@ -149,6 +164,8 @@ function App() {
       <AppFooter />
     </div>
   );
+  if (dataProviderMode === 'supabase' && liveSession) return <WorkspaceModuleGate key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} page={calendarOAuthReturn ? 'rev' : currentPage} onSignOut={handleSignOut}>{(pages,page) => calendarOAuthReturn ? (pages.includes('rev') ? <OutlookConnectionPanel workspaceId={currentWorkspaceId} userId={liveSession.userId} callback /> : <main className="p-6">Calendar connection access is unavailable for this account.</main>) : renderWorkspace(pages,page as Page)}</WorkspaceModuleGate>;
+  return renderWorkspace();
 }
 
 function LiveModeNotice() {
