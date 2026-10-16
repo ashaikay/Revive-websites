@@ -95,16 +95,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function renderEngagement(element: React.ReactElement) {
+  const result = render(element);
+  fireEvent.click(await screen.findByText('Find employers', { selector: 'summary' }));
+  fireEvent.click(screen.getByText('Employer outreach', { selector: 'summary' }));
+  return result;
+}
+
 describe('Programme Hub employer discovery and engagement', () => {
   it('shows editable pilot filters, separate postal sectors and disabled-provider setup without paid calls', async () => {
     mocks.discoveryAvailable = false;
-    render(<ProgrammeEmployerEngagement {...props()} />);
+    await renderEngagement(<ProgrammeEmployerEngagement {...props()} />);
     expect(await screen.findByRole('heading', { name: 'Find employers' })).toBeVisible();
     expect(screen.getByLabelText('Search geography')).toHaveValue('Birmingham / West Midlands');
     expect(screen.getByRole('checkbox', { name: 'Royal Mail and postal delivery' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Post Office branch roles' })).toBeChecked();
     expect(screen.getByLabelText(/Exclude employer-name terms/)).toHaveValue('barbering');
-    expect(screen.getByText(/COMPANIES_HOUSE_API_KEY/)).toBeVisible();
+    expect(screen.getByText(/COMPANIES_HOUSE_API_KEY/)).not.toBeVisible();
+    expect(screen.getByText(/OPENAI_API_KEY/)).not.toBeVisible();
+    for (const setup of screen.getAllByText('Manager setup details')) fireEvent.click(setup);
     expect(screen.getByText(/OPENAI_API_KEY/)).toBeVisible();
     expect(screen.queryByRole('button', { name: /^send/i })).toBeNull();
     expect(mocks.invoke.mock.calls.filter(([name, options]) => name === 'rev-programme-employer-outreach-draft' && options.body.action === 'prepare')).toHaveLength(0);
@@ -124,7 +133,7 @@ describe('Programme Hub employer discovery and engagement', () => {
       if (name === 'rev-programme-employer-engagement-save') return { data: { operation: body.operation, recordId: employerId, workspaceId, programmeId, version: 1, duplicate: false }, error: null };
       throw new Error(`Unexpected call ${name}`);
     });
-    render(<ProgrammeEmployerEngagement {...props()} />);
+    await renderEngagement(<ProgrammeEmployerEngagement {...props()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'SEARCH COMPANIES HOUSE' }));
     const result = await screen.findByRole('heading', { name: candidate.name });
     const card = result.closest('article');
@@ -150,7 +159,7 @@ describe('Programme Hub employer discovery and engagement', () => {
       }
       throw new Error(`Unexpected call ${name}`);
     });
-    render(<ProgrammeEmployerEngagement {...props()} />);
+    await renderEngagement(<ProgrammeEmployerEngagement {...props()} />);
     const exclusions = await screen.findByLabelText(/Exclude employer-name terms/);
     fireEvent.change(exclusions, { target: { value: 'barbering, beauty salons' } });
     expect(exclusions).toHaveValue('barbering, beauty salons');
@@ -165,7 +174,7 @@ describe('Programme Hub employer discovery and engagement', () => {
   });
 
   it('shows validation for an empty manual-history submission without retaining a request', async () => {
-    render(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
+    await renderEngagement(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
     const history = (await screen.findByRole('heading', { name: 'Record engagement history' })).closest('form');
     if (!history) throw new Error('Engagement history form missing');
     fireEvent.click(within(history).getByRole('button', { name: 'ADD MANUAL HISTORY' }));
@@ -180,7 +189,7 @@ describe('Programme Hub employer discovery and engagement', () => {
       throw new Error(`Unexpected initial call ${name}`);
     });
     const originalImplementation = mocks.invoke.getMockImplementation();
-    render(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
+    await renderEngagement(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
     await screen.findByRole('heading', { name: 'Employer engagement workspace' });
     mocks.invoke.mockImplementation(async (name: string, { body }: { body: Record<string, unknown> }) => {
       if (name === 'rev-programme-employer-engagement-save') {
@@ -216,11 +225,14 @@ describe('Programme Hub employer discovery and engagement', () => {
       if (name === 'rev-programme-employer-discovery' && body.action === 'search') return deferred;
       throw new Error(`Unexpected call ${name}`);
     });
-    const { rerender } = render(<ProgrammeEmployerEngagement {...props()} />);
+    const { rerender } = await renderEngagement(<ProgrammeEmployerEngagement {...props()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'SEARCH COMPANIES HOUSE' }));
     rerender(<ProgrammeEmployerEngagement {...props(programme(secondProgrammeId))} />);
     resolveSearch({ data: { searchId, status: 'succeeded', results: [candidate], errorCode: null, retrievedAt: candidate.retrievedAt }, error: null });
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Find employers' })).toBeVisible());
+    const searchDisclosure = screen.getByText('Find employers', { selector: 'summary' }).closest('details')!;
+    await waitFor(() => expect(searchDisclosure).not.toHaveAttribute('open'));
+    fireEvent.click(within(searchDisclosure).getByText('Find employers', { selector: 'summary' }));
+    expect(within(searchDisclosure).getByRole('heading', { name: 'Find employers' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: candidate.name })).toBeNull();
     expect(screen.getByText(/No discovery results are ready for review/)).toBeVisible();
   });
@@ -229,7 +241,7 @@ describe('Programme Hub employer discovery and engagement', () => {
     const contactId = '66666666-6666-4666-8666-666666666666';
     mocks.rows.programme_hub_outreach_settings = [{ id: '77777777-7777-4777-8777-777777777777', workspace_id: workspaceId, programme_id: programmeId, offer_summary: 'We provide practical recruitment support to local employers.', version: 1 }];
     mocks.outreachAvailable = true;
-    render(<ProgrammeEmployerEngagement {...props(programme(), [employer])} contacts={[{
+    await renderEngagement(<ProgrammeEmployerEngagement {...props(programme(), [employer])} contacts={[{
       id: contactId, workspaceId, programmeId, employerId, contactKey: 'CONTACT-1', preferredName: 'Suppressed Contact',
       roleTitle: null, businessEmail: 'contact@example.test', businessPhone: null, suppressed: true,
       suppressionReasonKey: 'do_not_contact', active: true, version: 1,
@@ -252,7 +264,7 @@ describe('Programme Hub employer discovery and engagement', () => {
     const statuses = mocks.invoke.getMockImplementation()!;
     mocks.invoke.mockImplementation((name: string, options: { body: Record<string, unknown> }) => name === 'rev-programme-employer-engagement-save'
       ? new Promise((resolve) => { resolveSave = resolve; }) : statuses(name, options));
-    render(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
+    await renderEngagement(<ProgrammeEmployerEngagement {...props(programme(), [employer])} />);
     const button = await screen.findByRole('button', { name: buttonName });
     const form = button.closest('form')!;
     if (operation === 'engagement_event') fireEvent.change(within(form).getByLabelText('What happened'), { target: { value: 'Discussed recruitment needs.' } });
@@ -268,7 +280,7 @@ describe('Programme Hub employer discovery and engagement', () => {
   });
 
   it('keeps short-offer validation next to the offer button without invoking a save', async () => {
-    render(<ProgrammeEmployerEngagement {...props()} />);
+    await renderEngagement(<ProgrammeEmployerEngagement {...props()} />);
     const button = await screen.findByRole('button', { name: 'SAVE PROGRAMME OFFER' });
     const form = button.closest('form')!;
     fireEvent.change(within(form).getByLabelText('Programme offer for employer outreach'), { target: { value: 'Too short' } });

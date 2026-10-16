@@ -3,9 +3,10 @@ import { supabaseClient } from '@/data/supabaseClient';
 import type { ProgrammeHubSaveAttempt } from '@/domain/programmeHub';
 import { emptyParticipantContact, normaliseParticipantContact, participantContactColumns, participantContactError, parseParticipantContact, type ParticipantContactDraft, type ParticipantContactRecord } from '@/services/programmeParticipantContacts';
 
-export function ParticipantContactDetails({ workspaceId, programmeId, participantId, openRequest, refreshKey, busy, pending, feedback, onSave }: {
+export function ParticipantContactDetails({ workspaceId, programmeId, participantId, openRequest, refreshKey, busy, pending, feedback, onSave, onEditingChange }: {
   workspaceId: string; programmeId: string; participantId: string; openRequest: number; refreshKey: number;
   busy: boolean; pending: ProgrammeHubSaveAttempt | null; feedback: React.ReactNode;
+  onEditingChange?: (editing: boolean) => void;
   onSave: (record: ParticipantContactRecord | null, draft: ParticipantContactDraft) => Promise<boolean>;
 }) {
   const [opened, setOpened] = useState(false);
@@ -13,6 +14,8 @@ export function ParticipantContactDetails({ workspaceId, programmeId, participan
   const [record, setRecord] = useState<ParticipantContactRecord | null>(null);
   const [draft, setDraft] = useState<ParticipantContactDraft>(emptyParticipantContact);
   const [editing, setEditing] = useState(false);
+  useEffect(() => { onEditingChange?.(editing); }, [editing, onEditingChange]);
+  useEffect(() => () => onEditingChange?.(false), [onEditingChange]);
   const [error, setError] = useState('');
   const [validation, setValidation] = useState('');
   const [reload, setReload] = useState(0);

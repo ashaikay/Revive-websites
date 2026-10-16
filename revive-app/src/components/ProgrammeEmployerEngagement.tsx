@@ -59,6 +59,7 @@ export function ProgrammeEmployerEngagement({
   isManager,
   canMaintain,
   onEmployersChanged,
+  onNavigationLockChange,
 }: {
   workspaceId: string;
   userId: string;
@@ -70,6 +71,7 @@ export function ProgrammeEmployerEngagement({
   isManager: boolean;
   canMaintain: boolean;
   onEmployersChanged(): Promise<void>;
+  onNavigationLockChange?: (locked: boolean) => void;
 }) {
   const contextKey = `${workspaceId}:${programme.id}`;
   const contextRef = useRef(contextKey);
@@ -92,6 +94,8 @@ export function ProgrammeEmployerEngagement({
   const [pendingSearch, setPendingSearch] = useState<EmployerDiscoveryAttempt | null>(null);
   const [pendingSave, setPendingSave] = useState<EmployerEngagementSaveAttempt | null>(null);
   const [pendingDraft, setPendingDraft] = useState<EmployerOutreachAttempt | null>(null);
+  useEffect(() => { onNavigationLockChange?.(busy || !!pendingSearch || !!pendingSave || !!pendingDraft); }, [busy, pendingSearch, pendingSave, pendingDraft, onNavigationLockChange]);
+  useEffect(() => () => onNavigationLockChange?.(false), [onNavigationLockChange]);
   const [selectedEmployerId, setSelectedEmployerId] = useState('');
   const [offerSummary, setOfferSummary] = useState('');
   const [feedbackTarget, setFeedbackTarget] = useState('');
@@ -320,12 +324,13 @@ export function ProgrammeEmployerEngagement({
   return <div className="space-y-5" aria-label="Employer discovery and engagement">
     {renderFeedback('')}
 
-    <section className="rounded-lg border p-4" aria-labelledby="find-employers-heading">
+    <details className="rounded-lg border p-4" onToggle={(event) => { if (!event.currentTarget.open && (pendingSearch || pendingSave?.operation === 'discovery_employer' || (busy && (feedbackTarget === 'search' || feedbackTarget.startsWith('discovery_employer:'))))) event.currentTarget.open = true; }} open={feedbackTarget === 'search' || feedbackTarget.startsWith('discovery_employer:') || !!pendingSearch || pendingSave?.operation === 'discovery_employer'}><summary className="cursor-pointer font-semibold">Find employers</summary><section className="mt-3" aria-labelledby="find-employers-heading">
       <h3 id="find-employers-heading" className="text-lg font-semibold">Find employers</h3>
       <p className="mt-1 text-sm text-neutral-600">Search Companies House registry evidence within the selected programme. This is separate from advertised Job opportunities.</p>
       <p className="mt-1 text-sm text-neutral-600">Royal Mail/postal delivery and Post Office branch roles are separate filters. Registered-office evidence does not prove a local branch, workplace or vacancy.</p>
       {discoveryAvailability && !discoveryAvailability.available && <div role="status" className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-        Employer discovery is unavailable. Configure a server-side <code>COMPANIES_HOUSE_API_KEY</code> and set <code>REV_PROGRAMME_EMPLOYER_DISCOVERY_ENABLED=true</code>. Manual employer entry remains available below.
+        Employer search is not enabled. You can still add employers manually.
+        {isManager && <details className="mt-2"><summary className="cursor-pointer">Manager setup details</summary><p className="mt-2">Configure a server-side <code>COMPANIES_HOUSE_API_KEY</code> and set <code>REV_PROGRAMME_EMPLOYER_DISCOVERY_ENABLED=true</code>.</p></details>}
       </div>}
       <form className="mt-3 space-y-3" noValidate onSubmit={(event) => {
         event.preventDefault();
@@ -389,7 +394,7 @@ export function ProgrammeEmployerEngagement({
         </article>;
       })}</div>
       <p className="mt-3 text-xs text-neutral-600">Contains public sector information licensed under the Open Government Licence v3.0.</p>
-    </section>
+    </section></details>
 
     <section className="rounded-lg border p-4" aria-labelledby="engagement-workspace-heading">
       <h3 id="engagement-workspace-heading" className="text-lg font-semibold">Employer engagement workspace</h3>
@@ -449,7 +454,7 @@ export function ProgrammeEmployerEngagement({
       </>}
     </section>
 
-    <section className="rounded-lg border p-4" aria-labelledby="prepare-outreach-heading">
+    <details className="rounded-lg border p-4" onToggle={(event) => { if (!event.currentTarget.open && (pendingDraft || pendingSave?.operation === 'outreach_settings' || pendingSave?.operation === 'draft_revision' || (busy && ['outreach_settings', 'draft_revision', 'draft'].includes(feedbackTarget)))) event.currentTarget.open = true; }} open={feedbackTarget === 'outreach_settings' || feedbackTarget === 'draft_revision' || feedbackTarget === 'draft' || !!pendingDraft || pendingSave?.operation === 'outreach_settings' || pendingSave?.operation === 'draft_revision'}><summary className="cursor-pointer font-semibold">Employer outreach</summary><section className="mt-3" aria-labelledby="prepare-outreach-heading">
       <h3 id="prepare-outreach-heading" className="text-lg font-semibold">Prepare employer outreach</h3>
       <p className="mt-1 font-medium">Prepared — not sent</p>
       <p className="text-sm text-neutral-600">Drafts use saved employer evidence and the programme offer. They contain no Service user information and require Employment Specialist review.</p>
@@ -472,7 +477,8 @@ export function ProgrammeEmployerEngagement({
         {renderFeedback('outreach_settings')}
       </form>}
       {outreachAvailability && !outreachAvailability.available && <div role="status" className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-        AI draft preparation is unavailable. Configure server-side <code>OPENAI_API_KEY</code>, set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_AI_ENABLED=true</code>, and optionally set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_DAILY_LIMIT</code> (default 10, maximum 50). No browser key or fallback draft is used.
+        AI draft preparation is not enabled. Your programme offer can still be saved.
+        {isManager && <details className="mt-2"><summary className="cursor-pointer">Manager setup details</summary><p className="mt-2">Configure server-side <code>OPENAI_API_KEY</code>, set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_AI_ENABLED=true</code>, and optionally set <code>REV_PROGRAMME_EMPLOYER_OUTREACH_DAILY_LIMIT</code> (default 10, maximum 50).</p></details>}
       </div>}
       {selectedEmployer && <div className="mt-3 space-y-3">
         <label className="block text-sm font-medium">Employer contact for the draft<select disabled={busy || !!pendingSearch || !!pendingSave || !!pendingDraft} className={fieldClass} value={draftContactId} onChange={(event) => setDraftContactId(event.target.value)}><option value="">No named contact</option>{selectedContacts.map((contact) => <option key={contact.id} value={contact.id} disabled={contact.suppressed}>{contact.preferredName}{contact.suppressed ? ' — suppressed' : ''}</option>)}</select></label>
@@ -507,10 +513,7 @@ export function ProgrammeEmployerEngagement({
             {renderFeedback('draft_revision')}
         </form> : <p className="text-sm text-neutral-600">No outreach draft has been prepared for this employer.</p>}
       </div>}
-    </section>
-    <section className="rounded-lg border border-dashed p-4 text-sm text-neutral-600">
-      <h3 className="font-semibold text-neutral-900">Planned next slices</h3>
-      <p>Job fairs and events, Service user job matching, and applications remain separate future work. This workflow does not perform them.</p>
-    </section>
+    </section></details>
+
   </div>;
 }

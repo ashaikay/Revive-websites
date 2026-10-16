@@ -30,7 +30,7 @@ jobs:
             supabase/functions/rev-programme-employer-engagement-save/*.test.ts \
             supabase/functions/rev-programme-employer-outreach-draft/*.test.ts
       - name: Test Programme Hub mounted UI
-        run: npm test -- src/tests/programmeHubContract.test.ts src/tests/programmeHubUI.test.tsx src/tests/programmeEmployerEngagementUI.test.tsx src/tests/programmeCaseloadReporting.test.ts src/tests/programmeEmployerSaveErrors.test.ts src/tests/workspaceTeamUI.test.tsx src/tests/workspaceInvitationApp.test.tsx src/tests/workspaceModuleAccess.test.tsx
+        run: npm test -- src/tests/programmeHubContract.test.ts src/tests/programmeHubUI.test.tsx src/tests/programmeEmployerEngagementUI.test.tsx src/tests/programmeCaseloadReporting.test.ts src/tests/programmeEmployerSaveErrors.test.ts src/tests/workspaceTeamUI.test.tsx src/tests/workspaceInvitationApp.test.tsx src/tests/workspaceModuleAccess.test.tsx src/tests/workspaceModuleSchema.test.ts
       - name: Check Programme Hub Edge Function
         uses: denoland/setup-deno@v2
         with:

@@ -103,7 +103,8 @@ create policy rev_module_access_guard on public.meeting_proposals as restrictive
 
 create policy rev_module_access_guard on public.rev_meeting_calendar_bindings as restrictive for all to authenticated using (public.can_use_rev_module(workspace_id,'rev')) with check (public.can_use_rev_module(workspace_id,'rev'));
 
-create policy rev_module_access_guard on public.rev_meeting_provider_gate as restrictive for all to authenticated using (public.can_use_rev_module(workspace_id,'rev')) with check (public.can_use_rev_module(workspace_id,'rev'));
+-- rev_meeting_provider_gate is a backend-only singleton, not a tenant table.
+-- Its existing revoked browser privileges and service-role-only controls remain intact.
 
 create policy rev_module_access_guard on public.workspace_calendar_connections as restrictive for all to authenticated using (public.can_use_rev_module(workspace_id,'rev') or public.can_use_rev_module(workspace_id,'scheduling')) with check (public.can_use_rev_module(workspace_id,'rev') or public.can_use_rev_module(workspace_id,'scheduling'));
 
