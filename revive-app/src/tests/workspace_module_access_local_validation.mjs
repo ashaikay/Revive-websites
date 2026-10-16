@@ -1,8 +1,8 @@
 // Isolated local Supabase only. No hosted project, real staff or external messages.
 import { randomUUID } from 'node:crypto';
-const base = process.env.REV_LOCAL_SUPABASE_URL ?? 'http://127.0.0.1:54321';
+const base = process.env.REV_LOCAL_SUPABASE_URL ?? 'http://127.0.0.1:55321';
 const parsed = new URL(base);
-if (!['127.0.0.1','localhost'].includes(parsed.hostname) || parsed.port !== '54321' || parsed.protocol !== 'http:' || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) throw new Error('Local Supabase required.');
+if (!['127.0.0.1','localhost'].includes(parsed.hostname) || parsed.port !== '55321' || parsed.protocol !== 'http:' || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) throw new Error('Local Supabase required.');
 const anon = process.env.REV_LOCAL_SUPABASE_ANON_KEY, service = process.env.REV_LOCAL_SUPABASE_SERVICE_KEY ?? process.env.REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY;
 if (!anon || !service) throw new Error('Local fixture keys required.');
 const call = async (path, body, token = service, method = 'POST') => {
