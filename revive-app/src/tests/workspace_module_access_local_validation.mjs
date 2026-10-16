@@ -30,14 +30,28 @@ const readAccess=(user,subject=user)=>rpc('get_rev_workspace_module_access',{tar
 const initial=await readAccess(es);pass('MODULE_INVITE_OUTCOMES_ONLY',initial.status===200&&JSON.stringify(initial.data?.modules)===JSON.stringify(['programme'])&&initial.data.version===1);
 pass('MODULE_MEMBER_CANNOT_READ_OTHER_ACCESS',(await readAccess(es,owner)).status===403);
 pass('MODULE_OUTSIDER_ACCESS_DENIED',(await readAccess(outsider,es)).status===403);
-const programmeId=randomUUID(),personId=randomUUID();
+const programmeId=randomUUID();
 const programme={id:programmeId,workspace_id:ws,name:'Module fixture',timezone:'Europe/London',created_by_user_id:owner.id,updated_by_user_id:owner.id};
 pass('MODULE_PROGRAMME_FIXTURE',(await call('/rest/v1/programme_hub_programmes',programme)).status<300);
 pass('MODULE_ADVISER_FIXTURE',(await call('/rest/v1/programme_hub_advisers',{workspace_id:ws,programme_id:programmeId,user_id:es.id,created_by_user_id:owner.id,updated_by_user_id:owner.id})).status<300);
-pass('MODULE_PERSON_FIXTURE',(await call('/rest/v1/programme_hub_participants',{id:personId,workspace_id:ws,programme_id:programmeId,participant_key:'TEST',preferred_name:'Fixture person',case_reference:'CASE',created_by_user_id:owner.id,updated_by_user_id:owner.id})).status<300);
+// Constrained records must use the same trusted writers as the application.
+// The service role does not receive execution rights on private CHECK helpers.
+const personFixture=await rpc('save_rev_programme_hub_record',{
+ target_operation:'participant',target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),
+ target_programme_id:programmeId,target_record_id:null,expected_version:0,
+ target_payload:{participantKey:'TEST',preferredName:'Fixture person',caseReference:'CASE',desiredRoleKeys:[],skillKeys:[],vacancySearchGeographyKeys:[],residencyEvidenceReference:'',active:true}
+});
+if(personFixture.status!==200)console.error('MODULE_PERSON_FIXTURE_DIAGNOSTICS='+JSON.stringify({status:personFixture.status,errorCode:typeof personFixture.data?.code==='string'&&/^[A-Z0-9_]{1,20}$/.test(personFixture.data.code)?personFixture.data.code:null}));
+const personId=personFixture.data?.record_id;
+pass('MODULE_PERSON_FIXTURE',personFixture.status===200&&typeof personId==='string'&&/^[0-9a-f-]{36}$/i.test(personId));
 pass('MODULE_ASSIGNMENT_FIXTURE',(await call('/rest/v1/programme_hub_participant_advisers',{workspace_id:ws,programme_id:programmeId,participant_id:personId,adviser_user_id:es.id,created_by_user_id:owner.id,updated_by_user_id:owner.id})).status<300);
 for(const [table,record] of [['business_profiles',{workspace_id:ws,business_name:'Private business fixture'}],['contacts',{workspace_id:ws,lifecycle:'lead',name:'Private commercial fixture'}],['scheduling_workers',{workspace_id:ws,display_name:'Private worker fixture',created_by_user_id:owner.id,updated_by_user_id:owner.id}]]){
- pass('MODULE_SEED_'+table.toUpperCase(),(await call('/rest/v1/'+table,record)).status<300);
+ const seeded=table==='scheduling_workers' ? await rpc('save_rev_scheduling_worker',{
+  target_workspace_id:ws,initiating_user_id:owner.id,target_request_id:randomUUID(),target_worker_id:null,
+  target_display_name:'Private worker fixture',target_role_labels:[],target_skill_tags:[],target_active:true,expected_version:0
+ }) : await call('/rest/v1/'+table,record);
+ if(seeded.status>=300)console.error('MODULE_SEED_DIAGNOSTICS='+JSON.stringify({table,status:seeded.status,errorCode:typeof seeded.data?.code==='string'&&/^[A-Z0-9_]{1,20}$/.test(seeded.data.code)?seeded.data.code:null}));
+ pass('MODULE_SEED_'+table.toUpperCase(),seeded.status>=200&&seeded.status<300);
  const denied=await call('/rest/v1/'+table+'?workspace_id=eq.'+ws+'&select=workspace_id',undefined,es.token,'GET');
  pass('MODULE_ES_CANNOT_READ_'+table.toUpperCase(),denied.status===200&&Array.isArray(denied.data)&&denied.data.length===0);
 }
