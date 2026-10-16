@@ -62,8 +62,10 @@ pass('MODULE_ES_CANNOT_GRANT_SELF',(await save(es,['programme','business'],1)).s
 pass('MODULE_DIRECT_ACCESS_INSERT_DENIED',(await call('/rest/v1/workspace_module_access',{workspace_id:ws,user_id:es.id,modules:['business']},es.token)).status>=400);
 const requestId=randomUUID();const changes=await Promise.all([save(owner,[],1,requestId),save(owner,[],1,requestId)]);
 pass('MODULE_CONCURRENT_EXACT_REPLAY',changes.every(v=>v.status===200&&v.data?.version===2&&v.data?.modules?.length===0));
-pass('MODULE_CHANGED_RETRY_DENIED',(await save(owner,['programme'],1,requestId)).status===409);
-pass('MODULE_STALE_VERSION_DENIED',(await save(owner,['programme'],1)).status===409);
+const changedRetry=await save(owner,['programme'],1,requestId);
+pass('MODULE_CHANGED_RETRY_DENIED',changedRetry.status===500&&changedRetry.data?.code==='40001');
+const staleVersion=await save(owner,['programme'],1);
+pass('MODULE_STALE_VERSION_DENIED',staleVersion.status===500&&staleVersion.data?.code==='40001');
 pass('MODULE_REVOKED_CASELOAD_READ_DENIED',(await readPerson()).data?.length===0);
 const rejected=await rpc('save_rev_programme_hub_participant_note',{target_workspace_id:ws,initiating_user_id:es.id,target_request_id:randomUUID(),target_programme_id:programmeId,target_participant_id:personId,note_body:'Must not be written after module revocation.'});
 pass('MODULE_REVOKED_TRUSTED_NOTE_DENIED',rejected.status===403);
