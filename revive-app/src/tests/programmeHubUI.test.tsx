@@ -1316,4 +1316,21 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     await waitFor(() => expect(within(nav).getByRole('button', { name: 'Employers' })).toBeEnabled());
   });
 
+  it('restores an uncertain Scheduling permission in the protected team view and retries exactly', async () => {
+    setRows('owner');
+    const attempt = { workspaceId, userId: adviserId, enabled: true, expectedVersion: 0, requestId: savedId };
+    sessionStorage.setItem(`rev-scheduling-permission:${workspaceId}:${ownerId}`, JSON.stringify(attempt));
+    const permission = { workspaceId, userId: adviserId, enabled: true, canManage: true, managed: false, version: 1 };
+    mocks.rpc.mockImplementation(async (name: string) => ({ data: name === 'list_rev_workspace_staff_names' ? [] : name === 'get_rev_scheduling_management' || name === 'save_rev_scheduling_management' ? permission : { workspaceId, members: [{ userId: adviserId, role: 'member', status: 'active', displayName: 'Natalie', nameVersion: 1 }], invitations: [] }, error: null }));
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+    const retry = await screen.findByRole('button', { name: 'Retry same Scheduling permission' });
+    await waitFor(() => { expect(retry).toBeVisible(); expect(screen.getByLabelText('Choose a programme')).toBeDisabled(); });
+    const nav = screen.getByRole('navigation', { name: 'Employment support areas' });
+    expect(within(nav).getByRole('button', { name: 'Employers' })).toBeDisabled();
+    fireEvent.click(retry);
+    await waitFor(() => expect(within(nav).getByRole('button', { name: 'Employers' })).toBeEnabled());
+    expect(mocks.rpc.mock.calls.find(([name]) => name === 'save_rev_scheduling_management')?.[1]).toEqual({ target_workspace_id: workspaceId, target_user_id: adviserId, target_enabled: true, expected_version: 0, target_request_id: savedId });
+    expect(sessionStorage.getItem(`rev-scheduling-permission:${workspaceId}:${ownerId}`)).toBeNull();
+  });
+
 });

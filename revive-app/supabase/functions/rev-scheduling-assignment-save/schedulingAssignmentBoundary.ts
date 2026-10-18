@@ -1,4 +1,4 @@
-import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+import {resolveSchedulingOrigin as resolveAnnualLeaveOrigin} from '../_shared/schedulingOrigins.ts';
 export interface AssignmentInput{target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_assignment_id:string|null;target_worker_id:string;target_job_id:string;target_status:string;expected_version:number;expected_worker_version:number|null;expected_job_version:number|null;expected_pattern_version:number|null;}
 export interface AssignmentDependencies{allowedOrigin?:string;getUserId(authorization:string):Promise<string|null>;canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;save(input:AssignmentInput):Promise<unknown>;}
 export const refusalReasons={

@@ -1,3 +1,4 @@
+import { resolveSchedulingOrigin } from '../_shared/schedulingOrigins.ts';
 export interface UnavailabilityInput {
  target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_worker_id:string;target_unavailability_id:string|null;
  target_start_at:string;target_end_at:string;target_category:string;target_status:string;expected_version:number;
@@ -18,8 +19,8 @@ function storedInstant(v:unknown):string|null{if(typeof v!=='string'||!/^\d{4}-\
 function localValue(ms:number,timezone:string):string{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ms));const get=(type:string)=>parts.find(part=>part.type===type)?.value;return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;}
 function isWorkspaceMidnight(value:string,timezone:string):boolean{try{return localValue(Date.parse(value),timezone).endsWith('T00:00');}catch{return false;}}
 export async function handleWorkerUnavailabilitySave(request:Request,deps:UnavailabilityDependencies):Promise<Response>{
- if(!deps.allowedOrigin||request.headers.get('Origin')!==deps.allowedOrigin)return new Response(null,{status:403});
- const headers={'Access-Control-Allow-Origin':deps.allowedOrigin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+ const origin=resolveSchedulingOrigin(request.headers.get('Origin'),deps.allowedOrigin);if(!origin)return new Response(null,{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});

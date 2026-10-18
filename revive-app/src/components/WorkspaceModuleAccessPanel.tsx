@@ -1,3 +1,4 @@
+import { SchedulingManagementAccessPanel } from './SchedulingManagementAccessPanel';
 import { useEffect, useRef, useState } from 'react';
 import { loadModuleAccess, saveModuleAccess, parseModuleAttempt, ModuleAccessRejected, moduleLabels, revModules, type ModuleAccess, type ModuleAttempt, type RevModule } from '@/services/workspaceModuleAccess';
 import type { TeamMember } from '@/services/workspaceTeam';
@@ -6,9 +7,10 @@ export function WorkspaceModuleAccessPanel({workspaceId,actorId,members,onLocked
  const [selected,setSelected]=useState(''),[access,setAccess]=useState<ModuleAccess|null>(null),[modules,setModules]=useState<RevModule[]>([]);
  const [pending,setPending]=useState<ModuleAttempt|null>(null),[blocked,setBlocked]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[refresh,setRefresh]=useState(0);
  const alive=useRef(true),inFlight=useRef(false); const identity=useRef(key);identity.current=key;
+ const [schedulingLocked,setSchedulingLocked]=useState(false);
  const ownLocked=busy || !!pending || blocked;
- const locked=ownLocked || externalLocked;
- useEffect(()=>{onLocked(ownLocked);},[ownLocked,onLocked]);
+ const locked=ownLocked || externalLocked || schedulingLocked;
+ useEffect(()=>{onLocked(ownLocked || schedulingLocked);},[ownLocked,schedulingLocked,onLocked]);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;onLocked(false);};},[onLocked]);
  useEffect(()=>{
   setPending(null);setSelected('');setAccess(null);setBlocked(false);setMessage('');setError('');
@@ -37,5 +39,6 @@ export function WorkspaceModuleAccessPanel({workspaceId,actorId,members,onLocked
  {busy&&<p role="status">Saving access...</p>}
  {pending&&!busy&&<button className="btn-primary mt-3" onClick={()=>void save(pending)}>Retry same access change</button>}
  {!pending&&selected&&<><button className="btn-secondary mt-2" disabled={locked} onClick={()=>{setError('');setRefresh(v=>v+1);}}>Reload access</button>{access&&!access.managed&&<form onSubmit={e=>{e.preventDefault();if(!locked)void save({workspaceId,userId:selected,modules:revModules.filter(m=>modules.includes(m)),expectedVersion:access.version,requestId:crypto.randomUUID()});}}><fieldset className="mt-3 flex flex-wrap gap-3" disabled={locked}><legend className="mb-2 text-sm">Allowed sections</legend>{revModules.map(m=><label key={m} className="text-sm"><input type="checkbox" checked={modules.includes(m)} onChange={e=>setModules(old=>e.target.checked?[...old,m]:old.filter(x=>x!==m))}/> {moduleLabels[m]}</label>)}</fieldset><p className="mt-2 text-sm">Existing role limits still apply. Unticking every section removes module access without deleting records.</p><button className="btn-primary mt-3" disabled={locked}>Save section access</button></form>}</>}
+ <SchedulingManagementAccessPanel key={`${workspaceId}:${actorId}`} workspaceId={workspaceId} actorId={actorId} members={members} externalLocked={ownLocked||externalLocked} onLocked={setSchedulingLocked} />
  </section>;
 }

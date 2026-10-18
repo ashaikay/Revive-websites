@@ -9,20 +9,12 @@ const caller = (authorization: string) => createClient(url, anonKey, {
 });
 
 Deno.serve(request => handleSchedulingDailySessionsSave(request, {
-  allowedOrigin: Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
+  allowedOrigin: Deno.env.get('REV_SCHEDULING_ALLOWED_ORIGINS') ?? Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
   getUserId: async authorization => {
     const { data, error } = await caller(authorization).auth.getUser();
     return error ? null : data.user?.id ?? null;
   },
-  canManage: async (authorization, workspaceId, userId) => {
-    const { data, error } = await caller(authorization)
-      .from('workspace_members')
-      .select('role,status')
-      .eq('workspace_id', workspaceId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    return !error && data?.status === 'active' && ['owner', 'admin'].includes(data.role);
-  },
+  canManage: async (authorization, workspaceId, userId) => { const { data, error } = await caller(authorization).rpc('get_rev_scheduling_management', { target_workspace_id: workspaceId, target_user_id: userId }); return !error && data?.workspaceId === workspaceId && data?.userId === userId && data?.canManage === true; },
   save: async input => {
     const service = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
       auth: { persistSession: false, autoRefreshToken: false },

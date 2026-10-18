@@ -1,4 +1,4 @@
-import { resolveAnnualLeaveOrigin } from '../_shared/annualLeaveOrigins.ts';
+import { resolveSchedulingOrigin as resolveAnnualLeaveOrigin } from '../_shared/schedulingOrigins.ts';
 
 export interface JobInput {
  target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_job_id:string|null;
