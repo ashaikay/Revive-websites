@@ -269,3 +269,24 @@ test('identifies a stale contact edit as a definitive version conflict', () => {
   const failure = classifyProgrammeHubDatabaseError('participant_contact', { code: 'P0001', message: 'Participant contact unavailable or changed' });
   assert.equal(failure.status, 409); assert.equal(failure.errorCode, 'participant_contact_changed');
 });
+
+// Exact Programme Hub origin allowlist regression.
+test('allows listed origins without widening authentication or workspace permissions', async () => {
+  const deps = { ...dependencies(), allowedOrigin: 'http://localhost:5180, https://rev11.netlify.app' };
+  for (const value of ['http://localhost:5180', 'https://rev11.netlify.app']) {
+    const preflight = await handleProgrammeHubSave(new Request('http://local', { method: 'OPTIONS', headers: { Origin: value } }), deps);
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), value);
+    const denied = await handleProgrammeHubSave(request(programmeBody, { headers: { Origin: value, Authorization: 'Bearer test', 'Content-Type': 'application/json' } }), { ...deps, canWriteWorkspace: async () => false });
+    assert.equal(denied.status, 403);
+  }
+  for (const value of ['https://rev11.netlify.app.evil.test', 'https://other.netlify.app', 'null', '']) {
+    let invoked = false;
+    const denied = await handleProgrammeHubSave(new Request('http://local', { method: 'OPTIONS', headers: value ? { Origin: value } : {} }), { ...deps, getUserId: async () => { invoked = true; return userId; } });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.headers.get('Access-Control-Allow-Origin'), null);
+    assert.equal(invoked, false);
+  }
+  const wildcard = await handleProgrammeHubSave(new Request('http://local', { method: 'OPTIONS', headers: { Origin: 'https://other.netlify.app' } }), { ...deps, allowedOrigin: '*' });
+  assert.equal(wildcard.status, 403);
+});

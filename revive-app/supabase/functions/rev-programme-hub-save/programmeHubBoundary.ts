@@ -132,8 +132,8 @@ function validPayload(operation: ProgrammeHubOperation, payload: unknown): paylo
 
 function allowedOrigin(request: Request, configured?: string): string | null {
   const origin = request.headers.get('Origin');
-  const allowed = configured ?? 'http://localhost:5180';
-  return origin === allowed ? origin : null;
+  const allowed = (configured ?? 'http://localhost:5180').split(',').map(value => value.trim()).filter(Boolean);
+  return origin && allowed.includes(origin) ? origin : null;
 }
 
 export async function handleProgrammeHubSave(request: Request, dependencies: ProgrammeHubDependencies): Promise<Response> {
