@@ -3,12 +3,15 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
+  recovery: false,
   rpc: vi.fn(),
   session: null as null | { userId: string; email: string },
   context: { user: {}, workspaces: [] as Array<{ id: string }> },
   calendar: null as null | { code: string; state: string; failed: boolean },
   store: { currentWorkspaceId: '', isInitializing: true, initializationError: 'No workspace yet', setLiveContext: vi.fn(), setInitialization: vi.fn(), clearTenantState: vi.fn(), switchWorkspace: vi.fn() },
 }));
+vi.mock('@/services/passwordRecoveryBrowser', () => ({ passwordRecoveryEntry: { get active() { return mocks.recovery; } } }));
+vi.mock('@/components/PasswordRecoveryPanel', () => ({ PasswordRecoveryPanel: () => <h1>Set your password</h1> }));
 vi.mock('@/hooks/useAppStore', () => ({ useAppStore: () => mocks.store }));
 vi.mock('@/services/authService', () => ({ authProvider: { getSession: () => null, initialize: async () => mocks.session, subscribe: () => undefined, signIn: vi.fn(), signOut: vi.fn() }, classifySignInError: () => 'network' }));
 vi.mock('@/data/provider', () => ({ dataProviderMode: 'supabase' }));
@@ -26,7 +29,7 @@ vi.mock('@/components/OutlookConnectionPanel', () => ({ OutlookConnectionPanel: 
 vi.mock('@/components/AppFooter', () => ({ AppFooter: () => null }));
 vi.mock('@/components/ProgrammeHubModule', () => ({ ProgrammeHubModule: () => <p>Authorised Outcomes screen</p> }));
 import App from '@/App';
-beforeEach(() => { mocks.calendar = null; mocks.session = null; mocks.store.switchWorkspace.mockClear(); window.history.replaceState(null, '', '/'); });
+beforeEach(() => { mocks.recovery = false; mocks.calendar = null; mocks.session = null; mocks.store.switchWorkspace.mockClear(); window.history.replaceState(null, '', '/'); });
 afterEach(() => { cleanup(); window.history.replaceState(null, '', '/'); });
 it('shows an invitation before the no-workspace and initialization guards', async () => {
   window.history.replaceState(null, '', '/?rev_team_invite=44444444-4444-4444-8444-444444444444');
@@ -78,4 +81,13 @@ it('does not render any App workspace module when section access cannot be verif
  mocks.rpc.mockResolvedValue({data:null,error:{code:'42501'}});
  try {render(<App/>);expect(await screen.findByRole('alert')).toHaveTextContent('Section access could not be loaded.');expect(screen.queryByText('Authorised Outcomes screen')).toBeNull();}
  finally {mocks.store.currentWorkspaceId='';mocks.store.isInitializing=true;mocks.store.initializationError='No workspace yet';}
+});
+
+it('shows password recovery before invitation and workspace guards', () => {
+  mocks.recovery = true;
+  window.history.replaceState(null, '', '/?rev_auth_recovery=1&rev_team_invite=44444444-4444-4444-8444-444444444444');
+  render(<App />);
+  expect(screen.getByRole('heading', { name: 'Set your password' })).toBeVisible();
+  expect(screen.queryByText('Loading your REV workspace...')).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Join your REV team' })).toBeNull();
 });

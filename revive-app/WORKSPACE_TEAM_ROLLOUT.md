@@ -46,3 +46,21 @@ Staff still need active programme registration and caseload assignment. Module g
 The module gate fails closed if the access RPC is unavailable. Deploy the reviewed backend before using this client build for live staff. Test sign-in, confirmed invitation acceptance, Outcomes-only direct URLs/API denial, manager permissions, revoked access, and existing Scheduling/meeting workflows in isolated CI before production. Background checks refresh access on focus and every 30 seconds; database enforcement applies on every new statement. No automatic sending or provider enablement.
 
 This migration covers the explicit REV tables/RPCs from committed 1d4527b and the pending staff migration. It deliberately does not alter unrelated historical shared-project applications. Every future module/table/RPC must add its module guard; the isolated validator checks the current scope.
+
+## Password setup and recovery
+
+Staff invitation links are still shared manually; creating an invitation does not send email.
+Account confirmation and password recovery use the configured Supabase Auth SMTP service.
+Existing confirmed accounts should use “Forgot or need a password?” with their own email,
+not create a second account. REV requests a recovery email with a same-origin return URL
+and preserves the invitation ID. The recipient opens the newest email link, chooses and
+confirms a password, then signs in and explicitly accepts the original invitation.
+No membership or programme registration is created by password recovery.
+
+Recovery callbacks are consumed once, verified against Auth, and stripped from the URL.
+A stale, malformed or refreshed recovery page requires a new email link; an existing
+signed-in account alone cannot unlock this form. Passwords are never stored by REV.
+Test with a separate staff account in a private window, not the manager session.
+Ensure the hosted REV URL is in the existing Auth redirect allowlist before testing.
+Do not change shared Site URL, SMTP, confirmation requirements or other applications.
+No migration, Edge Function deployment or invitation-email sender is included here.

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
 import { acceptWorkspaceInvitation, invitationLink, teamId } from '@/services/workspaceTeam';
 
+import { PasswordResetRequest } from './PasswordResetRequest';
+
 export function WorkspaceInvitationPanel({ invitationId, onAccepted }: { invitationId: string; onAccepted: (workspaceId: string) => void }) {
   const [email, setEmail] = useState(''), [password, setPassword] = useState('');
   const [mode, setMode] = useState<'sign-in' | 'create'>('sign-in');
@@ -60,6 +62,7 @@ export function WorkspaceInvitationPanel({ invitationId, onAccepted }: { invitat
         {mode === 'create' && <p className="text-sm">Use at least 12 characters. Keep your password private.</p>}
         <button className="btn-primary" disabled={busy}>{busy ? 'Please wait...' : mode === 'create' ? 'Create my account' : 'Sign in to continue'}</button>
       </form>
+      <PasswordResetRequest email={email} invitationId={invitationId} />
     </>}
     {!checking && account && <div className="space-y-3">
       <p>Signed in as <strong>{account.email}</strong></p>

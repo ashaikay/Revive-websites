@@ -19,6 +19,10 @@ import { WorkspaceInvitationPanel } from '@/components/WorkspaceInvitationPanel'
 import { invitationFromLocation } from '@/services/workspaceTeam';
 import { ProgrammeHubModule } from '@/components/ProgrammeHubModule';
 
+import { passwordRecoveryEntry } from '@/services/passwordRecoveryBrowser';
+import { PasswordRecoveryPanel } from '@/components/PasswordRecoveryPanel';
+import { PasswordResetRequest } from '@/components/PasswordResetRequest';
+
 type Page = 'home' | 'rev' | 'customers' | 'growth' | 'business' | 'scheduling' | 'programme';
 type LoginError = 'invalid_credentials' | 'configuration' | 'network' | 'workspace';
 
@@ -38,7 +42,7 @@ function App() {
   const [loginError, setLoginError] = useState<LoginError | null>(null);
 
   React.useEffect(() => {
-    if (dataProviderMode !== 'supabase' || !authProvider.initialize) return;
+    if (passwordRecoveryEntry.active || dataProviderMode !== 'supabase' || !authProvider.initialize) return;
     let mounted = true;
     setInitialization(true);
     void authProvider.initialize()
@@ -112,6 +116,7 @@ function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  if (dataProviderMode === 'supabase' && passwordRecoveryEntry.active) return <PasswordRecoveryPanel />;
   const teamInvitationId = invitationFromLocation(window.location.search);
   if (dataProviderMode === 'supabase' && teamInvitationId && !calendarOAuthReturn) {
     return <WorkspaceInvitationPanel invitationId={teamInvitationId} onAccepted={(workspaceId) => window.location.replace(window.location.origin + window.location.pathname + '?rev_team_workspace=' + encodeURIComponent(workspaceId) + '#programme')} />;
@@ -191,6 +196,7 @@ function LoginPanel({ onSignIn, error }: { onSignIn: (email: string, password: s
         <label className="block text-sm font-medium text-neutral-700 mb-2" htmlFor="rev-password">Password</label>
         <input id="rev-password" className="w-full rounded-md border border-neutral-300 px-3 py-2 mb-6" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
         <button className="btn-primary w-full" type="submit">Sign in</button>
+        <PasswordResetRequest email={email} />
       </form>
     </main>
   );
