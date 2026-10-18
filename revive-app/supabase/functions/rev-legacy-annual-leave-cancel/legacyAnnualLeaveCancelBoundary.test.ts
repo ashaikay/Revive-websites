@@ -61,3 +61,28 @@ test('known historical refusals are scoped and arbitrary failures remain unknown
  value.deps.cancel=async()=>{throw Error('Annual leave accounting cancellation required');};
  assert.equal((await handleLegacyAnnualLeaveCancel(request(),value.deps)).status,503);
 });
+
+test('historical cancellation accepts configured hosted and local preflights without invoking authority',async()=>{
+ for(const origin of ['https://rev11.netlify.app','http://localhost:5180']) {
+  const value=fixture();value.deps.allowedOrigin='https://rev11.netlify.app,http://localhost:5180';
+  value.deps.getUserId=async()=>{throw Error('Preflight must not authenticate');};
+  const response=await handleLegacyAnnualLeaveCancel(new Request('https://example.test',{method:'OPTIONS',headers:{Origin:origin}}),value.deps);
+  assert.equal(response.status,204);assert.equal(response.headers.get('Access-Control-Allow-Origin'),origin);assert.equal(value.calls.length,0);
+ }
+ for(const origin of ['https://rev11.netlify.app.evil.test','https://unlisted.netlify.app','null']) {
+  const value=fixture();value.deps.allowedOrigin='https://rev11.netlify.app,http://localhost:5180';
+  const response=await handleLegacyAnnualLeaveCancel(new Request('https://example.test',{method:'OPTIONS',headers:{Origin:origin}}),value.deps);
+  assert.equal(response.status,403);assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);assert.equal(value.calls.length,0);
+ }
+});
+test('hosted cancellation still requires a verified manager and preserves the exact cancellation request',async()=>{
+ const hosted=(authorization?:string)=>new Request('https://example.test',{method:'POST',headers:{Origin:'https://rev11.netlify.app','Content-Type':'application/json',...(authorization?{Authorization:authorization}:{})},body:JSON.stringify(body)});
+ const value=fixture();value.deps.allowedOrigin='https://rev11.netlify.app,http://localhost:5180';
+ assert.equal((await handleLegacyAnnualLeaveCancel(hosted(),value.deps)).status,401);assert.equal(value.calls.length,0);
+ value.deps.canManage=async()=>false;
+ assert.equal((await handleLegacyAnnualLeaveCancel(hosted('Bearer test'),value.deps)).status,403);assert.equal(value.calls.length,0);
+ value.deps.canManage=async()=>true;
+ const response=await handleLegacyAnnualLeaveCancel(hosted('Bearer test'),value.deps);
+ assert.equal(response.status,200);assert.equal(response.headers.get('Access-Control-Allow-Origin'),'https://rev11.netlify.app');
+ assert.deepEqual(value.calls,[{target_workspace_id:workspaceId,initiating_user_id:actorId,target_request_id:requestId,target_worker_id:workerId,target_unavailability_id:unavailabilityId,expected_version:1}]);
+});

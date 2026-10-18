@@ -1,4 +1,4 @@
-import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+import {resolveSchedulingOrigin as resolveAnnualLeaveOrigin} from '../_shared/schedulingOrigins.ts';
 
 export interface LegacyAnnualLeaveCancelInput {
  target_workspace_id:string;
