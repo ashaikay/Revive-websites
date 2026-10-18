@@ -18,6 +18,7 @@ jobs:
       - run: npm ci
       - run: npx vitest run src/tests/schedulingManagementAccess.test.tsx src/tests/workspaceModuleAccess.test.tsx src/tests/workspaceTeamUI.test.tsx src/tests/schedulingWorkerArchiveUI.test.tsx src/tests/schedulingRecoveryUI.test.tsx src/tests/schedulingRequiredSkillsUI.test.tsx src/tests/schedulingDailySaveFeedbackUI.test.tsx src/tests/jobAssignmentsPanelUI.test.tsx --maxWorkers=1
       - run: node --experimental-strip-types --test supabase/functions/rev-worker-save/*.test.ts supabase/functions/rev-worker-pattern-save/*.test.ts supabase/functions/rev-worker-unavailability-save/*.test.ts supabase/functions/rev-scheduling-job-save/*.test.ts supabase/functions/rev-scheduling-assignment-save/*.test.ts supabase/functions/rev-scheduling-daily-sessions-save/*.test.ts
+      - run: node --experimental-strip-types --test supabase/functions/rev-annual-leave-*/*.test.ts
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -25,6 +26,11 @@ jobs:
         run: |
           for function in rev-worker-save rev-worker-pattern-save rev-worker-unavailability-save rev-scheduling-job-save rev-scheduling-assignment-save rev-scheduling-daily-sessions-save; do
             deno check "supabase/functions/$function/index.ts"
+          done
+      - name: Check annual leave functions
+        run: |
+          for path in supabase/functions/rev-annual-leave-*/index.ts; do
+            deno check "$path"
           done
       - run: npm run build
   scheduling-access-database:

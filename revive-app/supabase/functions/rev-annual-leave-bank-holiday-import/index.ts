@@ -5,7 +5,7 @@ const url = Deno.env.get('SUPABASE_URL')!;
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY')!;
 const caller = (authorization: string) => createClient(url, anonKey, {global: {headers: {Authorization: authorization}}, auth: {persistSession: false, autoRefreshToken: false}});
 Deno.serve(request => handleBankHolidayImport(request, {
- allowedOrigin: Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
+ allowedOrigin: Deno.env.get('REV_SCHEDULING_ALLOWED_ORIGINS') ?? Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
  getUserId: async authorization => {
   const {data, error} = await caller(authorization).auth.getUser();
   return error ? null : data.user?.id ?? null;

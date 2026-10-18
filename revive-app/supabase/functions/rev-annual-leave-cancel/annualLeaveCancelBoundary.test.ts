@@ -84,3 +84,28 @@ test('duplicate, missing, foreign and incorrect-revision account results remain 
   assert.deepEqual(await response.json(),{error:'Annual leave cancellation outcome could not be confirmed.',code:'outcome_unknown'});
  }
 });
+
+// Every annual leave route must accept the hosted Scheduling origin without
+// bypassing authentication or calling any balance/provider operation in preflight.
+import {handleAnnualLeavePolicySave} from '../rev-annual-leave-policy-save/annualLeavePolicyBoundary.ts';
+import {handleAnnualLeaveAccountOpen} from '../rev-annual-leave-account-open/annualLeaveAccountBoundary.ts';
+import {handleAnnualLeaveAdjustmentSave} from '../rev-annual-leave-adjustment-save/annualLeaveAdjustmentBoundary.ts';
+import {handleAnnualLeaveCalendarConfigure} from '../rev-annual-leave-calendar-configure/annualLeaveCalendarBoundary.ts';
+import {handleBankHolidayImport} from '../rev-annual-leave-bank-holiday-import/bankHolidayImportBoundary.ts';
+import {handleAnnualLeaveRecord} from '../rev-annual-leave-record/annualLeaveRecordBoundary.ts';
+const noAuthority=async()=>{throw Error('No authority or balance operation should be invoked');};
+const originDependencies={allowedOrigin:'https://rev11.netlify.app,http://localhost:5180',getUserId:noAuthority,canManage:noAuthority,save:noAuthority,open:noAuthority,configure:noAuthority,execute:noAuthority,fetchOfficial:noAuthority,record:noAuthority,cancel:noAuthority,now:()=> '2026-10-18T12:00:00Z'};
+for(const handler of [handleAnnualLeaveCancel,handleAnnualLeavePolicySave,handleAnnualLeaveAccountOpen,handleAnnualLeaveAdjustmentSave,handleAnnualLeaveCalendarConfigure,handleBankHolidayImport,handleAnnualLeaveRecord]) {
+ test(handler.name+' accepts configured hosted/local preflights and refuses unrelated origins',async()=>{
+  for(const origin of ['https://rev11.netlify.app','http://localhost:5180']) {
+   const response=await handler(new Request('https://example.test',{method:'OPTIONS',headers:{Origin:origin}}),originDependencies);
+   assert.equal(response.status,204);assert.equal(response.headers.get('Access-Control-Allow-Origin'),origin);
+   const unauthenticated=await handler(new Request('https://example.test',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'}),originDependencies);
+   assert.equal(unauthenticated.status,401);
+  }
+  for(const origin of ['https://rev11.netlify.app.evil.test','https://unlisted.netlify.app','null']) {
+   const response=await handler(new Request('https://example.test',{method:'OPTIONS',headers:{Origin:origin}}),originDependencies);
+   assert.equal(response.status,403);assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);
+  }
+ });
+}

@@ -1,4 +1,4 @@
-import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+import {resolveSchedulingOrigin as resolveAnnualLeaveOrigin} from '../_shared/schedulingOrigins.ts';
 
 export const bankHolidaySource = 'https://www.gov.uk/bank-holidays.json';
 export const ukRegions = ['england-and-wales', 'scotland', 'northern-ireland'] as const;

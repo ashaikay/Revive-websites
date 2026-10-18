@@ -1,4 +1,4 @@
-import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+import {resolveSchedulingOrigin as resolveAnnualLeaveOrigin} from '../_shared/schedulingOrigins.ts';
 
 export interface AnnualLeaveAccountInput{target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_worker_id:string;target_leave_year_start:string;expected_version:number;}
 export interface AnnualLeaveAccountDependencies{allowedOrigin?:string;getUserId(authorization:string):Promise<string|null>;canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;open(input:AnnualLeaveAccountInput):Promise<unknown>;}

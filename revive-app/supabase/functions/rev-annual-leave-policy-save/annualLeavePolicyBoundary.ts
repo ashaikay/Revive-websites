@@ -1,4 +1,4 @@
-import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+import {resolveSchedulingOrigin as resolveAnnualLeaveOrigin} from '../_shared/schedulingOrigins.ts';
 
 export interface AnnualLeavePolicyInput{target_workspace_id:string;initiating_user_id:string;target_request_id:string;target_worker_id:string|null;target_effective_from_leave_year:number;target_allowance_input_unit:'hours'|'days';target_allowance_input_value:number;target_allowance_minutes:number;target_hours_per_day_minutes:number;target_leave_year_start_month:number;target_leave_year_start_day:number;target_bank_holiday_treatment:'included'|'additional';expected_version:number;}
 export interface AnnualLeavePolicyDependencies{allowedOrigin?:string;getUserId(authorization:string):Promise<string|null>;canManage(authorization:string,workspaceId:string,userId:string):Promise<boolean>;save(input:AnnualLeavePolicyInput):Promise<unknown>;}
