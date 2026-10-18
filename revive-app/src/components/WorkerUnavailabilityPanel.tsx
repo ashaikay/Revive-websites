@@ -32,7 +32,7 @@ function periodLabel(period:UnavailablePeriod){
  return period.category==='leave'?'Leave':period.category==='sickness'?'Sickness':'Unavailable';
 }
 
-export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,workspaceTimezone=null,disabled=false,retryDisabled=disabled,parentDisabledReason=''}:{workspaceId:string;userId:string;workerId:string;active:boolean;workspaceTimezone?:string|null;disabled?:boolean;retryDisabled?:boolean;parentDisabledReason?:string}){
+export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,workerName='',active,workspaceTimezone=null,disabled=false,retryDisabled=disabled,parentDisabledReason=''}:{workspaceId:string;userId:string;workerId:string;workerName?:string;active:boolean;workspaceTimezone?:string|null;disabled?:boolean;retryDisabled?:boolean;parentDisabledReason?:string}){
  const [list,setList]=useState<UnavailablePeriod[]>([]);
  const [ready,setReady]=useState(false);
  const [busy,setBusy]=useState(false);
@@ -140,7 +140,7 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
    setCancel(null);
    setEditing(false);
    setDraft(blank());
-   setMessage(status==='cancelled'?'Period cancelled and planner refresh requested.':attempt.category==='sickness'?'Sickness dates saved and planner refresh requested. No notification was sent.':'Unavailable period saved and planner refresh requested.');
+   setMessage(status==='cancelled'?'Period cancelled.':attempt.category==='sickness'?'Sickness dates saved.':'Unavailable period saved.');
    try{const rows=await read();if(mounted.current)setList(rows);}
    catch{if(mounted.current){setReady(false);setMessage('Saved. Refresh to reload the periods.');}}
   }catch(error){
@@ -180,7 +180,7 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
   if(lock.current||!ready||retryDisabled||disabled||blocked)return;
   lock.current=true;
   setBusy(true);
-  setMessage(retry?'Retrying the same historical leave cancellation...':'Cancelling historical leave without changing balances...');
+  setMessage(retry?'Retrying cancellation...':'Cancelling leave...');
   let attempt=legacyPending;
   try{
    if(!attempt){
@@ -204,7 +204,7 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
    if(!mounted.current)return;
    setLegacyPending(null);
    setLegacyCancel(null);
-   setMessage('Historical leave cancelled with no balance change. Planner refresh requested.');
+   setMessage('Leave cancelled. Balance unchanged.');
    const [rows,accounted]=await Promise.all([read(),readAccounted()]);
    if(mounted.current){setList(rows);setAccountedLeaveIds(accounted);}
   }catch(error){
@@ -216,7 +216,7 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
     setMessage(error.message);
     try{const [rows,accounted]=await Promise.all([read(),readAccounted()]);if(mounted.current){setList(rows);setAccountedLeaveIds(accounted);}}
     catch{setReady(false);}
-   }else setMessage('Historical leave cancellation outcome is unconfirmed. Retry the same cancellation request.');
+   }else setMessage('Cancellation not confirmed. Retry the same change.');
   }finally{
    lock.current=false;
    if(mounted.current)setBusy(false);
@@ -261,12 +261,13 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
  return <details ref={detailsRef} open={editing||undefined} onToggle={event=>{if(editing&&!event.currentTarget.open)event.currentTarget.open=true;}} className="border-t mt-4 pt-3 overflow-visible">
   <summary className="font-medium cursor-pointer">Leave, sickness and unavailable periods</summary>
   {message&&<p role="status" className="my-2">{message}</p>}
-  {disabledReason&&<p className="text-sm my-2">Controls unavailable: {disabledReason}</p>}
+  {disabledReason&&!message&&!cancel&&!legacyCancel&&<p className="text-sm my-2">{disabledReason}</p>}
+  <details className="my-3 text-sm"><summary className="cursor-pointer">Time settings</summary>
   <label className="block my-2">Unavailable-period display/input timezone<input className="block border rounded p-2 w-full" title={disabledReason||undefined} value={timezoneInput} disabled={controlsDisabled||editing||!!cancel} onChange={event=>setTimezoneInput(event.target.value)}/></label>
   <button className="btn-secondary" title={disabledReason||undefined} disabled={controlsDisabled||editing||!!cancel} onClick={()=>{try{new Intl.DateTimeFormat('en-GB',{timeZone:timezoneInput});setTimezone(timezoneInput);setMessage('Timezone applied.');}catch{setMessage('Use a valid timezone such as Europe/London.');}}}>APPLY TIMEZONE</button>
-  <p className="text-sm my-2">Unavailable times are shown in {timezone}. Sickness uses inclusive dates in {workspaceTimezone??'the confirmed workspace timezone'}. Stored intervals use an exclusive end. No calendar event or notification is created.</p>
+  <p className="text-sm my-2">Unavailable times are shown in {timezone}. Sickness uses inclusive dates in {workspaceTimezone??'the confirmed workspace timezone'}. No calendar event or notification is created.</p></details>
   {!workspaceTimezone&&<p className="text-sm text-amber-800 my-2">Sickness recording is unavailable because the workspace timezone could not be confirmed.</p>}
-  <button type="button" className="btn-secondary my-2" title={disabledReason||undefined} disabled={controlsDisabled||!active||!!cancel} onClick={startAdding}>ADD UNAVAILABLE / SICKNESS</button>
+  {!cancel&&!legacyCancel&&<button type="button" className="btn-secondary my-2" title={disabledReason||undefined} disabled={controlsDisabled||!active} onClick={startAdding}>ADD UNAVAILABLE / SICKNESS</button>}
   {pending&&<button className="btn-secondary my-2" title={retryDisabled?disabledReason||undefined:undefined} disabled={busy||retryDisabled||blocked||!ready} onClick={()=>void save(null,true)}>{busy?'RETRYING...':'RETRY SAME PERIOD SAVE'}</button>}
   {legacyPending&&<button className="btn-secondary my-2" title={retryDisabled?disabledReason||undefined:undefined} disabled={busy||retryDisabled||blocked||!ready} onClick={()=>void cancelLegacy(true)}>{busy?'RETRYING...':'RETRY HISTORICAL LEAVE CANCELLATION'}</button>}
   {editing&&<form ref={formRef} aria-label={draft.record?'Edit unavailable or sickness period':'Record unavailable or sickness period'} noValidate className="relative z-10 mt-3 w-full overflow-visible rounded-lg border border-blue-200 bg-blue-50 p-4 shadow-sm" onSubmit={submitDraft}>
@@ -276,27 +277,27 @@ export function WorkerUnavailabilityPanel({workspaceId,userId,workerId,active,wo
     {draft.category==='sickness'?<>
      <label className="block my-2 font-medium">First sickness date (inclusive, {workspaceTimezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="date" value={draft.start} onChange={event=>{setMessage('');setDraft({...draft,start:event.target.value});}}/></label>
      <label className="block my-2 font-medium">Last sickness date (inclusive, {workspaceTimezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="date" value={draft.end} onChange={event=>{setMessage('');setDraft({...draft,end:event.target.value});}}/></label>
-     <p className="text-sm my-2">Only sickness dates are recorded. Do not enter diagnoses, symptoms, medical notes or other health details. REV will list conflicting assignments and will not cancel or reassign them.</p>
+     <p className="text-sm my-2">Record dates only; do not add medical details. Review conflicting assignments before saving.</p>
     </>:<>
      <label className="block my-2 font-medium">Start ({timezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="datetime-local" value={draft.start} onChange={event=>{setMessage('');setDraft({...draft,start:event.target.value});}}/></label>
      <label className="block my-2 font-medium">End ({timezone})<input className="mt-1 block w-full border rounded p-2 bg-white" type="datetime-local" value={draft.end} onChange={event=>{setMessage('');setDraft({...draft,end:event.target.value});}}/></label>
     </>}
     <div className="mt-3 flex flex-wrap gap-2"><button className="btn-primary" type="submit">{busy?'SAVING...':'SAVE'}</button>
-    <button className="btn-secondary" type="button" onClick={()=>{setDraft(blank());setEditing(false);setMessage('Changes discarded. No unavailable or sickness period was changed.');}}>DISCARD CHANGES</button></div>
+    <button className="btn-secondary" type="button" onClick={()=>{setDraft(blank());setEditing(false);setMessage('Changes discarded.');}}>DISCARD CHANGES</button></div>
    </fieldset>
   </form>}
   <ul className="space-y-3 mt-3">{list.map(period=>{
    let dates:string|null=null;
    if(period.category==='sickness'&&workspaceTimezone){try{const value=utcSicknessDates(period.startAt,period.endAt,workspaceTimezone);dates=`${formatSchedulingDate(value.firstDate)} to ${formatSchedulingDate(value.lastDate)} inclusive (${workspaceTimezone})`;}catch{dates=null;}}
    return <li key={period.unavailabilityId} className="border rounded p-3">
-    <p>{periodLabel(period)} · {period.status}</p>
+    <p className="font-medium">{periodLabel(period)} · {period.status==='active'?'Recorded':'Cancelled'}</p>
     <p>{dates??`${formatSchedulingLocal(utcLeaveToLocal(period.startAt,timezone))} to ${formatSchedulingLocal(utcLeaveToLocal(period.endAt,timezone))} (${timezone})`}</p>
-    {period.status==='active'&&period.category!=='leave'&&<><button className="btn-secondary mt-2" disabled={controlsDisabled||!active||!!cancel||!!legacyCancel} onClick={()=>editPeriod(period)}>EDIT PERIOD</button><button className="btn-secondary mt-2 ml-2" disabled={controlsDisabled||editing} onClick={()=>setCancel(period)}>CANCEL PERIOD</button></>}
-    {period.status==='active'&&period.category==='leave'&&(accountedLeaveIds.has(period.unavailabilityId)?<p className="text-sm mt-2">Recorded annual leave — cancel through Annual Leave for an exact balance reversal.</p>:<button className="btn-secondary mt-2" disabled={controlsDisabled||editing||!!cancel} onClick={()=>setLegacyCancel(period)}>CANCEL HISTORICAL LEAVE (NO BALANCE CHANGE)</button>)}
+    {period.status==='active'&&period.category!=='leave'&&cancel?.unavailabilityId!==period.unavailabilityId&&<><button className="btn-secondary mt-2" disabled={controlsDisabled||!active||!!cancel||!!legacyCancel} onClick={()=>editPeriod(period)}>EDIT PERIOD</button><button className="btn-secondary mt-2 ml-2" disabled={controlsDisabled||editing||!!cancel||!!legacyCancel} onClick={()=>setCancel(period)}>CANCEL PERIOD</button></>}
+    {period.status==='active'&&period.category==='leave'&&legacyCancel?.unavailabilityId!==period.unavailabilityId&&(accountedLeaveIds.has(period.unavailabilityId)?<p className="text-sm mt-2">Open Annual Leave to cancel this record and restore its allowance.</p>:<button className="btn-secondary mt-2" disabled={controlsDisabled||editing||!!cancel||!!legacyCancel} onClick={()=>setLegacyCancel(period)}>Cancel older leave</button>)}
+    {cancel?.unavailabilityId===period.unavailabilityId&&<div role="group" aria-label="Confirm period cancellation" className="mt-3 rounded border p-3"><p className="font-semibold">Cancel {cancel.category==='sickness'?'sickness':'unavailable time'}{workerName?` for ${workerName}`:''}?</p><p className="mt-1 text-sm">Assigned work will not change.</p><div className="mt-3 flex gap-2"><button className="btn-secondary" disabled={busy} onClick={()=>setCancel(null)}>Keep period</button><button className="btn-primary" disabled={controlsDisabled} onClick={()=>void save(cancel)}>Confirm cancellation</button></div></div>}
+    {legacyCancel?.unavailabilityId===period.unavailabilityId&&<div role="group" aria-label="Confirm historical leave cancellation" className="mt-3 rounded border p-3"><p className="font-semibold">Cancel older leave{workerName?` for ${workerName}`:''}?</p><p className="mt-1 text-sm">The leave balance will not change.</p><div className="mt-3 flex gap-2"><button className="btn-secondary" disabled={busy} onClick={()=>setLegacyCancel(null)}>Keep leave</button><button className="btn-primary" disabled={controlsDisabled} onClick={()=>void cancelLegacy()}>Confirm cancellation</button></div></div>}
    </li>;
   })}</ul>
-  {cancel&&<div role="group" aria-label="Confirm period cancellation" className="my-3"><p>Cancel this {cancel.category==='sickness'?'sickness':'unavailable'} period? Its history will remain recorded. No work will be cancelled or reassigned.</p><button className="btn-secondary" disabled={controlsDisabled} onClick={()=>void save(cancel)}>CONFIRM CANCELLATION</button><button className="btn-secondary ml-2" disabled={controlsDisabled} onClick={()=>setCancel(null)}>KEEP PERIOD</button></div>}
-  {legacyCancel&&<div role="group" aria-label="Confirm historical leave cancellation" className="my-3"><p>Cancel this historical leave? Dates and history remain recorded. No annual-leave balance will be deducted or credited.</p><button className="btn-secondary" disabled={controlsDisabled} onClick={()=>void cancelLegacy()}>CONFIRM HISTORICAL LEAVE CANCELLATION</button><button className="btn-secondary ml-2" disabled={controlsDisabled} onClick={()=>setLegacyCancel(null)}>KEEP HISTORICAL LEAVE</button></div>}
   {ready&&list.length===0&&<p className="text-sm my-2">No leave, sickness or unavailable periods recorded.</p>}
  </details>;
 }

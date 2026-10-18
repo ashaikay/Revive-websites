@@ -76,7 +76,7 @@ describe('Annual Leave Stage 3 interactions',()=>{
   const body={workspaceId:ws,workerId,requestId,startAt:'2026-05-01T00:00:00.000Z',endAt:'2026-05-02T00:00:00.000Z',expectedAccounts:[{accountId,version:3}]},pending:AnnualLeaveAttempt={operation:'record',workspaceId:ws,workerId,requestId,body};
   mocks.invoke.mockResolvedValue({data:null,error:new Error('network')});
   const {tree}=render(states(pending));button(tree,'Retry same change').props.onClick?.();
-  await vi.waitFor(()=>expect(mocks.setters[4]).toHaveBeenCalledWith(expect.stringMatching(/could not confirm what happened/)));
+  await vi.waitFor(()=>expect(mocks.setters[4]).toHaveBeenCalledWith(expect.stringMatching(/Save not confirmed/)));
   expect(mocks.removeItem).not.toHaveBeenCalled();expect(mocks.dispatch).not.toHaveBeenCalled();
  });
  it('refreshes explicitly without submitting or clearing a pending request and fails closed on read failure',async()=>{

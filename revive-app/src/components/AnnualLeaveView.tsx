@@ -146,6 +146,7 @@ export function AnnualLeaveBalance({account}: {account: AnnualLeaveAccount}) {
 }
 
 export function AnnualLeaveHistory({
+  workerName,
   absences,
   accounts = [],
   legacy,
@@ -154,6 +155,7 @@ export function AnnualLeaveHistory({
   onCancelLegacy,
   disabled,
 }: {
+  workerName?: string;
   absences: AnnualLeaveAbsence[];
   accounts?: AnnualLeaveAccount[];
   legacy: LegacyAnnualLeave[];
@@ -179,16 +181,17 @@ export function AnnualLeaveHistory({
             <summary className="cursor-pointer">View calculation</summary>
             <p>{formatLeaveMinutes(absence.totalDeductionMinutes)} in the original leave record.</p>
           </details>
-          {absence.status === 'confirmed' && (
+          {absence.status === 'confirmed' && !(cancelTarget?.kind === 'annual' && cancelTarget.absence.absenceId === absence.absenceId) && (
             <button className="btn-secondary mt-2" disabled={disabled || cancelTarget !== null} onClick={() => setCancelTarget({kind: 'annual', absence})}>
               Cancel leave
             </button>
           )}
           {cancelTarget?.kind === 'annual' && cancelTarget.absence.absenceId === absence.absenceId && (
             <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3" role="group" aria-label="Confirm annual leave cancellation">
-              <p>Cancel this Annual Leave? It will leave the active planner, remain in history, and its exact recorded balance deduction will be reversed.</p>
+              <p className="font-semibold">Cancel {workerName ? `${workerName}’s leave` : 'this leave'}?</p>
+              <p className="mt-1">The recorded leave allowance will be restored.</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button className="btn-secondary" type="button" onClick={() => { onCancel(absence); setCancelTarget(null); }}>Confirm cancellation</button>
+                <button className="btn-primary" type="button" disabled={disabled} onClick={() => { onCancel(absence); setCancelTarget(null); }}>Confirm cancellation</button>
                 <button className="btn-ghost" type="button" onClick={() => setCancelTarget(null)}>Keep leave</button>
               </div>
             </div>
@@ -197,23 +200,24 @@ export function AnnualLeaveHistory({
       ))}
       {legacy.map(leave => (
         <li className="card p-3" key={leave.unavailabilityId}>
-          <strong>Older leave (not included in the balance)</strong>
+          <strong>Older leave</strong>
           <p>
             {formatAnnualLeaveInstant(leave.startAt, legacyDisplayTimezone)} to{' '}
-            {formatAnnualLeaveInstant(leave.endAt, legacyDisplayTimezone)} (shown in {legacyDisplayTimezone};
-            the original timezone was not saved)
+            {formatAnnualLeaveInstant(leave.endAt, legacyDisplayTimezone)} ({legacyDisplayTimezone})
           </p>
-          <p>Status: {leave.status === 'active' ? 'Recorded' : 'Cancelled'}</p>
-          {leave.status === 'active' && (
+          <p>{leave.status === 'active' ? 'Recorded' : 'Cancelled'}</p>
+          <details className="mt-2 text-sm"><summary className="cursor-pointer">Details</summary><p>Not included in the leave balance. Dates are shown in {legacyDisplayTimezone}; the original timezone was not saved. History is kept.</p></details>
+          {leave.status === 'active' && !(cancelTarget?.kind === 'legacy' && cancelTarget.leave.unavailabilityId === leave.unavailabilityId) && (
             <button className="btn-secondary mt-2" disabled={disabled || cancelTarget !== null} onClick={() => setCancelTarget({kind: 'legacy', leave})}>
               Cancel older leave
             </button>
           )}
           {cancelTarget?.kind === 'legacy' && cancelTarget.leave.unavailabilityId === leave.unavailabilityId && (
             <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3" role="group" aria-label="Confirm older leave cancellation">
-              <p>Cancel this older leave? It will leave the active planner and remain in history. Annual Leave balances will not change because this record was never included in them.</p>
+              <p className="font-semibold">Cancel {workerName ? `${workerName}’s older leave` : 'this older leave'}?</p>
+              <p className="mt-1">The leave balance will not change.</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button className="btn-secondary" type="button" onClick={() => { onCancelLegacy(leave); setCancelTarget(null); }}>Confirm cancellation</button>
+                <button className="btn-primary" type="button" disabled={disabled} onClick={() => { onCancelLegacy(leave); setCancelTarget(null); }}>Confirm cancellation</button>
                 <button className="btn-ghost" type="button" onClick={() => setCancelTarget(null)}>Keep leave</button>
               </div>
             </div>
@@ -449,11 +453,11 @@ export function AnnualLeaveView({
       }
       const success =
         submittedAttempt.operation === 'record'
-          ? 'Leave added. The balance and weekly planner have been updated.'
+          ? 'Leave saved.'
           : submittedAttempt.operation === 'cancel'
-            ? 'Leave cancelled. The balance and weekly planner have been updated.'
+            ? 'Leave cancelled. Recorded allowance restored.'
             : submittedAttempt.operation === 'legacy_cancel'
-              ? 'Older leave cancelled. The weekly planner has been updated and the balance is unchanged.'
+              ? 'Leave cancelled. Balance unchanged.'
               : submittedAttempt.operation === 'import'
                 ? 'Official holidays imported and the reviewed year confirmed. Existing leave and balances are unchanged.'
               : 'This setup step is complete. Continue with the next step when ready.';
@@ -472,7 +476,7 @@ export function AnnualLeaveView({
         }
       } else {
         setMessage(
-          'We could not confirm what happened. Your original change is saved; use Retry same change before doing anything else.',
+          'Save not confirmed. Keep this page open and retry the same change.',
         );
       }
     } finally {
@@ -488,7 +492,7 @@ export function AnnualLeaveView({
     const token = scopeGuard.current.capture();
     const reloaded = await load(workerId);
     if (reloaded && scopeGuard.current.isCurrent(token)) {
-      setMessage('Leave details refreshed. No saved change was resubmitted.');
+      setMessage('Leave details refreshed.');
     }
   };
 
@@ -732,7 +736,7 @@ export function AnnualLeaveView({
           className="my-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 text-amber-950"
           aria-label="Pending annual leave change"
         >
-          <h3 className="text-base font-semibold">A saved change needs attention</h3>
+          <h3 className="text-base font-semibold">Save not confirmed</h3>
           <p className="mt-1 text-sm">
             {pendingInvalidMessage ??
               message ??
@@ -1283,6 +1287,7 @@ export function AnnualLeaveView({
       <section className="mt-6">
         <h3 className="font-semibold">Leave history</h3>
         <AnnualLeaveHistory
+          workerName={selectedWorker?.displayName}
           absences={model?.absences ?? []}
           accounts={model?.accounts ?? []}
           legacy={model?.legacyLeave ?? []}

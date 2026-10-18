@@ -17,9 +17,8 @@ describe('Annual Leave cancellation controls',()=>{
   render(<AnnualLeaveHistory absences={[absence]} legacy={[]} legacyDisplayTimezone="UTC" disabled={false} onCancel={onCancel} onCancelLegacy={vi.fn()}/>);
   fireEvent.click(screen.getByRole('button',{name:'Cancel leave'}));
   const confirmation=screen.getByRole('group',{name:'Confirm annual leave cancellation'});
-  expect(confirmation).toHaveTextContent('leave the active planner');
-  expect(confirmation).toHaveTextContent('remain in history');
-  expect(confirmation).toHaveTextContent('exact recorded balance deduction will be reversed');
+  expect(confirmation).toHaveTextContent('The recorded leave allowance will be restored.');
+  expect(within(confirmation).getAllByRole('button')).toHaveLength(2);
   expect(onCancel).not.toHaveBeenCalled();
   fireEvent.click(within(confirmation).getByRole('button',{name:'Confirm cancellation'}));
   expect(onCancel).toHaveBeenCalledWith(absence);
@@ -30,9 +29,32 @@ describe('Annual Leave cancellation controls',()=>{
   render(<AnnualLeaveHistory absences={[]} legacy={[legacy]} legacyDisplayTimezone="UTC" disabled={false} onCancel={vi.fn()} onCancelLegacy={onCancelLegacy}/>);
   fireEvent.click(screen.getByRole('button',{name:'Cancel older leave'}));
   const confirmation=screen.getByRole('group',{name:'Confirm older leave cancellation'});
-  expect(confirmation).toHaveTextContent('remain in history');
-  expect(confirmation).toHaveTextContent('Annual Leave balances will not change');
+  expect(confirmation).toHaveTextContent('The leave balance will not change.');
+  expect(within(confirmation).getAllByRole('button')).toHaveLength(2);
   fireEvent.click(within(confirmation).getByRole('button',{name:'Confirm cancellation'}));
   expect(onCancelLegacy).toHaveBeenCalledWith(legacy);
  });
+});
+
+it('names the worker, keeps dates beside the confirmation and never writes when Keep leave is chosen',()=>{
+ const onCancel=vi.fn();render(<AnnualLeaveHistory workerName="Tom" absences={[absence]} legacy={[]} legacyDisplayTimezone="UTC" disabled={false} onCancel={onCancel} onCancelLegacy={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Cancel leave'}));
+ const group=screen.getByRole('group',{name:'Confirm annual leave cancellation'});
+ expect(group).toHaveTextContent('Cancel Tom’s leave?');
+ expect(group.closest('li')).toHaveTextContent('05/10/2026');
+ expect(screen.queryByRole('button',{name:'Cancel leave'})).toBeNull();
+ fireEvent.click(within(group).getByRole('button',{name:'Keep leave'}));
+ expect(onCancel).not.toHaveBeenCalled();expect(screen.queryByRole('group',{name:'Confirm annual leave cancellation'})).toBeNull();expect(screen.getByRole('button',{name:'Cancel leave'})).toBeEnabled();
+});
+it('disables confirmation if the parent becomes locked while a cancellation is open',()=>{
+ const onCancel=vi.fn(),props={absences:[absence],legacy:[],legacyDisplayTimezone:'UTC',onCancel,onCancelLegacy:vi.fn()};
+ const view=render(<AnnualLeaveHistory {...props} disabled={false}/>);fireEvent.click(screen.getByRole('button',{name:'Cancel leave'}));
+ view.rerender(<AnnualLeaveHistory {...props} disabled/>);
+ expect(screen.getByRole('button',{name:'Confirm cancellation'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Confirm cancellation'}));expect(onCancel).not.toHaveBeenCalled();
+});
+it('keeps fallback-timezone details collapsed while showing older leave dates',()=>{
+ render(<AnnualLeaveHistory absences={[]} legacy={[legacy]} legacyDisplayTimezone="Europe/London" disabled={false} onCancel={vi.fn()} onCancelLegacy={vi.fn()}/>);
+ const details=screen.getByText('Details').closest('details');expect(details).not.toHaveAttribute('open');
+ expect(screen.getByText(/original timezone was not saved/)).not.toBeVisible();
+ fireEvent.click(screen.getByText('Details'));expect(screen.getByText(/original timezone was not saved/)).toBeVisible();
 });

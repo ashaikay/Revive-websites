@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {rememberLeaveAttempt,restoreLeaveAttempt,type LeaveAttempt} from '@/services/workerUnavailability';
 
@@ -61,7 +61,7 @@ describe('Sickness recording UI',()=>{
   await enterSickness();
   expect(screen.getByLabelText(/First sickness date/)).toHaveAccessibleName(/inclusive/);
   expect(screen.getByLabelText(/Last sickness date/)).toHaveAccessibleName(/inclusive/);
-  expect(screen.getByText(/Do not enter diagnoses, symptoms, medical notes/)).toBeInTheDocument();
+  expect(screen.getByText(/do not add medical details/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'SAVE'}));
   await waitFor(()=>expect(mocks.invoke).toHaveBeenCalledTimes(1));
   const [name,{body}]=mocks.invoke.mock.calls[0];
@@ -138,7 +138,7 @@ describe('Sickness recording UI',()=>{
   expect(mocks.invoke).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button',{name:'DISCARD CHANGES'}));
   expect(screen.queryByRole('form',{name:'Record unavailable or sickness period'})).not.toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent('Changes discarded. No unavailable or sickness period was changed.');
+  expect(screen.getByRole('status')).toHaveTextContent('Changes discarded.');
  });
 
  it('preserves Ricki and Karol unconfirmed payloads and exposes only their retry controls',async()=>{
@@ -154,4 +154,36 @@ describe('Sickness recording UI',()=>{
   expect(restoreLeaveAttempt(window.sessionStorage,workspaceId,userId,karolWorkerId)).toEqual(karol);
   expect(mocks.invoke).not.toHaveBeenCalled();
  });
+it('keeps time settings collapsed and cancels only after a short record-specific confirmation',async()=>{
+ const period={id:recordId,workspace_id:workspaceId,worker_id:workerId,start_at:'2026-10-19T08:00:00.000Z',end_at:'2026-10-19T09:00:00.000Z',category:'unavailable',status:'active',version:2};
+ mocks.rows.scheduling_worker_unavailability=[period];
+ render(<WorkerUnavailabilityPanel workspaceId={workspaceId} userId={userId} workerId={workerId} workerName="Tom" active workspaceTimezone="Europe/London"/>);
+ fireEvent.click(screen.getByText('Leave, sickness and unavailable periods'));
+ const cancel=await screen.findByRole('button',{name:'CANCEL PERIOD'});await waitFor(()=>expect(cancel).toBeEnabled());
+ expect(screen.getByLabelText('Unavailable-period display/input timezone')).not.toBeVisible();
+ fireEvent.click(cancel);const group=screen.getByRole('group',{name:'Confirm period cancellation'});
+ expect(group).toHaveTextContent('Cancel unavailable time for Tom?');expect(group.closest('li')).toHaveTextContent('19/10/2026');
+ expect(within(group).getAllByRole('button')).toHaveLength(2);expect(screen.queryByRole('button',{name:'ADD UNAVAILABLE / SICKNESS'})).toBeNull();
+ fireEvent.click(within(group).getByRole('button',{name:'Keep period'}));expect(mocks.invoke).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'CANCEL PERIOD'}));
+ mocks.invoke.mockImplementation(async(_name,{body})=>{mocks.rows.scheduling_worker_unavailability=[{...period,status:'cancelled',version:3}];return {data:{workspaceId:body.workspaceId,workerId:body.workerId,unavailabilityId:recordId,startAt:body.startAt,endAt:body.endAt,category:body.category,status:body.status,version:3},error:null};});
+ fireEvent.click(within(screen.getByRole('group',{name:'Confirm period cancellation'})).getByRole('button',{name:'Confirm cancellation'}));
+ await screen.findByText('Period cancelled.');
+ expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({workspaceId,workerId,unavailabilityId:recordId,expectedVersion:2,startAt:period.start_at,endAt:period.end_at,category:'unavailable',status:'cancelled'});
+});
+
+it('keeps older leave confirmation short and retries its exact cancellation after a lost response',async()=>{
+ mocks.rows.scheduling_worker_unavailability=[{id:recordId,workspace_id:workspaceId,worker_id:workerId,start_at:'2026-10-19T08:00:00.000Z',end_at:'2026-10-19T09:00:00.000Z',category:'leave',status:'active',version:2}];
+ mocks.invoke.mockResolvedValue({data:null,error:new Error('network')});
+ renderPanel();fireEvent.click(screen.getByText('Leave, sickness and unavailable periods'));
+ const start=await screen.findByRole('button',{name:'Cancel older leave'});await waitFor(()=>expect(start).toBeEnabled());fireEvent.click(start);
+ const group=screen.getByRole('group',{name:'Confirm historical leave cancellation'});expect(group).toHaveTextContent('The leave balance will not change.');expect(within(group).getAllByRole('button')).toHaveLength(2);
+ fireEvent.click(within(group).getByRole('button',{name:'Keep leave'}));expect(mocks.invoke).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Cancel older leave'}));fireEvent.click(screen.getByRole('button',{name:'Confirm cancellation'}));
+ const retry=await screen.findByRole('button',{name:'RETRY HISTORICAL LEAVE CANCELLATION'});const exact=mocks.invoke.mock.calls[0][1].body;
+ expect(exact).toMatchObject({workspaceId,workerId,unavailabilityId:recordId,expectedVersion:2});
+ mocks.invoke.mockResolvedValue({data:{workspaceId,workerId,unavailabilityId:recordId,startAt:'2026-10-19T08:00:00.000Z',endAt:'2026-10-19T09:00:00.000Z',category:'leave',status:'cancelled',version:3},error:null});
+ fireEvent.click(retry);await screen.findByText('Leave cancelled. Balance unchanged.');expect(mocks.invoke.mock.calls[1][1].body).toEqual(exact);
+});
+
 });

@@ -160,7 +160,7 @@ describe('Annual Leave mounted scope lifecycle',()=>{
   fireEvent.click(screen.getByRole('button',{name:'Leave settings'}));
   fireEvent.click(screen.getByRole('button',{name:'Load official dates'}));
   fireEvent.click(await screen.findByRole('button',{name:'Confirm reviewed holidays'}));
-  await screen.findByText('We could not confirm what happened. Your original change is saved; use Retry same change before doing anything else.');
+  await screen.findByText('Save not confirmed. Keep this page open and retry the same change.');
   const saved=JSON.parse(window.sessionStorage.getItem(key(wsA,userA))??'null') as AnnualLeaveAttempt;
   expect(saved.operation).toBe('import');expect(saved.body.previewId).toBe(previewId);
   expect(screen.getByRole('button',{name:'Load official dates'})).toBeDisabled();
@@ -185,12 +185,12 @@ describe('Annual Leave mounted scope lifecycle',()=>{
    expect(retry).toBeEnabled();
 
    fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
-   await screen.findByText('Leave details refreshed. No saved change was resubmitted.');
+   await screen.findByText('Leave details refreshed.');
    expect(screen.getByRole('button',{name:'Refresh'})).toBeEnabled();
 
    fireEvent.click(retry);
    await waitFor(()=>expect(mocks.invoke).toHaveBeenCalledTimes(1));
-   await screen.findByText('We could not confirm what happened. Your original change is saved; use Retry same change before doing anything else.');
+   await screen.findByText('Save not confirmed. Keep this page open and retry the same change.');
    expect(screen.getByRole('button',{name:'Retry same change'})).toBeEnabled();
 
    await act(async()=>{stalePage.resolve({data:null,error:{message:'stale pre-cleanup result'}});await stalePage.promise;});

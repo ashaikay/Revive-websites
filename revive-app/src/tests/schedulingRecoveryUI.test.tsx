@@ -58,11 +58,11 @@ describe('Scheduling parent recovery lock',()=>{
   const legacy={unavailabilityId:'66666666-6666-4666-8666-666666666666',workspaceId,workerId,startAt:'2026-01-02T09:00:00.000Z',endAt:'2026-01-02T17:00:00.000Z',category:'leave' as const,status:'active' as const,version:1};
   mocks.states=[[legacy],true,false,null,false,'',{record:null,start:'',end:'',category:'unavailable'},false,null,'Europe/London','Europe/London',new Set<string>(),null,null];
   const legacyMarkup=renderToStaticMarkup(WorkerUnavailabilityPanel({workspaceId,userId,workerId,active:true}));
-  expect(legacyMarkup).toContain('CANCEL HISTORICAL LEAVE (NO BALANCE CHANGE)');
+  expect(legacyMarkup).toContain('Cancel older leave');
   expect(legacyMarkup).not.toContain('cancel through Annual Leave');
   mocks.states=[[legacy],true,false,null,false,'',{record:null,start:'',end:'',category:'unavailable'},false,null,'Europe/London','Europe/London',new Set([legacy.unavailabilityId]),null,null];
   const accountedMarkup=renderToStaticMarkup(WorkerUnavailabilityPanel({workspaceId,userId,workerId,active:true}));
-  expect(accountedMarkup).toContain('cancel through Annual Leave for an exact balance reversal');
-  expect(accountedMarkup).not.toContain('CANCEL HISTORICAL LEAVE (NO BALANCE CHANGE)');
+  expect(accountedMarkup).toContain('Open Annual Leave to cancel this record and restore its allowance.');
+  expect(accountedMarkup).not.toContain('Cancel older leave');
  });
 });
