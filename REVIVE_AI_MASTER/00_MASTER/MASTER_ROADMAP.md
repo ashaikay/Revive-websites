@@ -41,6 +41,14 @@
 | 12 | Industry Playbooks | REV Trades, REV Property, REV Beauty, etc. | ⏳ Future |
 | 13 | API & Integrations | Third-party integrations, API ecosystem | ⏳ Future |
 
+### Agreed organisation access — requirements only
+
+One REV organisation/workspace must support multiple users with individual logins. Owners must manage invitations, permissions, revocation and AI spending limits. Proposed future personas are Owner, Manager/Scheduler, Worker and Read-only viewer. Managers/Schedulers manage jobs, private documents, reviewed AI recommendations and assignments; Workers see their own schedule and assigned-job documents and may upload reports only for assigned jobs; Read-only viewers see only explicitly permitted schedules/reports without editing.
+
+Employment Specialists must be authorised for identified programmes and restricted to active allocated caseloads, with defined manager oversight. Permissions, private storage and tenant isolation must be enforced server-side; important actions must record the actor, and revoked users must lose access.
+
+These are agreed requirements, not implemented capabilities. The current durable workspace roles remain `owner | admin | member | viewer`; current Scheduling document and AI access remains owner/admin-only, and worker self-service is pending. Any new role values or changed mappings require an explicit migration and implementation plan with RLS, storage, audit, revocation, compatibility and cross-workspace tests.
+
 ### Outcomes / Programme Hub — Employer Engagement / IPS foundation
 
 Employer Engagement for employment-support and Individual Placement and Support (IPS) organisations is the pre-existing employment-support plan from 21 September 2026, clarified on 8 October 2026. It is not a new product module and belongs inside **Outcomes / Programme Hub**.
@@ -61,9 +69,15 @@ The canonical architecture and decision boundary are documented in `REVIVE_AI_MA
 
 **Implementation state:** the first tenant-neutral foundation is implemented and is now integrated into the existing authenticated REV app. Programme configuration, employers, employer contacts, vacancies, minimal participant employment profiles, explicit advisers and caseload assignments use version-bound, service-only, idempotent audited writes. The migration and save function are recorded as deployed; this integration does not deploy or alter hosted data. Required tenant contracts remain unconfigured and show **Needs review**. Matching, outreach drafts, outcomes, reporting, spreadsheet import and voice capture are not implemented.
 
-### Planned worker briefs and assignment communications — not implemented
+### Private job documents and reviewed AI extraction implemented locally; provider disabled and communications unavailable
 
-Future worker scheduling scope: managers may upload a private job brief; each worker has a recipient email separate from a REV login; confirmed assignments may send shift details and a secure brief link using the organisation's separately authorised sending account. The capability must prevent duplicate sends, track `sent` / `failed` / `not_sent`, and send appropriate updates when an assignment changes or is cancelled. Calendar read consent is not email-sending authority. This requirement is planned only: it is not implemented, enabled or authorised, and must receive its own security, permission, delivery and idempotency review before execution work.
+The private source-document foundation and server-side OpenAI Responses adapter are implemented locally for existing open Scheduling jobs. Active owners/admins can upload a PDF or UTF-8 text source of at most 2 MB through a trusted, retry-safe boundary into private workspace/job-scoped storage. Worker self-service remains deferred. The pinned `gpt-4.1-mini-2025-04-14` adapter uses strict structured output, no tools and `store:false`; uploaded content remains untrusted evidence and every extracted item requires a page or section reference. Missing and ambiguous information stays explicit.
+
+Analysis has a durable, at-most-one provider-attempt claim per request. Exact retries return the recorded success, failure or pending/unknown state and never create an automatic second provider call. Extracted requirements remain separate from version-bound manager confirmation. Confirmation updates canonical job skills transactionally, invalidates when the job later changes, and does not assign a worker. Confirmed qualifications leave suitability unknown and block assignment because worker qualification evidence is not currently recorded.
+
+Production analysis remains explicitly unavailable until both server-only `OPENAI_API_KEY` and `REV_SCHEDULING_DOCUMENT_AI_ENABLED=true` are configured, the migration and functions are deployed, and the organisation accepts an appropriate provider-retention position. No live provider call, hosted migration or deployment was performed. OpenAI states that API data is not used for training by default, while abuse-monitoring logs may retain content for up to 30 days; approved Zero Data Retention or Modified Abuse Monitoring is required for stronger controls. At published `gpt-4.1-mini` rates of approximately $0.40 per million input tokens and $1.60 per million output tokens, a representative 10,000-input/2,000-output extraction is about $0.007 before additional PDF image tokens.
+
+Future worker scheduling communication scope remains planned: each worker has a recipient email separate from a REV login; confirmed assignments may send shift details and a secure brief link using the organisation's separately authorised sending account. The capability must prevent duplicate sends, track `sent` / `failed` / `not_sent`, and send appropriate updates when an assignment changes or is cancelled. Calendar read consent is not email-sending authority. Worker-email fields, brief links, notification execution and sending permissions are not implemented, enabled or authorised.
 
 ### Current Phase 5 boundary
 

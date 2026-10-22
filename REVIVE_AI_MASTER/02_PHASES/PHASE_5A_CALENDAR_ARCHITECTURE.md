@@ -206,6 +206,22 @@ This is a manual, channel-neutral internal draft. Reminder timing, delivery, sen
 
 Storage intent: additive workspace-scoped storage with a unique `(workspace_id, meeting_proposal_id)` current record, composite tenant foreign keys, restrictive RLS, service-only writes, a private exact-request ledger, optimistic version authority and transactional append-only audit evidence.
 
+### `meeting_reminder_deliveries`
+
+Phase 5E manual email-delivery contract (9 October 2026):
+
+- Delivery is a separate, explicit lifecycle from draft preparation. An active owner/admin first approves the exact current draft version; correcting the draft invalidates that approval.
+- A second explicit owner/admin action records sending consent and requests one immediate email. Calendar connection or calendar-write consent is not email-sending consent.
+- The browser supplies only workspace, proposal and exact request identifiers plus the explicit send-consent assertion. Recipient, subject and body are derived by the trusted server from the saved meeting proposal and approved reminder draft.
+- The trusted claim transaction rechecks active owner/admin authority, the dedicated `SEND_MEETING_REMINDER_EMAIL` capability, a future provider-accepted meeting, no meeting outcome, the unchanged approved draft and one-attempt authority.
+- One workspace/proposal delivery record is permitted. Exact request replay is idempotent; a provider attempt can move forward only once from `approved_not_sent` to `provider_attempt_claimed`.
+- Sender configuration and Microsoft authentication must succeed before the atomic claim. After claim, Microsoft Graph is invoked at most once. A claimed, accepted, rejected or unknown attempt is never automatically resent.
+- Provider acceptance is displayed as **“Accepted by provider — delivery not confirmed.”** A claimed or unknown outcome requires reconciliation and offers no retry control.
+- Delivery records and request ledgers are workspace-scoped, service-write-only and append audited without copying recipient addresses or reminder bodies into audit metadata.
+- `SEND_MEETING_REMINDER_EMAIL` remains disabled by default. Implementation and fake-provider verification do not authorize deployment, capability enablement or a real email.
+
+This first delivery slice is manual and immediate only. It adds no automatic draft generation, timer, scheduler, recurring reminder, RSVP/response ingestion, calendar mutation, commercial mutation or worker communication.
+
 ### Provider attempt records
 
 Preferred starting point: reuse `rev_action_executions` and `provider_usage_events` from Phase 4C for authorization, idempotency, claim, audit, and terminal outcome control. A later review may add `meeting_provider_attempts` only if it is needed for meeting-specific provider event reference, reconciliation cursor, or outcome metadata not safely represented on the existing execution record.

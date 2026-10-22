@@ -18,6 +18,7 @@ import {
  type PlannerLeave,
 } from '@/services/schedulingPlanner';
 import {formatSchedulingDate,formatSchedulingInstant,formatSchedulingTime} from '@/services/schedulingDisplay';
+import {SchedulingReportingPanel} from './SchedulingReportingPanel';
 import {
  clearLeaveAttempt,
  LeaveSaveRefused,
@@ -311,6 +312,7 @@ export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{
    </div>
    <p role="status" className={`text-sm mt-3 ${stale?'text-red-800':'text-slate-600'}`}>{busy?'Updating planner…':message} {updated&&`Last successful update: ${new Intl.DateTimeFormat('en-GB',{timeZone:timezone,hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(updated))} (${timezone}).`}</p>
    <p className="text-xs text-slate-500 mt-1">Refreshes every 30 seconds while this page is visible and after saved changes. Cancelled records are kept in history below.</p>
+   {data&&<SchedulingReportingPanel data={data} startDate={rangeStart} endDate={rangeEnd} timezone={timezone} workerId={workerFilter} location={locationFilter} periodLabel={viewMode==='week'?'WEEK':'MONTH'} stale={stale}/>}
    <div className="flex flex-wrap gap-2 mt-3 text-xs">
     <span className="rounded px-2 py-1 bg-blue-50 text-blue-950 border border-blue-200">Assigned</span>
     <span className="rounded px-2 py-1 bg-amber-50 text-amber-950 border border-amber-300">Unfilled</span>

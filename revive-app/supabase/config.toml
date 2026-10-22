@@ -420,22 +420,11 @@ enabled = true
 [functions.rev-email-execute]
 verify_jwt = true
 
+[functions.rev-meeting-reminder-deliver]
+verify_jwt = true
+
 [functions.rev-programme-hub-save]
 verify_jwt = true
-
-
-[functions.rev-scheduling-job-document-upload]
-verify_jwt = true
-
-[functions.rev-scheduling-job-document-analyse]
-verify_jwt = true
-
-[functions.rev-scheduling-job-requirements-confirm]
-verify_jwt = true
-
-[functions.rev-scheduling-job-document-access]
-verify_jwt = true
-
 
 [functions.rev-programme-employer-discovery]
 verify_jwt = true
@@ -444,4 +433,19 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.rev-programme-employer-outreach-draft]
+verify_jwt = true
+
+[functions.rev-scheduling-job-import]
+verify_jwt = true
+
+[functions.rev-scheduling-job-document-upload]
+verify_jwt = true
+
+[functions.rev-scheduling-job-document-access]
+verify_jwt = true
+
+[functions.rev-scheduling-job-document-analyse]
+verify_jwt = true
+
+[functions.rev-scheduling-job-requirements-confirm]
 verify_jwt = true

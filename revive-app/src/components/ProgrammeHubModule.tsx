@@ -27,7 +27,11 @@ import {
   submitProgrammeHubAttempt,
 } from '@/services/programmeHubService';
 
-type ProgrammeArea = 'team' | 'caseload' | 'employers' | 'jobs' | 'settings';
+import VocationalProfileBuilder from './VocationalProfileBuilder';
+import { ParticipantVocationalAssessment } from './ParticipantVocationalAssessment';
+import { VocationalStatusPanel } from './VocationalStatusPanel';
+
+type ProgrammeArea = 'team' | 'caseload' | 'employers' | 'jobs' | 'vocational' | 'settings';
 
 const emptyData: ProgrammeHubData = {
   programmes: [], advisers: [], employers: [], contacts: [], vacancies: [],
@@ -251,7 +255,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const pendingArea: ProgrammeArea | null = !pending ? null : pending.operation === 'programme' ? 'settings' : pending.operation === 'adviser' || pending.operation === 'participant_adviser' ? 'team' : pending.operation === 'vacancy' ? 'jobs' : pending.operation === 'employer' || pending.operation === 'contact' ? 'employers' : 'caseload';
   const currentArea: ProgrammeArea = teamLocked ? 'team' : employerLocked ? 'employers' : pendingArea ?? area ?? (isManager ? data.programmes.length ? 'team' : 'settings' : 'caseload');
   const changeArea = (next: ProgrammeArea) => {
-    if (recordNavigationLocked || ((next === 'settings' || next === 'team') && !isManager)) return;
+    if (recordNavigationLocked || ((next === 'settings' || next === 'team' || next === 'vocational') && !isManager)) return;
     setArea(next);
   };
   useEffect(() => { areaHeading.current?.focus({ preventScroll: true }); }, [currentArea]);
@@ -582,11 +586,21 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
 
       {ready && (isManager || isAdviser) && <>
         <nav className="flex flex-wrap gap-2" aria-label="Employment support areas">
-          {(isManager ? [['team', 'My team'], ['caseload', 'Caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities'], ['settings', 'Settings']] : [['caseload', 'My caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities']]).map(([key, label]) => <button key={key} type="button" aria-current={currentArea === key ? 'page' : undefined} className={currentArea === key ? 'btn-primary' : 'btn-secondary'} disabled={recordNavigationLocked && currentArea !== key} onClick={() => changeArea(key as ProgrammeArea)}>{label}</button>)}
+          {(isManager ? [['team', 'My team'], ['caseload', 'Caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities'], ['vocational', 'Vocational Profiles'], ['settings', 'Settings']] : [['caseload', 'My caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities']]).map(([key, label]) => <button key={key} type="button" aria-current={currentArea === key ? 'page' : undefined} className={currentArea === key ? 'btn-primary' : 'btn-secondary'} disabled={recordNavigationLocked && currentArea !== key} onClick={() => changeArea(key as ProgrammeArea)}>{label}</button>)}
         </nav>
         {recordNavigationLocked && <p className="text-sm" role="status">{busy || pending || employerLocked || teamLocked ? 'Finish or confirm the current request before changing areas.' : 'Save or cancel your edit before changing areas.'}</p>}
-        <h2 ref={areaHeading} tabIndex={-1} className="sr-only">{currentArea === 'team' ? 'Team workspace' : currentArea === 'caseload' ? 'Caseload workspace' : currentArea === 'employers' ? 'Employer workspace' : currentArea === 'jobs' ? 'Job opportunities workspace' : 'Programme settings workspace'}</h2>
+        <h2 ref={areaHeading} tabIndex={-1} className="sr-only">{currentArea === 'team' ? 'Team workspace' : currentArea === 'caseload' ? 'Caseload workspace' : currentArea === 'employers' ? 'Employer workspace' : currentArea === 'jobs' ? 'Job opportunities workspace' : currentArea === 'vocational' ? 'Vocational profile templates workspace' : 'Programme settings workspace'}</h2>
       </>}
+      {isManager && currentArea === 'vocational' && selectedProgramme && !recordNavigationLocked && (
+  <section className="card p-5" aria-label="Vocational profile templates">
+    <VocationalProfileBuilder
+      key={`${workspaceId}:${userId}:${selectedProgramme.id}`}
+      workspaceId={workspaceId}
+      userId={userId}
+      programmeId={selectedProgramme.id}
+    />
+  </section>
+)}
       <div hidden={currentArea !== 'settings'} className="space-y-6">
       {isManager && (
         <details className="card p-5" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'programme' && (busy || pending)) event.currentTarget.open = true; }} open={data.programmes.length === 0 || (feedbackTarget === 'programme' && (busy || !!pending || !!error || !!message))}>
@@ -667,11 +681,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       {selectedProgramme && (isManager || isAdviser) && <section className="card p-5">
         <h2 className="text-xl font-semibold">{!isManager ? 'My caseload' : specialistFilter === 'all' ? 'All Service users' : specialistFilter === 'unassigned' ? 'Unassigned Service users' : `${adviserLabel(specialistFilter, data, userId)} — caseload`}</h2>
           {caseloadTools}
-          <CompactCaseload participants={programmeParticipants} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} />
+          <CompactCaseload workspaceId={workspaceId} programmeId={selectedProgramme.id} participants={programmeParticipants} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} />
       </section>}
       {selectedProgramme && (isManager || isAdviser) && selectedParticipants.map((participant) => <section key={participant.id} className="card p-5" aria-label="Selected Service-user record">
         <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">Service-user record</h2><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => setOpenRecordRequest(null)}>Close record</button></div>
         <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onEditingChange={setContactEditing} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 1} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />
+        <ParticipantVocationalAssessment workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} participantName={participant.preferredName} caseReference={participant.caseReference} assignedSpecialists={currentCaseload(participant, data).map((assignment) => adviserLabel(assignment.adviserUserId, data, userId))} isManager={isManager} consentAdvisers={currentCaseload(participant, data).filter((assignment) => activeProgrammeAdvisers.some((adviser) => adviser.userId === assignment.adviserUserId)).map((assignment) => ({ userId: assignment.adviserUserId, label: adviserLabel(assignment.adviserUserId, data, userId) }))} />
         {participantEdit && (isManager ? <form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p>
           <Field label="Service user ID"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
           <Field label="Known as"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
@@ -784,33 +799,53 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   );
 }
 
-function CompactCaseload({ participants, visible, totalMatches, data, userId, search, onSearch, page, pages, setPage, selectedId, locked, openRecord }: {
+function CompactCaseload({ workspaceId, programmeId, participants, visible, totalMatches, data, userId, search, onSearch, page, pages, setPage, selectedId, locked, openRecord }: {
+  workspaceId: string; programmeId: string;
   participants: ProgrammeHubParticipant[]; visible: ProgrammeHubParticipant[]; totalMatches: number;
   data: ProgrammeHubData; userId: string; search: string; onSearch: (value: string) => void;
   page: number; pages: number; setPage: (page: number) => void; selectedId: string | null; locked: boolean;
   openRecord: (participant: ProgrammeHubParticipant) => void;
 }) {
   const unassigned = participants.filter((participant) => currentCaseload(participant, data).length === 0).length;
-  return <div className="mt-5 border-t border-neutral-200 pt-4" aria-label="Caseload overview">
-    <h3 className="font-semibold">Caseload overview</h3>
-    <p className="mt-1 text-sm text-neutral-600">{participants.length} {participants.length === 1 ? 'Service user' : 'Service users'}{participants.length > 0 ? unassigned ? ` · ${unassigned} unassigned` : ' · All assigned' : ''}</p>
-    <label className="mt-3 block text-sm font-medium">Search caseload<input className={`${inputClass} mt-1`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Name, case reference or ES" /></label>
-    {visible.length === 0 ? <p className="mt-3 text-sm text-neutral-600">{participants.length ? 'No Service users match this search.' : 'No Service users available in this programme.'}</p>
-      : <ul className="mt-3 divide-y divide-neutral-200">{visible.map((participant) => {
+  // Employment outcomes are not yet available in the Programme Hub data contract.
+  // Do not infer verified work, job readiness or a percentage from unrelated fields.
+  const [showHelp, setShowHelp] = useState(false);
+  return <section className="mt-5 border-t border-neutral-200 pt-5" aria-label="Caseload overview">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h3 className="text-xl font-semibold">My Caseload</h3><p className="mt-1 text-base text-neutral-600">Employment progress dashboard</p></div>
+      <button type="button" className="btn-secondary" aria-expanded={showHelp} onClick={() => setShowHelp((value) => !value)}>Help</button>
+    </div>
+    {showHelp && <p className="mt-3 rounded-lg bg-neutral-50 p-3 text-base text-neutral-700">Employment journey progress will be calculated from verified milestones. Until job-start and readiness evidence is connected, REV will not guess percentages or mark anyone as in work. Vocational assessment progress remains visible separately.</p>}
+    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-3xl font-bold">{participants.length}</p><p className="mt-1 text-base">Service users</p></div>
+      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-xl font-semibold text-neutral-600">Not tracked</p><p className="mt-1 text-base">Job ready</p></div>
+      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-xl font-semibold text-neutral-600">Not tracked</p><p className="mt-1 text-base">In work</p></div>
+    </div>
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-semibold">Caseload progress</h4><span className="text-sm text-neutral-600">Search · Filter · Export</span></div>
+    <p className="mt-1 text-base text-neutral-600">{participants.length} {participants.length === 1 ? 'Service user' : 'Service users'}{unassigned ? ` · ${unassigned} unassigned` : participants.length ? ' · All assigned' : ''}</p>
+    <label className="mt-4 block text-base font-medium">Search caseload<input className={`${inputClass} mt-2`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Name, case reference or ES" /></label>
+    {visible.length === 0 ? <p className="mt-4 text-base text-neutral-600">{participants.length ? 'No Service users match this search.' : 'No Service users available in this programme.'}</p>
+      : <ul className="mt-4 space-y-3">{visible.map((participant) => {
         const assignments = currentCaseload(participant, data);
-        return <li key={participant.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-          <div><p className="font-medium">{participant.preferredName} · {participant.caseReference}{!participant.active ? ' · Inactive record' : ''}</p>
-            <p className="text-sm text-neutral-600">{assignments.length ? `Assigned to ${assignments.map((assignment) => adviserLabel(assignment.adviserUserId, data, userId)).join(', ')}` : 'No active Employment Specialist assigned.'}</p></div>
-          <button type="button" className="btn-secondary" aria-label="Open Service-user record" aria-pressed={selectedId === participant.id} disabled={locked} onClick={() => openRecord(participant)}>{selectedId === participant.id ? 'Viewing' : 'Open'}</button>
+        return <li key={participant.id} className="rounded-xl border border-neutral-200 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="text-lg font-semibold">{participant.preferredName} {String.fromCharCode(183)} {participant.caseReference}{!participant.active ? String.fromCharCode(32,183,32) + "Inactive record" : ""}</p></div>
+            <button type="button" className="btn-secondary" aria-label="Open Service-user record" aria-pressed={selectedId === participant.id} disabled={locked} onClick={() => openRecord(participant)}>{selectedId === participant.id ? 'Viewing' : 'Open record'}</button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-base font-medium">Employment journey</p><span className="text-base text-neutral-600">Not yet tracked</span></div>
+          <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-neutral-200" role="progressbar" aria-label={`Employment journey for ${participant.preferredName}: no verified progress data available`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={0}><div className="h-full w-0 bg-blue-600" /></div>
+          <p className="mt-2 text-base text-neutral-600">Outcome not yet recorded</p>
+          <div className="mt-3 border-t border-neutral-100 pt-3"><VocationalStatusPanel workspaceId={workspaceId} programmeId={programmeId} participantId={participant.id} compact /></div>
+          <p className="mt-2 text-base text-neutral-600">{assignments.length ? `Assigned to ${assignments.map((assignment) => adviserLabel(assignment.adviserUserId, data, userId)).join(', ')}` : 'No active Employment Specialist assigned.'}</p>
         </li>;
       })}</ul>}
-    {totalMatches > 0 && <nav className="mt-3 flex flex-wrap items-center gap-3 text-sm" aria-label="Caseload pages">
+    {totalMatches > 0 && <nav className="mt-4 flex flex-wrap items-center gap-3 text-base" aria-label="Caseload pages">
       <span>{(page - 1) * 10 + 1}–{Math.min(page * 10, totalMatches)} of {totalMatches}</span>
       <button type="button" className="btn-secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
       <span>Page {page} of {pages}</span>
       <button type="button" className="btn-secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
     </nav>}
-  </div>;
+  </section>;
 }
 
 function ConfigurationState({ programme, data }: { programme: ProgrammeHubProgramme; data: ProgrammeHubData }) {

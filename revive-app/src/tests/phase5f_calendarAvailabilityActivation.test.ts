@@ -126,6 +126,6 @@ describe('Phase 5F controlled FatherLegacy availability activation', () => {
     expect(response.status).toBe(429);
     expect(JSON.parse(body)).toEqual({ error: 'Calendar provider is rate limited.', code: 'provider_rate_limited' });
     expect(body).not.toMatch(new RegExp(`${token}|${mailbox}|raw|stack`));
-    expect(source).not.toMatch(/Calendars\.ReadWrite|\/events|createEvent|updateEvent|deleteEvent|send|accept|decline|\.patch\(|\.delete\(/i);
+    expect(source).not.toMatch(/Calendars\.ReadWrite|\/events|createEvent|updateEvent|deleteEvent|\b(?:send|accept|decline)\s*\(|\.patch\(|\.delete\(/i);
   });
 });

@@ -1,0 +1,60 @@
+name: REV scheduling transfer verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scheduling-transfer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm test -- src/tests/schedulingTransfers.test.ts src/tests/schedulingTransfersUI.test.tsx src/tests/schedulingMonthPlannerUI.test.tsx
+      - run: node --experimental-strip-types --test supabase/functions/rev-scheduling-job-import/*.test.ts
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/rev-scheduling-job-import/index.ts
+      - run: npm run build
+
+  scheduling-transfer-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npx --yes supabase@2.117.0 start --exclude studio
+      - name: Test atomic job import authority and retry
+        shell: bash
+        run: |
+          while IFS='=' read -r key value; do
+            value="${value%\"}"
+            value="${value#\"}"
+            case "$key" in
+              ANON_KEY) export REV_LOCAL_SUPABASE_ANON_KEY="$value" ;;
+              SERVICE_ROLE_KEY) export REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY="$value" ;;
+            esac
+          done < <(npx --yes supabase@2.117.0 status -o env)
+          test -n "${REV_LOCAL_SUPABASE_ANON_KEY:-}"
+          test -n "${REV_LOCAL_SUPABASE_SERVICE_ROLE_KEY:-}"
+          node src/tests/scheduling_job_import_local_validation.mjs
+      - if: always()
+        run: npx --yes supabase@2.117.0 stop
