@@ -22,13 +22,32 @@ const overlap = (a: string[], b: string[]) => {
   const available = new Set(a.map(norm).filter(Boolean));
   return [...new Set(b.map(norm).filter(Boolean))].filter(x => available.has(x));
 };
-const safeTime = (v: string) => { const t = Date.parse(v); return Number.isFinite(t) ? t : null; };
+const safeTime = (v: string) => {
+  const time = Date.parse(v);
+  if (!Number.isFinite(time)) return null;
+  // Date.parse otherwise silently rolls dates such as February 30 into March.
+  const calendarDate = /^(\d{4}-\d{2}-\d{2})(?:T|$)/.exec(v)?.[1];
+  if (calendarDate) {
+    const midnight = Date.parse(`${calendarDate}T00:00:00.000Z`);
+    if (!Number.isFinite(midnight) || new Date(midnight).toISOString().slice(0, 10) !== calendarDate) return null;
+  }
+  return time;
+};
+const isHttpsSource = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname);
+  } catch { return false; }
+};
 export function assessOpportunity(profile: OrdinaryVocationalSummary | null, opportunity: Opportunity, now = new Date()): OpportunityAssessment {
   const needsReview: string[] = [];
   const reasons: string[] = [];
   const retrieved = safeTime(opportunity.evidence.retrievedAt);
-  const expired = opportunity.expiresAt ? safeTime(opportunity.expiresAt) : null;
-  if (opportunity.evidence.state !== 'verified' || !opportunity.evidence.sourceUrl.startsWith('https://') || retrieved === null || retrieved > now.getTime() || (expired !== null && expired <= now.getTime())) {
+  const expired = opportunity.expiresAt === undefined ? null : safeTime(opportunity.expiresAt);
+  if (!Number.isFinite(now.getTime()) || opportunity.evidence.state !== 'verified' || !isHttpsSource(opportunity.evidence.sourceUrl)
+    || retrieved === null || retrieved > now.getTime()
+    || (opportunity.expiresAt !== undefined && expired === null)
+    || (expired !== null && expired <= now.getTime())) {
     needsReview.push('Source evidence must be verified, dated and current.');
   }
   if (opportunity.kind === 'business_sales_prospect') {

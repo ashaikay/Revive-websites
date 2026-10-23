@@ -50,11 +50,18 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [recoveryBlocked, setRecoveryBlocked] = useState(false);
   const [pending, setPending] = useState<{ requestId: string; templateId: string | null; expectedVersion: number; title: string; description: string; sections: VocationalProfileTemplate['sections'] } | null>(null);
   const scope = `${workspaceId}:${programmeId ?? 'organisation'}:${userId}`;
   const generation = useRef(0);
   const saveLock = useRef(false);
   const pendingKey = `rev-vocational-pending:${scope}`;
+  const currentScope = useRef(scope);
+  if (currentScope.current !== scope) {
+    currentScope.current = scope;
+    generation.current++;
+    saveLock.current = false;
+  }
 
   const load = async () => {
     const seq = ++generation.current;
@@ -90,7 +97,10 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
 
   useEffect(() => {
     let valid = true;
-    setPending(null);
+    setPending(null); setBusy(false); setMessage(''); setDirty(false); setRecoveryBlocked(false);
+    setTemplate(null); savedId.current = null; setActiveId(''); setPreview(false);
+    setNewSection(''); setQuestionLabel(''); setOptionsText('');
+    setQuestionType('short_text'); setRequired(false); setStandardField('');
     try {
       const raw = window.sessionStorage.getItem(pendingKey);
       if (raw) {
@@ -98,13 +108,13 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         if (parsed && typeof parsed.requestId === 'string' && Array.isArray(parsed.sections)) setPending(parsed);
         else throw Error('Invalid pending save');
       }
-    } catch { if (valid) setError('Pending save recovery is unavailable. Do not start another save.'); }
+    } catch { if (valid) setRecoveryBlocked(true); }
     void load();
     return () => { valid = false; generation.current++; };
   }, [scope]);
 
   const save = async (retry = false) => {
-    if (!supabaseClient || saveLock.current || loading || (!retry && !template)) return;
+    if (!supabaseClient || saveLock.current || recoveryBlocked || loading || (!retry && !template)) return;
     const problems = template ? validateVocationalTemplate(template) : [];
     if (!retry && problems.length) { setError(problems.join(' ')); return; }
     const attempt = retry ? pending : template ? {
@@ -113,6 +123,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
       title: template.title.trim(), description: template.description ?? '', sections: template.sections,
     } : null;
     if (!attempt) return;
+    const seq = generation.current;
     try {
       saveLock.current = true; setBusy(true); setError(''); setMessage('');
       if (!retry) { window.sessionStorage.setItem(pendingKey, JSON.stringify(attempt)); setPending(attempt); }
@@ -122,42 +133,47 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         target_programme_id: programmeId, target_title: attempt.title,
         target_description: attempt.description, target_sections: attempt.sections,
       });
+      if (seq !== generation.current) return;
       if (rpcError) throw rpcError;
       if (!data || typeof data.id !== 'string' || data.status !== 'draft' || Number(data.version) !== (attempt.templateId ? attempt.expectedVersion + 1 : 1)) throw Error('Unexpected save response.');
       window.sessionStorage.removeItem(pendingKey);
       setPending(null); savedId.current = data.id;
       setTemplate(current => current ? { ...current, id: data.id, version: Number(data.version), updatedAt: new Date().toISOString() } : current);
       setDirty(false); setMessage('Draft saved.');
-    } catch { setError('Save not confirmed. Retry the same save before making further changes.'); }
-    finally { saveLock.current = false; setBusy(false); }
+    } catch { if (seq === generation.current) setError('Save not confirmed. Retry the same save before making further changes.'); }
+    finally { if (seq === generation.current) { saveLock.current = false; setBusy(false); } }
   };
 
   const publish = async () => {
-    if (!template || !savedId.current || dirty || pending || busy || !supabaseClient) return;
+    if (!template || !savedId.current || dirty || pending || busy || saveLock.current || recoveryBlocked || !supabaseClient) return;
     if (!window.confirm('Publish this questionnaire? The published version cannot be edited.')) return;
-    setBusy(true); setError('');
+    const seq = generation.current;
+    saveLock.current = true; setBusy(true); setError('');
     try {
       const { data, error: rpcError } = await supabaseClient.rpc('publish_rev_vocational_template', {
         target_workspace_id: workspaceId, target_template_id: savedId.current,
         expected_version: template.version,
       });
+      if (seq !== generation.current) return;
       if (rpcError) throw rpcError;
       if (!data || data.status !== 'published' || data.id !== savedId.current) throw Error('Publication not confirmed.');
       setTemplate(current => current ? { ...current, status: 'published' } : current);
       setPreview(true); setMessage('Template published.');
-    } catch { setError('Publication not confirmed. Refresh and verify the template status before retrying.'); }
-    finally { setBusy(false); }
+    } catch { if (seq === generation.current) setError('Publication not confirmed. Refresh and verify the template status before retrying.'); }
+    finally { if (seq === generation.current) { saveLock.current = false; setBusy(false); } }
   };
   const createRevision = async () => {
-    if (!template || template.status !== 'published' || busy || pending || !supabaseClient || !savedId.current) return;
+    if (!template || template.status !== 'published' || busy || saveLock.current || pending || recoveryBlocked || !supabaseClient || !savedId.current) return;
     if (!window.confirm('Create an editable draft from this published questionnaire? The published version will remain available.')) return;
-    setBusy(true); setError(''); setMessage('');
+    const seq = generation.current;
+    saveLock.current = true; setBusy(true); setError(''); setMessage('');
     try {
       const { data, error: rpcError } = await supabaseClient.rpc('rev_vocational_create_revision', {
         target_workspace_id: workspaceId,
         target_template_id: savedId.current,
         expected_version: template.version,
       });
+      if (seq !== generation.current) return;
       if (rpcError) throw rpcError;
       if (!data || typeof data.id !== 'string' || data.status !== 'draft' || Number(data.version) !== template.version + 1) {
         throw Error('Unexpected revision response.');
@@ -167,15 +183,15 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
       setPreview(false); setDirty(false);
       setMessage('Editable draft created. Published version retained.');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Revision not confirmed. Reload before trying again.');
-    } finally { setBusy(false); }
+      if (seq === generation.current) setError(cause instanceof Error ? cause.message : 'Revision not confirmed. Reload before trying again.');
+    } finally { if (seq === generation.current) { saveLock.current = false; setBusy(false); } }
   };
 
   const savedId = useRef<string | null>(null);
 
 
   function update(operation: (current: VocationalProfileTemplate) => VocationalProfileTemplate): boolean {
-    if (!template || template.status !== 'draft' || busy || pending) return false;
+    if (!template || template.status !== 'draft' || busy || pending || recoveryBlocked) return false;
     try {
       setTemplate(operation(template)); setDirty(true); setMessage('');
       setError('');
@@ -253,6 +269,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   function changeSections(sections: VocationalProfileTemplate['sections']) {
     update(current => ({ ...current, sections: sections.map((s, order) => ({ ...s, order })), updatedAt: new Date().toISOString() }));
   }
+  const recoveryWarning = recoveryBlocked && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Pending save recovery is unavailable. Do not start another save. Ask support to recover the retained request before editing or publishing.</p>;
   if (loading) return <p role="status">Loading vocational templates...</p>;
   if (!template) return (
     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
@@ -260,8 +277,10 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
       <p className="text-sm text-slate-600">Create a programme-specific vocational assessment with your own sections and questions.</p>
       <p className="text-sm text-slate-600">Templates are saved to your programme workspace.</p>
       {error && <p role="alert" className="text-red-700">{error}</p>}
+      {recoveryWarning}
       {pending && <button className={button} disabled={busy} onClick={() => void save(true)}>Retry pending save</button>}
-      <button type="button" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => {
+      <button type="button" disabled={recoveryBlocked} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => {
+        if (recoveryBlocked) return;
         try {
           const created = createVocationalTemplate(workspaceId, userId, programmeId);
           savedId.current = null; setTemplate(created); setDirty(true);
@@ -283,13 +302,14 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         <button type="button" className={button} disabled={template.status === 'published'} onClick={() => setPreview(p => !p)}>{template.status === 'published' ? 'Published (read-only)' : preview ? 'Back to editor' : 'Preview participant form'}</button>
       </div>
       <div className="flex flex-wrap gap-2">
-        {template.status === 'published' && <button type="button" className={button} disabled={busy || Boolean(pending)} onClick={() => void createRevision()}>Create editable draft version</button>}
-        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || !dirty} onClick={() => void save()}>{busy ? 'Working...' : 'Save draft'}</button>
-        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || dirty || !savedId.current} onClick={() => void publish()}>Publish template</button>
+        {template.status === 'published' && <button type="button" className={button} disabled={busy || Boolean(pending) || recoveryBlocked} onClick={() => void createRevision()}>Create editable draft version</button>}
+        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || !dirty} onClick={() => void save()}>{busy ? 'Working...' : 'Save draft'}</button>
+        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || dirty || !savedId.current} onClick={() => void publish()}>Publish template</button>
         <button type="button" className={button} disabled={busy || Boolean(pending) || dirty} onClick={() => void load()}>Reload saved template</button>
       </div>
       {pending && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">Save not confirmed. Do not edit or publish until resolved. <button type="button" className={button} disabled={busy} onClick={() => void save(true)}>Retry same save</button></div>}
       {message && <p role="status" className="text-sm text-green-700">{message}</p>}
+      {recoveryWarning}
       {dirty && <p className="text-sm text-amber-700">Unsaved changes. Save before leaving this page.</p>}
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -298,7 +318,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Status</div><div className="text-sm font-semibold">{template.status}{dirty ? ' - Unsaved changes' : ''}</div></div>
       </div>
       <label className="block space-y-1 text-sm font-medium">Template title
-        <input className={field} value={template.title} disabled={template.status === 'published' || busy || Boolean(pending)} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
+        <input className={field} value={template.title} disabled={template.status === 'published' || busy || Boolean(pending) || recoveryBlocked} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
       </label>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {errors.length > 0 && <div role="status" className="text-sm text-amber-700">{errors.slice(0, 3).map((message, i) => <p key={i}>{message}</p>)}</div>}
@@ -307,7 +327,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
           {template.sections.map(s => <section className="space-y-3 rounded-lg border border-slate-200 p-4" key={s.id}><h4 className="font-semibold">{s.title}</h4>{s.questions.length === 0 && <p className="text-sm text-slate-500">No questions in this section.</p>}{s.questions.map(q => <PreviewQuestion key={q.id} question={q} />)}</section>)}
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)]">
+        <fieldset disabled={busy || Boolean(pending) || recoveryBlocked} className="grid gap-5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)]">
           <aside className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Profile sections</h3>
             <div className="space-y-1">{template.sections.map((s, index) => (
@@ -367,7 +387,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
               </div>
             </>}
           </main>
-        </div>
+        </fieldset>
       )}
     </div>
   );

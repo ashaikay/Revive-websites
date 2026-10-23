@@ -6,7 +6,11 @@ export const jobImportHeaders=['title','start_date','start_time','end_date','end
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isoDate=/^\d{4}-\d{2}-\d{2}$/;
 const localTime=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
-const csvCell=(value:string)=>/[",\r\n]/.test(value)?`"${value.replace(/"/g,'""')}"`:value;
+const csvCell=(value:string)=>{
+ // CSV quoting alone does not stop spreadsheet formula evaluation.
+ const literal=/^\s*[=+\-@]|^[\t\r\n]/.test(value)?`'${value}`:value;
+ return /[",\r\n]/.test(literal)?`"${literal.replace(/"/g,'""')}"`:literal;
+};
 export const csvText=(rows:string[][])=>rows.map(row=>row.map(csvCell).join(',')).join('\r\n')+'\r\n';
 export const jobImportTemplate=()=>csvText([
  [...jobImportHeaders],

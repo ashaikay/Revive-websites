@@ -20,6 +20,22 @@ const existing:SchedulingJob={jobId:'88888888-8888-4888-8888-888888888888',works
 const migration=readFileSync(new URL('../../supabase/migrations/20261010230000_rev_scheduling_job_import.sql',import.meta.url),'utf8');
 
 describe('Scheduling CSV transfers',()=>{
+ it.each([
+  ['=2+3', "'=2+3\r\n"],
+  ['+2+3', "'+2+3\r\n"],
+  ['-2+3', "'-2+3\r\n"],
+  ['@SUM(1)', "'@SUM(1)\r\n"],
+  ['  =2+3', "'  =2+3\r\n"],
+  ['\t=2+3', "'\t=2+3\r\n"],
+  ['\r=2+3', '"\'\r=2+3"\r\n'],
+  ['\n=2+3', '"\'\n=2+3"\r\n'],
+ ])('exports formula-like cell %j as literal text', (value, expected) => {
+  expect(csvText([[value]])).toBe(expected);
+ });
+ it('preserves ordinary CSV text, dates and quote escaping', () => {
+  expect(csvText([['Support shift', '2026-10-23', '09:00', '2', 'A, B', 'Say "hello"']]))
+   .toBe('Support shift,2026-10-23,09:00,2,"A, B","Say ""hello"""\r\n');
+ });
  it('exports authorised schedule columns with local times and non-medical labels',()=>{
   const rows=scheduleExportRows(data,{startDate:'2026-10-05',endDate:'2026-10-11',timezone:'Europe/London'});
   expect(rows[0]).toEqual(['record_type','worker','job','date','local_start','local_end','timezone','recorded_status']);
