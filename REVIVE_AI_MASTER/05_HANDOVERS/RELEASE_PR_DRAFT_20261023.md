@@ -192,3 +192,18 @@ reminder provider execution false. No secrets or origin settings are changed by
 these proposed deployment commands. Both use existing server secret
 REV_CALENDAR_OAUTH_ALLOWED_ORIGIN, which still needs hosted origin verification.
 No function deployment has yet been reported.
+
+### User-confirmed Edge Function deployment
+
+The user ran CLI 2.117.0 `functions deploy` with the two explicit names,
+`--project-ref ntbowgutwyyhhnmkadlv --use-api`. Output listed the source assets
+and confirmed both functions deployed. No no-verify-jwt flag was used; source
+configuration keeps JWT verification enabled and the reminder provider gate
+false. No frontend release occurred.
+
+Cloud attempted read-only OPTIONS preflights for both endpoints using origin
+`https://rev11.netlify.app` and requested headers
+`apikey,authorization,content-type,x-client-info`. Both attempts were blocked by
+the execution environment's outbound proxy with tunnel 403 before reaching
+Supabase. This is not a Supabase preflight result. Browser/Windows verification
+of hosted CORS and authenticated behavior remains outstanding.
