@@ -147,3 +147,15 @@ any database-password prompt happen locally; do not paste credentials into chat.
 A successful plan checks migration selection/connectivity, not live SQL
 compatibility or evidence of no schema drift. No deployment or applying command
 is authorized by this dry-run handoff.
+
+### Hosted dry-run result supplied by user
+
+The Windows CLI 2.117.0 dry run succeeded against project
+`ntbowgutwyyhhnmkadlv` using the exact command above. Its output selected exactly
+all 15 expected migrations, in ascending version order, and stated migrations
+would not be pushed. A local `.sql.before-eof-fix.bak` file was correctly skipped
+because it is not a migration filename. No Vault update, migration application,
+function deployment, or frontend release was requested by that command.
+The result establishes connectivity and migration selection; applying the SQL
+against the existing hosted schema remains unverified. Production application
+requires explicit authorization before removing `--dry-run`.
