@@ -172,3 +172,23 @@ absence of manually applied SQL. Do not retry, drop existing tables, add blanket
 IF NOT EXISTS, or repair history without comparing existing definitions, RLS,
 grants, functions and triggers with the intended migration effects. No function
 deployment or Netlify release has been performed as part of this handoff.
+
+### User-confirmed hosted database rollout completion
+
+Subsequent user CLI output confirmed all four baseline versions in both local
+and remote migration history. A new dry run selected exactly the nine later
+versions. The user then applied those nine versions with `--include-all
+--skip-vault`; output listed each application and ended `Finished supabase db
+push` without errors. Together with the prior two successful applications and
+four reconciled history entries, all 73 repository migration versions are now
+accounted for by the supplied evidence. This is user-supplied execution evidence,
+not an independently queried final history or hosted functional smoke test.
+
+Next step: deploy only `rev-scheduling-job-import` and
+`rev-meeting-reminder-deliver`, using CLI `functions deploy` with explicit names,
+project ref and `--use-api` (server-side bundling avoids local Docker). CLI 2.117.0
+help confirms this syntax. Keep verify_jwt=true from project configuration and
+reminder provider execution false. No secrets or origin settings are changed by
+these proposed deployment commands. Both use existing server secret
+REV_CALENDAR_OAUTH_ALLOWED_ORIGIN, which still needs hosted origin verification.
+No function deployment has yet been reported.
