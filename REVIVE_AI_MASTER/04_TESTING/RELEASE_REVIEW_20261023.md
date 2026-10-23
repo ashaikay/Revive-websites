@@ -46,8 +46,10 @@ were not repeated for these client/pure-service changes.
 
 ## Release status
 
-The combined branch is prepared for code review. Nothing has been merged,
-deployed, or applied to hosted Supabase by this review.
+The combined branch is prepared for code review. The documentation-only master
+index change from `main` has been incorporated to preserve its project priorities.
+The review branch has not been merged into `main` or a production branch, and
+nothing has been deployed or applied to hosted Supabase by this review.
 
 The user does not know which branch Netlify uses for `rev11.netlify.app`.
 Repository inspection found no declaration establishing that deployment branch;
