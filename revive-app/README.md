@@ -45,6 +45,25 @@ The future connection point is `src/data/supabaseAdapter.ts`. It intentionally t
 
 ## Commands
 
+Use Node.js 22.18+ or 24 (the Node test runner needs TypeScript stripping).
+Run commands from `revive-app/`:
+
+- `npm test`: Vitest unit/component suites, with two workers by default.
+- `npm run test:node`: Node unit/boundary suites, with two workers.
+- `npm run test:all`: both runners; both must pass for the complete unit/boundary check.
+- `npm test -- src/tests/programmeHubUI.test.tsx`: one Vitest suite.
+- `npm run build`: TypeScript check and production bundle.
+
+Runner discovery checks `.test.*` files under `src/tests/` and
+`supabase/functions/` and assigns each by its runner import. Unknown or mixed
+runner imports stop discovery rather than silently omitting tests. Node suites
+are intentionally not executed by Vitest. No test timeout has been increased.
+
+Database SQL and `*_local_validation.mjs` integration harnesses are separate from
+these commands. Follow their documented local Supabase/CI setup; do not point
+them at production. Passing the unit/boundary suites does not establish database
+migration or live-provider readiness.
+
 ```text
 npm run dev
 npm test

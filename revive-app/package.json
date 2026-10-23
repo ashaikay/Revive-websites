@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:node": "node scripts/run-node-tests.mjs",
+    "test:all": "npm test && npm run test:node"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
