@@ -248,3 +248,21 @@ User handoff: pull Git changes, set only the reminder-specific origin through
 CLI secrets set, deploy only rev-meeting-reminder-deliver using --use-api, then
 repeat the OPTIONS check. Provider execution remains false and verify_jwt=true.
 This setting/deployment has not yet been reported as performed.
+
+### Both hosted origin checks passed
+
+User confirmed setting only REV_MEETING_REMINDER_ALLOWED_ORIGIN to
+https://rev11.netlify.app, deploying the updated reminder function including
+meetingReminderConfiguration.ts, and receiving OPTIONS 204 at 14:06:53 UTC
+(15:06:53 UK) on 23 October. Response echoes the exact Netlify origin, permits
+POST/OPTIONS and the four browser request headers, and varies by Origin.
+Together with the verified import preflight, both new endpoints now pass CORS
+checks for the current production origin. No live reminder send was attempted;
+the source provider gate remains false. These results do not establish
+successful authenticated writes or Netlify preview-origin access.
+
+Final combined local unit/boundary rerun after both origin fixes passed:
+105 Vitest files / 853 tests and 545 Node tests (1,398 total), zero failures.
+No additional frontend source changes occurred since the prior successful mock
+and Supabase builds. GitHub exact-head CI and frontend release review remain
+outstanding. Production branch and Netlify deployment were not changed.
