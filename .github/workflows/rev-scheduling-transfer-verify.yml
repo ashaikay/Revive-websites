@@ -40,8 +40,21 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
+      # Keep image-download connections from taking the fixed local stack ports.
+      - name: Reserve local Supabase ports
+        shell: bash
+        run: |
+          set -euo pipefail
+          reserved="$(sysctl -n net.ipv4.ip_local_reserved_ports)"
+          sudo sysctl -w "net.ipv4.ip_local_reserved_ports=${reserved:+$reserved,}55320-55329"
       - run: npm ci
-      - run: npx --yes supabase@2.117.0 start --exclude studio
+      - name: Start local Supabase
+        run: npx --yes supabase@2.117.0 start --exclude studio
+      - name: Diagnose local startup failure
+        if: failure()
+        run: |
+          ss -ltnp
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
       - name: Test atomic job import authority and retry
         shell: bash
         run: |

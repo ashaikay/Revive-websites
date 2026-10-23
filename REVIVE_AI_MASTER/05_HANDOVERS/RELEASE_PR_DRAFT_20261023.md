@@ -266,3 +266,24 @@ Final combined local unit/boundary rerun after both origin fixes passed:
 No additional frontend source changes occurred since the prior successful mock
 and Supabase builds. GitHub exact-head CI and frontend release review remain
 outstanding. Production branch and Netlify deployment were not changed.
+
+### PR #4 preview and CI startup failure
+
+User supplied PR status for commit 9a5e98b: Netlify preview ready at
+https://deploy-preview-4--rev11.netlify.app, deployment 6adb6bb8d05285bda58f1404.
+Push unit/boundary checks passed; one scheduling transfer database job failed.
+The detailed log shows ECR quota errors recovered through GHCR, followed by
+Docker failing to bind local port 55322 (address already in use). This occurs
+before migration startup or the import authority tests; no application assertion
+failed in this run. The log does not identify the competing port owner.
+
+55320-55329 overlap Linux's typical ephemeral range (32768-60999, also confirmed
+on this execution host). The scheduling transfer DB workflow now reserves those
+ports with net.ipv4.ip_local_reserved_ports before npm/image downloads, retaining
+any prior reservation. This prevents temporary outbound connections from taking
+fixed stack ports without changing project ports, production configuration, or
+test assertions. A failure diagnostic lists listening sockets and Docker port
+bindings to expose other possible competing listeners. Shell syntax and diff
+checks passed. GitHub execution of the revised workflow remains to be verified;
+this is a targeted mitigation for ephemeral allocation, not proof of the prior
+socket's owner. No cloud host sysctl setting was changed during verification.
