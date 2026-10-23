@@ -22,3 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run test:all
       - run: npm run build
+      - name: Build Supabase frontend
+        run: npm run build
+        env:
+          VITE_REV_PROVIDER_MODE: supabase

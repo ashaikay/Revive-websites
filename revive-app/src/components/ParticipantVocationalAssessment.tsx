@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
 import { VocationalStatusPanel } from './VocationalStatusPanel';
 import { VocationalConsentManager } from './VocationalConsentManager';
@@ -38,7 +38,23 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   const [expandedSection,setExpandedSection]=useState<string | null>(null);
   const [showHelp,setShowHelp]=useState(false);
   const [showMissing,setShowMissing]=useState(false);
-  useEffect(() => { setOpen(false); setSnapshots([]); setSelected(''); setAssessment(null); setAnswers({}); setDirty(false); setError(''); }, [workspaceId, programmeId, participantId]);
+  const scopeKey = JSON.stringify([workspaceId, programmeId, participantId, selected]);
+  // A fresh token also distinguishes leaving a profile and returning to it.
+  // Late replies must not change another profile's answers, feedback, or busy state.
+  const scope = useRef({ key: scopeKey, token: Symbol() });
+  // Lock synchronously, before React has rendered the disabled write controls.
+  const write = useRef<symbol | null>(null);
+  if (scope.current.key !== scopeKey) {
+    scope.current = { key: scopeKey, token: Symbol() };
+    write.current = null;
+  }
+  useEffect(() => { setSaving(false); setCompleting(false); }, [scopeKey]);
+  useEffect(() => () => { scope.current.token = Symbol(); write.current = null; }, []);
+  useEffect(() => {
+    setOpen(false); setSnapshots([]); setSelected(''); setAssessment(null); setAnswers({});
+    setDirty(false); setError(''); setNotice(''); setLoading(false);
+    setRefreshStatus(0); setExpandedSection(null); setShowMissing(false); setShowHelp(false);
+  }, [workspaceId, programmeId, participantId]);
   useEffect(() => {
     if (!open) return;
     let active = true;
@@ -98,7 +114,11 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   const coreProgressPercent = allQuestions.length ? Math.round((coreAnswered / allQuestions.length) * 100) : 0;
   const setAnswer = (id: string, value: unknown) => { setAnswers((previous) => ({ ...previous, [id]: value })); setDirty(true); setNotice(''); };
   const save = async () => {
-    if (!assessment || !snapshot || !supabaseClient || saving || !dirty) return;
+    if (!assessment || !snapshot || !supabaseClient || saving || completing || write.current || !dirty) return;
+    const scopeToken = scope.current.token;
+    const writeToken = Symbol();
+    write.current = writeToken;
+    const current = () => scope.current.token === scopeToken && write.current === writeToken;
     setSaving(true); setError(''); setNotice('');
     try {
       const payload: Record<string, unknown> = {};
@@ -110,32 +130,38 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         target_template_version_id: selected, target_action: 'save', target_assessment_id: assessment.assessmentId,
         expected_version: assessment.version, target_answers: payload,
       });
+      if (!current()) return;
       if (rpcError) throw rpcError;
       const result = data as Assessment;
       setAssessment(result); setAnswers(result.answers ?? {}); setDirty(false); setRefreshStatus(v=>v+1); setNotice('Draft saved. You can return to this assessment later.');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Save failed. Your unsaved answers remain on this screen.'); }
-    finally { setSaving(false); }
+    } catch (cause) { if (current()) setError(cause instanceof Error ? cause.message : 'Save failed. Your unsaved answers remain on this screen.'); }
+    finally { if (current()) { write.current = null; setSaving(false); } }
   };
   const complete = async () => {
-    if(!assessment || !supabaseClient || saving || completing || dirty || assessment.status==='completed' || sections.length===0)return;
+    if(!assessment || !supabaseClient || saving || completing || write.current || dirty || assessment.status==='completed' || sections.length===0)return;
     if(requiredMissing.length) { setShowMissing(true); setExpandedSection(sections.find(s => s.questions.some(q => requiredMissing.some(m => m.id === q.id)))?.id ?? null); setError(`${requiredMissing.length} required question(s) remain unanswered. Open the highlighted section and save before completing.`); return; }
     if(!window.confirm('Mark this vocational assessment as completed? This will lock the assessment.'))return;
+    const scopeToken = scope.current.token;
+    const writeToken = Symbol();
+    write.current = writeToken;
+    const current = () => scope.current.token === scopeToken && write.current === writeToken;
     setCompleting(true);setError('');setNotice('');
     try {
       const {data,error:rpcError}=await supabaseClient.rpc('rev_voc_assessment_complete',{
         target_workspace_id:workspaceId,target_programme_id:programmeId,target_participant_id:participantId,
         target_assessment_id:assessment.assessmentId,expected_version:assessment.version
       });
+      if(!current())return;
       if(rpcError)throw rpcError;
       const result=data as {version:number;status:string};
       setAssessment(prev=>prev?{...prev,version:result.version,status:result.status}:prev);
       setRefreshStatus(v=>v+1);setNotice('Vocational assessment marked completed.');
-    }catch(cause){setError(cause instanceof Error?cause.message:'Completion failed.');}
-    finally{setCompleting(false);}
+    }catch(cause){if(current())setError(cause instanceof Error?cause.message:'Completion failed.');}
+    finally{if(current()){write.current=null;setCompleting(false);}}
   };
   const renderQuestion = (q: Question) => {
     const value = answers[q.id];
-    const readOnly = assessment?.status === 'completed';
+    const readOnly = assessment?.status === 'completed' || loading || saving || completing;
     const common = 'mt-1 w-full rounded border border-neutral-300 p-2';
     if (q.type === 'long_text') return <textarea disabled={readOnly} className={common} rows={3} value={String(value ?? '')} onChange={(e) => setAnswer(q.id, e.target.value)} />;
     if (q.type === 'short_text' || q.type === 'date' || q.type === 'number') return <input disabled={readOnly} className={common} type={q.type === 'date' ? 'date' : q.type === 'number' ? 'number' : 'text'} value={value == null ? '' : String(value)} onChange={(e) => setAnswer(q.id, q.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value)} />;
@@ -153,8 +179,8 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   return <section className="mt-4 rounded-xl border border-neutral-200 bg-white p-4" aria-label="Vocational assessment">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="text-lg font-semibold text-neutral-900">Vocational profile</h3>
-        <p className="text-base text-neutral-700">{participantName || 'Service user'}{caseReference ? ` Â· ${caseReference}` : ''}</p></div>
-      <button type="button" className="btn-secondary" aria-expanded={open} onClick={() => { if (open && dirty && !window.confirm('Discard unsaved answers?')) return; setOpen(!open); }}>
+        <p className="text-base text-neutral-700">{participantName || 'Service user'}{caseReference ? ` · ${caseReference}` : ''}</p></div>
+      <button type="button" className="btn-secondary" disabled={saving || completing} aria-expanded={open} onClick={() => { if (open && dirty && !window.confirm('Discard unsaved answers?')) return; setOpen(!open); }}>
         {open ? 'Close profile' : 'Open profile'}
       </button>
     </div>
@@ -172,14 +198,14 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       {snapshots.length > 0 && <details className="rounded-lg border border-neutral-200 p-3">
         <summary className="cursor-pointer text-base font-medium">Questionnaire version</summary>
         <select aria-label="Published questionnaire version" className="mt-2 w-full rounded border border-neutral-300 p-2 text-base" value={selected} disabled={loading || saving || completing} onChange={(e) => { if (dirty && !window.confirm('Discard unsaved answers and switch questionnaire?')) return; setSelected(e.target.value); setExpandedSection(null); }}>
-          {snapshots.map((v) => <option key={v.id} value={v.id}>{v.title} Â· version {v.version}</option>)}
+          {snapshots.map((v) => <option key={v.id} value={v.id}>{v.title} · version {v.version}</option>)}
         </select>
       </details>}
       {assessment && !loading && isManager && <VocationalConsentManager key={assessment.assessmentId} assessmentId={assessment.assessmentId} advisers={consentAdvisers} />}
       {assessment && !loading && <>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3">
           <div className="min-w-0 flex-1">
-            <span className="text-base font-medium text-neutral-800">Core vocational profile: {coreProgressPercent}% Â· {unanswered.length} unanswered Â· {requiredMissing.length} required</span>
+            <span className="text-base font-medium text-neutral-800">Core vocational profile: {coreProgressPercent}% · {unanswered.length} unanswered · {requiredMissing.length} required</span>
             <div role="progressbar" aria-label="Core vocational profile answer progress" aria-valuenow={coreProgressPercent} aria-valuemin={0} aria-valuemax={100} className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
               <div className="h-full bg-blue-600" style={{ width: `${coreProgressPercent}%` }} />
             </div>
@@ -197,7 +223,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
           const expanded = expandedSection === section.id;
           return <section key={section.id} className="overflow-hidden rounded-lg border border-neutral-200">
             <button type="button" className="flex w-full items-center justify-between gap-3 bg-neutral-50 px-4 py-3 text-left text-base font-semibold" aria-expanded={expanded} onClick={() => setExpandedSection(expanded ? null : section.id)}>
-              <span>{section.title} Â· {section.questions.filter(q => answered(answers[q.id])).length} of {section.questions.length} answered{section.questions.some(q => q.required && !answered(answers[q.id])) ? ' Â· Required answers missing' : ''}</span><span aria-hidden="true">{expanded ? 'âˆ’' : '+'}</span>
+              <span>{section.title} · {section.questions.filter(q => answered(answers[q.id])).length} of {section.questions.length} answered{section.questions.some(q => q.required && !answered(answers[q.id])) ? ' · Required answers missing' : ''}</span><span aria-hidden="true">{expanded ? '−' : '+'}</span>
             </button>
             {expanded && <div className="space-y-5 p-4">{section.questions.filter(q => !showMissing || !answered(answers[q.id])).map((q) => <div key={q.id} className={`text-base ${q.required && !answered(answers[q.id]) ? 'rounded-lg border-l-4 border-amber-500 bg-amber-50 p-3' : ''}`}>
               <label className="block font-medium">{q.label}{q.required ? ' (required)' : ''}{renderQuestion(q)}</label>
@@ -209,7 +235,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
           <button type="button" className="btn-primary" disabled={!dirty || saving || completing} onClick={() => void save()}>{saving ? 'Saving...' : 'Save progress'}</button>
           <button type="button" className="btn-secondary" disabled={dirty || saving || completing} onClick={() => void complete()}>{completing ? 'Completing...' : 'Mark completed'}</button>
         </div>}
-        {assessment.status === 'completed' && <p className="text-base font-medium text-green-700">Assessment completed Â· Read-only</p>}
+        {assessment.status === 'completed' && <p className="text-base font-medium text-green-700">Assessment completed · Read-only</p>}
         {dirty && <p className="text-base text-neutral-700">Save progress before marking completed.</p>}
       </>}
     </div>}
