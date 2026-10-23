@@ -52,3 +52,24 @@ not be executed against hosted tables. Do not mark any of the nine later
 migrations applied: the exported matching/consent objects are absent.
 Do not retry the bulk push or drop/recreate tables to bypass the conflict.
 No function deployment or frontend release has occurred in this step.
+
+## User-supplied post-correction verification
+
+The user reported SQL Editor returned no rows, then supplied two successful
+permission checks: authenticated cannot execute either internal helper. Raw
+MD5 comparison to the local validator returned false. The subsequently supplied
+full `pg_get_functiondef` shows the intended strict validator body with CRLF
+line endings inside its dollar-quoted body, whereas the local baseline uses LF.
+The displayed code has the null-safe checks, missing-type rejection and choice
+option validation intact. Windows line endings explain the raw fingerprint
+mismatch; they do not change this function's SQL semantics. Future comparisons
+should normalize CRLF before fingerprinting, not weaken semantic validation.
+
+The four baseline migrations can now be reconciled in recorded history:
+`20261019010000`, `20261019011000`, `20261019012000`, `20261019013000`.
+This records existing and compared effects, including the targeted correction;
+it must not execute the local parity snapshot on hosted tables. The command
+syntax was checked against CLI 2.117.0 `migration repair --help`. It changes
+migration metadata, not application records or object definitions. After its
+success, obtain a new `db push --dry-run --include-all --skip-vault` plan and
+require exactly the nine later migrations. No repair has run from cloud.
