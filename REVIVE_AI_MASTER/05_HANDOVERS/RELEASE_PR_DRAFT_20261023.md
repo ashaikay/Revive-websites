@@ -159,3 +159,16 @@ function deployment, or frontend release was requested by that command.
 The result establishes connectivity and migration selection; applying the SQL
 against the existing hosted schema remains unverified. Production application
 requires explicit authorization before removing `--dry-run`.
+
+### Hosted application stopped on pre-existing vocational schema
+
+User output reports successful application of `20261009170000` and
+`20261010230000`, followed by SQLSTATE 42P07 at the first CREATE TABLE in
+`20261019010000`: `public.programme_hub_vocational_templates` already exists.
+The failing migration explicitly starts a transaction. No later migration is
+reported as attempted. Verify recorded history before further action.
+This confirms schema/history drift; migration selection alone did not establish
+absence of manually applied SQL. Do not retry, drop existing tables, add blanket
+IF NOT EXISTS, or repair history without comparing existing definitions, RLS,
+grants, functions and triggers with the intended migration effects. No function
+deployment or Netlify release has been performed as part of this handoff.
