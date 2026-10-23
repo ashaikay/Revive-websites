@@ -51,15 +51,36 @@ index change from `main` has been incorporated to preserve its project prioritie
 The review branch has not been merged into `main` or a production branch, and
 nothing has been deployed or applied to hosted Supabase by this review.
 
-The user does not know which branch Netlify uses for `rev11.netlify.app`.
-Repository inspection found no declaration establishing that deployment branch;
-it remains unverified. GitHub API access also returned Forbidden in this session,
-so a pull request and hosted CI status could not be managed or verified here.
-Git fetch/push works and the prepared branch is available through that route.
+The user subsequently supplied the Netlify project settings: production branch
+`phase-5l-calendar-event-creation`, base `revive-app`, build `npm run build`,
+publish directory `revive-app/dist`, Node.js 24.x, and branch deployments limited
+to that production branch. Deploy Previews are enabled for pull requests targeting
+that branch. The production branch was fetched and still points to
+`adf6f9a45e9dde140698a41c5cd10e895b3b5c0f`. This establishes the configured target
+and current Git tip. The user then supplied the completed production deploy:
+`rev11` at `adf6f9a`, with immutable deploy URL
+`https://6ad550d7648aa4a4b661a6e7--rev11.netlify.app/`. The configured branch,
+published deploy and fetched Git tip now agree based on that user-provided
+Netlify evidence. The separate Netlify site `revivewebsites` deploys `main` at
+`8758bb2` and is not the target of this REV release.
 
-Before production release, establish the Netlify production branch/commit and
-current hosted migration/function inventory. Review the combined branch against
-that baseline, establish CI results for the selected release commit, and perform
-the hosted programme/scheduling/consent smoke checks through the intended release
-process. Prior user confirmation that engagement works on Netlify is evidence
-for that earlier deployed version, not for this new branch.
+The release delta against that target includes 15 additional migration files
+and two new Supabase functions. Their presence in the diff does not establish
+which are already applied/deployed in the hosted project. Merging into the
+production branch can trigger Netlify; it does not deploy Supabase migrations
+or functions. The reported Netlify functions directory is for Netlify Functions,
+not these Supabase Edge Functions.
+
+GitHub API access returned Forbidden for PR queries and the production deployment
+metadata endpoint, so a pull request and hosted CI/deployment status could not be
+managed or verified here. Git fetch/push works. The prepared branch is available
+through that route, and the release PR target is now known.
+
+Before production release, confirm the current hosted migration/function
+inventory. Review the combined branch against the confirmed production target
+and deployed commit, establish CI results for the selected release
+commit, and perform the hosted programme/scheduling/consent smoke checks through
+the intended release process. Prior user confirmation that engagement works on
+Netlify is evidence for that earlier deployed version, not for this new branch.
+See `../05_HANDOVERS/RELEASE_PR_DRAFT_20261023.md` for the concrete PR target,
+release delta, and deployment order.
