@@ -9,3 +9,36 @@ function fixture(save?:JobImportDependencies['save']){const calls:JobImportInput
 test('manager import binds actor and canonical rows server-side',async()=>{const value=fixture(),response=await handleSchedulingJobImport(request(),value.deps);assert.equal(response.status,200);assert.equal(value.calls[0].initiating_user_id,userId);assert.deepEqual(value.calls[0].target_rows[0],{request_id:rowRequestId,title:row.title,start_at:row.startAt,end_at:row.endAt,timezone:row.timezone,location:row.location,required_skills:['Admin','Phone'],skill_requirement_mode:'all',staffing_count:2});});
 test('denies malformed rows, injected actors, duplicate request IDs and unauthorised users',async()=>{for(const value of [{...body,actorUserId:userId},{...body,rows:[row,row]},{...body,rows:[{...row,timezone:'bad/zone'}]},{...body,rows:[{...row,status:'open'}]}]){const fixtureValue=fixture();assert.equal((await handleSchedulingJobImport(request(value),fixtureValue.deps)).status,400);assert.equal(fixtureValue.calls.length,0);}const denied=fixture();assert.equal((await handleSchedulingJobImport(request(),{...denied.deps,canManage:async()=>false})).status,403);assert.equal(denied.calls.length,0);});
 test('maps only the exact atomic duplicate refusal to a request-bound conflict',async()=>{const refused=fixture(async()=>{throw new JobImportRefusal();});const response=await handleSchedulingJobImport(request(),refused.deps);assert.equal(response.status,409);assert.deepEqual(await response.json(),{status:'refused',code:'duplicate_jobs',batchRequestId});const uncertain=fixture(async()=>{throw Error('private');});assert.equal((await handleSchedulingJobImport(request(),uncertain.deps)).status,403);});
+
+test('configured production scheduling preflight does not authenticate or write', async () => {
+ for (const candidate of ['https://rev11.netlify.app', 'http://127.0.0.1:5180']) {
+  const value = fixture();
+  const response = await handleSchedulingJobImport(new Request('https://example.test', {
+   method: 'OPTIONS', headers: { Origin: candidate },
+  }), { ...value.deps, allowedOrigin: 'http://localhost:5180, https://rev11.netlify.app',
+   getUserId: async () => { throw Error('Preflight must not authenticate'); },
+   canManage: async () => { throw Error('Preflight must not check roles'); },
+   save: async () => { throw Error('Preflight must not write'); },
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), candidate);
+  assert.equal(response.headers.get('Vary'), 'Origin');
+  assert.match(response.headers.get('Access-Control-Allow-Headers') ?? '', /authorization/);
+  assert.equal(value.calls.length, 0);
+ }
+});
+test('unconfigured, missing, unlisted and lookalike origins remain blocked', async () => {
+ for (const configured of [undefined, '', 'http://localhost:5180, https://rev11.netlify.app']) {
+  for (const candidate of [null, 'https://attacker.example', 'https://rev11.netlify.app.attacker.example']) {
+   const value = fixture();
+   const response = await handleSchedulingJobImport(new Request('https://example.test', {
+    method: 'OPTIONS', headers: candidate ? { Origin: candidate } : {},
+   }), { ...value.deps, allowedOrigin: configured,
+    getUserId: async () => { throw Error('Denied origin must not authenticate'); },
+   });
+   assert.equal(response.status, 403);
+   assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
+   assert.equal(value.calls.length, 0);
+  }
+ }
+});

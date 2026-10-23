@@ -207,3 +207,22 @@ Cloud attempted read-only OPTIONS preflights for both endpoints using origin
 the execution environment's outbound proxy with tunnel 403 before reaching
 Supabase. This is not a Supabase preflight result. Browser/Windows verification
 of hosted CORS and authenticated behavior remains outstanding.
+
+### Hosted import preflight refusal and scheduling configuration correction
+
+User OPTIONS request from `https://rev11.netlify.app` reached edge runtime and
+returned empty 403 without CORS headers. This matches the import boundary's
+origin-refusal path; hosted secret values have not been inspected. The import
+entry point read only REV_CALENDAR_OAUTH_ALLOWED_ORIGIN, unlike existing
+scheduling entry points which prefer REV_SCHEDULING_ALLOWED_ORIGINS and use the
+comma-separated scheduling origin resolver. Updated import to use that same
+configuration preference and resolver without changing shared helper behavior,
+server secrets, JWT checks, roles, or writes.
+
+Five focused Node boundary tests pass, including two new preflight regressions:
+configured Netlify/development origins succeed without authentication or writes;
+missing/unconfigured/unlisted/lookalike origins fail without CORS access.
+Hosted redeployment and a new OPTIONS check are required. If the configured
+scheduling allowlist itself omits rev11, this code change alone will not permit
+it; inspect the intended configuration before changing any shared secrets.
+Reminder endpoint preflight remains unverified and its provider gate is false.

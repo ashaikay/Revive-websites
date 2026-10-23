@@ -1,4 +1,4 @@
-import {resolveAnnualLeaveOrigin} from '../_shared/annualLeaveOrigins.ts';
+import {resolveSchedulingOrigin} from '../_shared/schedulingOrigins.ts';
 
 export interface JobImportInput{target_workspace_id:string;initiating_user_id:string;target_batch_request_id:string;target_rows:Record<string,unknown>[];}
 export interface JobImportDependencies{
@@ -20,7 +20,7 @@ function validRow(value:unknown):value is Record<string,unknown>{
  try{new Intl.DateTimeFormat('en-GB',{timeZone:row.timezone});return true;}catch{return false;}
 }
 export async function handleSchedulingJobImport(request:Request,deps:JobImportDependencies):Promise<Response>{
- const origin=resolveAnnualLeaveOrigin(request.headers.get('Origin'),deps.allowedOrigin);if(!origin)return new Response(null,{status:403});
+ const origin=resolveSchedulingOrigin(request.headers.get('Origin'),deps.allowedOrigin);if(!origin)return new Response(null,{status:403});
  const headers={'Access-Control-Allow-Origin':origin,Vary:'Origin','Cache-Control':'no-store','Content-Type':'application/json'};const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(request.method!=='POST')return reply(405,{error:'Method not allowed.'});const authorization=request.headers.get('Authorization')??'';if(!/^Bearer\s+\S+$/i.test(authorization))return reply(401,{error:'Authentication required.'});if(request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase()!=='application/json')return reply(415,{error:'JSON required.'});
