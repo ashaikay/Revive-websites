@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { meetingReminderAllowedOrigin } from './meetingReminderConfiguration.ts';
 import { acquireMicrosoftGraphAccessToken } from '../_shared/microsoftGraphAuth.ts';
 import { sendMicrosoftGraphEmail } from '../rev-email-execute/microsoftGraphProvider.ts';
 import {
@@ -20,7 +21,7 @@ const service = () => createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'
 });
 
 Deno.serve((request) => handleMeetingReminderDelivery(request, {
-  allowedOrigin: Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
+  allowedOrigin: meetingReminderAllowedOrigin((name) => Deno.env.get(name)),
   providerExecutionEnabled: PROVIDER_EXECUTION_ENABLED,
   getUserId: async (authorization) => {
     const { data, error } = await caller(authorization).auth.getUser();

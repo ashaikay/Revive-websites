@@ -129,3 +129,33 @@ test('denies foreign origins, invalid authentication and unauthorized roles', as
   }), dependencies({ canManage: async () => false }));
   assert.equal(unauthorized.status, 403);
 });
+
+
+test('reminder origin configuration is independent and retains legacy fallback', async () => {
+  const { meetingReminderAllowedOrigin } = await import('./meetingReminderConfiguration.ts');
+  const env: Record<string, string> = {
+    REV_MEETING_REMINDER_ALLOWED_ORIGIN: 'https://rev11.netlify.app',
+    REV_CALENDAR_OAUTH_ALLOWED_ORIGIN: 'http://localhost:5180',
+  };
+  assert.equal(meetingReminderAllowedOrigin(name => env[name]), 'https://rev11.netlify.app');
+  delete env.REV_MEETING_REMINDER_ALLOWED_ORIGIN;
+  assert.equal(meetingReminderAllowedOrigin(name => env[name]), 'http://localhost:5180');
+  assert.equal(meetingReminderAllowedOrigin(() => undefined), undefined);
+  env.REV_MEETING_REMINDER_ALLOWED_ORIGIN = '';
+  assert.equal(meetingReminderAllowedOrigin(name => env[name]), '');
+});
+
+test('reminder production preflight accepts only its exact configured origin without side effects', async () => {
+  const fail = async (): Promise<never> => { throw Error('Preflight must not invoke authority or providers'); };
+  const deps = dependencies({ allowedOrigin: 'https://rev11.netlify.app',
+    getUserId: fail, canManage: fail, approve: fail, deliver: fail });
+  for (const origin of ['https://rev11.netlify.app', 'https://attacker.example',
+    'https://rev11.netlify.app.attacker.example']) {
+    const response = await handleMeetingReminderDelivery(new Request('https://example.test', {
+      method: 'OPTIONS', headers: { Origin: origin },
+    }), deps);
+    const allowed = origin === 'https://rev11.netlify.app';
+    assert.equal(response.status, allowed ? 204 : 403);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), allowed ? origin : null);
+  }
+});

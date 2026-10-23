@@ -226,3 +226,25 @@ Hosted redeployment and a new OPTIONS check are required. If the configured
 scheduling allowlist itself omits rev11, this code change alone will not permit
 it; inspect the intended configuration before changing any shared secrets.
 Reminder endpoint preflight remains unverified and its provider gate is false.
+
+### Scheduling preflight verified; reminder-specific origin prepared
+
+User confirmed import redeployment, then supplied OPTIONS 204 with exact
+Access-Control-Allow-Origin https://rev11.netlify.app, POST/OPTIONS methods and
+all four requested headers. This verifies import CORS, not authenticated writes.
+Reminder OPTIONS returned empty 403 from edge runtime. It still used the shared
+calendar single-origin setting; its value is uninspected.
+
+Added REV_MEETING_REMINDER_ALLOWED_ORIGIN, scoped to the reminder entry point,
+with the previous calendar setting retained only as fallback. Explicit empty
+configuration remains fail-closed. The single-origin resolver remains unchanged.
+The proposed setting is https://rev11.netlify.app, with no slash; existing calendar
+and scheduling secret values must remain unchanged. Ten focused reminder boundary
+and orchestrator tests pass, including origin override/fallback, exact-production
+preflight, unlisted/lookalike rejection, authentication/roles, explicit consent,
+and the disabled provider gate. No actual provider or production request issued.
+
+User handoff: pull Git changes, set only the reminder-specific origin through
+CLI secrets set, deploy only rev-meeting-reminder-deliver using --use-api, then
+repeat the OPTIONS check. Provider execution remains false and verify_jwt=true.
+This setting/deployment has not yet been reported as performed.
