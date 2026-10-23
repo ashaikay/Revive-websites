@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:node": "node scripts/run-node-tests.mjs",
-    "test:all": "npm test && npm run test:node"
+    "test:all": "npm test && npm run test:node",
+    "test:db:local": "node scripts/verify-local-database.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

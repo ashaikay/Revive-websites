@@ -42,6 +42,10 @@ async function fixture(targetWorkspaceId,actor,suffix,{accepted=true,startAt='20
   if(execution.status!==201)throw new Error(`Execution setup failed: ${JSON.stringify(execution.payload)}`);
  }
  const draft=await rpc(serviceKey,'save_rev_meeting_reminder_draft',{target_workspace_id:targetWorkspaceId,initiating_user_id:actor,target_request_id:randomUUID(),target_meeting_proposal_id:proposalId,target_body:`Please remember ${suffix}.`,expected_version:0});
+ if(!accepted){
+  check('UNBOOKED_REMINDER_DRAFT_DENIED',draft.status!==200&&draft.payload?.message==='Provider-accepted meeting required');
+  return{actionId,proposalId,draft};
+ }
  if(draft.status!==200)throw new Error(`Draft setup failed: ${JSON.stringify(draft.payload)}`);
  return{actionId,proposalId,draft};
 }
@@ -89,12 +93,15 @@ if(![200,201,204].includes(policy.status))throw new Error(`Execution policy setu
 check('DIRECT_BROWSER_CLAIM_RPC_DENIED',(await rpc(owner.token,'claim_rev_meeting_reminder_delivery',{target_workspace_id:workspaceId,initiating_user_id:owner.id,target_request_id:randomUUID(),target_meeting_proposal_id:eligible.proposalId,target_send_consent:true})).status!==200);
 
 const sendRequest=randomUUID();
-const [claimA,claimB]=await Promise.all([claim(eligible.proposalId,owner.id,sendRequest),claim(eligible.proposalId,admin.id,randomUUID())]);
+const adminSendRequest=randomUUID();
+const [claimA,claimB]=await Promise.all([claim(eligible.proposalId,owner.id,sendRequest),claim(eligible.proposalId,admin.id,adminSendRequest)]);
 const claims=[claimA,claimB],successfulClaims=claims.filter(value=>value.status===200);
 check('AT_MOST_ONE_CONCURRENT_CLAIM',successfulClaims.length===1&&claims.filter(value=>value.status!==200).length===1);
 const firstClaim=successfulClaims[0];
 check('SERVER_DERIVED_EMAIL',firstClaim.payload?.recipient==='customer@example.test'&&firstClaim.payload?.subject==='Reminder: Reminder eligible'&&firstClaim.payload?.body==='Please remember the corrected meeting details.'&&firstClaim.payload?.replayed===false);
-const replayClaim=await claim(eligible.proposalId,owner.id,sendRequest);
+const replayClaim=claimA.status===200
+ ?await claim(eligible.proposalId,owner.id,sendRequest)
+ :await claim(eligible.proposalId,admin.id,adminSendRequest);
 check('CLAIM_EXACT_REPLAY_NO_NEW_ATTEMPT',replayClaim.status===200&&replayClaim.payload?.replayed===true&&replayClaim.payload?.id===firstClaim.payload?.id);
 
 const record=(deliveryId,fingerprint,outcome,summary,failureCode)=>rpc(serviceKey,'record_rev_meeting_reminder_delivery_result',{target_delivery_id:deliveryId,expected_request_fingerprint:fingerprint,target_provider_outcome:outcome,target_result_summary:summary,target_failure_code:failureCode,target_provider_reference:null});
