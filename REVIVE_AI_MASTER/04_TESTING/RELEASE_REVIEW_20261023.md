@@ -84,3 +84,26 @@ the intended release process. Prior user confirmation that engagement works on
 Netlify is evidence for that earlier deployed version, not for this new branch.
 See `../05_HANDOVERS/RELEASE_PR_DRAFT_20261023.md` for the concrete PR target,
 release delta, and deployment order.
+
+## Hosted migration history supplied on 23 October 2026
+
+The user supplied the JSON result of the read-only query against
+`supabase_migrations.schema_migrations` for the intended hosted project.
+It contains 58 unique versions. All 58 versions and names match repository
+migration filenames; there are no hosted-only versions or name mismatches.
+The latest recorded version is `20261018220000`.
+
+Exactly the 15 release-delta migrations listed in
+`../05_HANDOVERS/RELEASE_PR_DRAFT_20261023.md` are absent from this history:
+meeting reminder delivery, scheduling job import, and the 13 vocational
+migrations from `20261019010000` through `20261021002000`.
+This establishes recorded history, not a comparison of live SQL definitions:
+manually executed SQL may exist without a migration-history entry. No migration
+was executed or history repaired during this comparison.
+
+Two missing versions (`20261009170000` and `20261010230000`) precede the latest
+recorded hosted version. A future CLI rollout must explicitly review these
+out-of-order migrations in its dry-run plan; a default latest-only migration
+push is insufficient. Do not mark them applied without establishing that their
+SQL is present. Hosted Edge Function inventory, exact-release CI, and the
+production rollout remain outstanding.
