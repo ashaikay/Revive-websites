@@ -115,3 +115,35 @@ build). The separate `revivewebsites` site uses `main@8758bb2` (reported
 19 October, 23:05, 22-second build). These are user-provided Netlify records,
 not independently fetched API results. The latter site remains outside this
 release target.
+
+## Backend inventory and dry-run handoff
+
+On 23 October the user supplied hosted migration-history results: 58 entries,
+all matching repository versions/names, with exactly the 15 migrations above
+absent from recorded history. They also searched Edge Functions and confirmed
+both new function names above are missing. This does not establish absence of
+manually applied SQL or compare definitions of existing functions.
+
+Cloud has neither `SUPABASE_ACCESS_TOKEN` nor `SUPABASE_DB_PASSWORD` and is not
+linked to the hosted project. No hosted dry run has run here. CLI 2.117.0 help
+was checked for `db push`: `--dry-run` prints the migration plan without applying
+migrations; `--include-all` includes missing versions older than recorded history;
+`--skip-vault` prevents the command's otherwise documented Vault update step.
+
+From Windows PowerShell, in `revive-app`, fetch and fast-forward the review branch,
+then authenticate locally and request only the plan:
+
+```powershell
+git fetch origin
+git switch review/rev-release-20261023
+git pull --ff-only
+npx --yes supabase@2.117.0 login
+npx --yes supabase@2.117.0 db push --project-ref ntbowgutwyyhhnmkadlv --dry-run --include-all --skip-vault
+```
+
+Stop if Git reports local conflicts or the CLI reports an error. Review the plan
+against all 15 filenames above before proposing an applying command. Login and
+any database-password prompt happen locally; do not paste credentials into chat.
+A successful plan checks migration selection/connectivity, not live SQL
+compatibility or evidence of no schema drift. No deployment or applying command
+is authorized by this dry-run handoff.
