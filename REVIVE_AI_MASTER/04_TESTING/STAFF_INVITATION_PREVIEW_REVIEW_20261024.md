@@ -103,3 +103,52 @@ file: all 70 tests passed, including the new scope regression. All 547 Node test
 passed separately. Explicit Supabase build and git diff --check passed. No
 application source changed after the broad run; the final correction was only
 the shared test helper. GitHub must verify the pushed head before release.
+
+## ES unassignment and engagement preview origin follow-up
+
+The user requested manager unassignment and avoiding accidental dual allocation.
+Added current ES assignments for the selected Service user under My team >
+Assign an Employment Specialist. Unassign requires confirmation, uses the existing
+participant_adviser operation with record ID, expected version and active=false,
+and preserves all records/history. Replacement creation/restoration is disabled
+in the form while a different active ES remains. Confirmation locks navigation,
+selectors and new writes; failed/uncertain saves retain the existing exact-request
+recovery flow. No implicit transfer, silent removal or automatic role promotion.
+The existing database still supports shared assignments: this form guard is not
+a database uniqueness guarantee against concurrent clients. Legacy shared rows
+are retained for explicit manager cleanup, not deleted by this release.
+
+The user supplied an engagement preflight failure from preview origin: deployed
+endpoint returned allow-origin localhost:5180. Its entry point now reads the same
+Programme Hub primary/additional origins as the save endpoint. Boundary matching
+supports exact comma-separated origins, responds without allow-origin on refusal,
+and leaves authentication, role checks, request binding and RPC writes unchanged.
+The existing configured additional preview secret can be reused; redeploy only
+rev-programme-employer-engagement-save, verify OPTIONS, then retry the same
+retained engagement request. Do not clear its stored attempt or create a new
+request as a workaround. No new hosted SQL or secrets required for this patch.
+
+User's reset email includes the text Reset Password but no visible raw URL. That
+alone does not prove the HTML anchor is missing: email previews/pasted text often
+omit href attributes and spam clients may block links. Asked whether the text
+has a right-click link action, without requesting the private reset link. Template
+inspection is pending if it is plain text; no hosted email template has changed.
+
+User confirmed reset-email text has no link action. Prepared a manual hosted
+recovery-template replacement at supabase/templates/recovery.html using an HTML
+anchor href={{ .ConfirmationURL }} plus the same generated URL as visible
+fallback text. HTML parser verification confirms the anchor and fallback, with
+no hardcoded localhost/SiteURL redirect or credential. Do not add this template
+via a wholesale hosted config push. It must be copied into Authentication >
+Email Templates > Reset Password > Body and saved there. Request a fresh link
+only afterward; previous messages will not be rewritten. Hosted template save
+and actual email-link behavior remain unverified.
+
+Final verification for this patch: complete npm run test:all passed 105 Vitest
+files / 858 tests and 548 Node tests (1,406 total). Supabase-mode production
+build passed. New unassignment test verifies no write before confirmation,
+cancellation without change, second-assignment form blocking, the exact active=false
+payload and expected version, retained historical row and participant, and
+replacement enablement after the confirmed refresh. Origin tests verify permitted
+exact hosts, refusal of lookalikes/other previews, no preflight authority calls,
+and authentication still required on POST. Diff whitespace check passed.

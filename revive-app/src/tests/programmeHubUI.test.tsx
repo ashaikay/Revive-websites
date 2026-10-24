@@ -1389,3 +1389,35 @@ it('keeps dashboard totals, rows and pages in the selected specialist, status an
   expect(overview.textContent).not.toMatch(/\u00c2|\u00e2|\ufffd/);
   expect(mocks.invoke).not.toHaveBeenCalled();
 });
+
+it('requires confirmed ES unassignment before offering a replacement and preserves the existing record', async () => {
+  setRows('owner', true);
+  mocks.rows.workspace_members.push({workspace_id:workspaceId,user_id:adviserId,role:'member',status:'active'});
+  mocks.rows.programme_hub_advisers=[ownerId,adviserId].map((user_id,index)=>({id:index?secondParticipantId:participantId,
+    workspace_id:workspaceId,programme_id:programmeId,user_id,active:true,version:1}));
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId}/>, 'My team');
+  fireEvent.click(screen.getByText('Assign an Employment Specialist',{selector:'summary'}));
+  fireEvent.change(screen.getByLabelText('Service user for caseload'),{target:{value:participantId}});
+  fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'),{target:{value:ownerId}});
+  expect(screen.getByRole('button',{name:'Assign ES'})).toBeDisabled();
+  const assignments=screen.getByLabelText('Current Service-user ES assignments');
+  fireEvent.click(within(assignments).getByRole('button',{name:'Unassign ES'}));
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Keep assignment'}));
+  expect(screen.queryByRole('group',{name:'Confirm ES unassignment'})).toBeNull();
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  fireEvent.click(within(assignments).getByRole('button',{name:'Unassign ES'}));
+  mocks.invoke.mockImplementation(async (_name:string,{body}:{body:Record<string,unknown>})=>{
+    expect(body).toMatchObject({operation:'participant_adviser',recordId:savedId,expectedVersion:1,
+      payload:{participantId,adviserUserId:adviserId,active:false}});
+    const record=mocks.rows.programme_hub_participant_advisers[0] as Record<string,unknown>;
+    record.active=false;record.version=2;
+    return {data:{operation:'participant_adviser',recordId:savedId,workspaceId,programmeId,version:2},error:null};
+  });
+  fireEvent.click(screen.getByRole('button',{name:'Confirm unassignment'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Assign ES'})).toBeEnabled());
+  expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  expect(mocks.rows.programme_hub_participants).toHaveLength(1);
+  expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
+  expect(screen.queryByRole('group',{name:'Confirm ES unassignment'})).toBeNull();
+});

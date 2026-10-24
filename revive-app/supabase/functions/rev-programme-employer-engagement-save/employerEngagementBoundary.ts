@@ -60,14 +60,16 @@ function validPayload(operation: EmployerEngagementOperation, payload: unknown):
 export async function handleEmployerEngagementSave(request: Request, dependencies: EmployerEngagementSaveDependencies): Promise<Response> {
   const configuredOrigin = dependencies.allowedOrigin ?? 'http://localhost:5180';
   const origin = request.headers.get('Origin');
+  if (!origin || !configuredOrigin.split(',').map(value => value.trim()).filter(Boolean).includes(origin)) {
+    return new Response(JSON.stringify({ error: 'Origin unavailable.' }), {status: 403, headers: {'Content-Type': 'application/json', 'Cache-Control': 'no-store', Vary: 'Origin'}});
+  }
   const headers = {
-    'Access-Control-Allow-Origin': origin === configuredOrigin ? origin : configuredOrigin,
+    'Access-Control-Allow-Origin': origin,
     Vary: 'Origin',
     'Cache-Control': 'no-store',
     'Content-Type': 'application/json',
   };
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers });
-  if (origin !== configuredOrigin) return reply(403, { error: 'Origin unavailable.' });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info' } });
   if (request.method !== 'POST') return reply(405, { error: 'Method not allowed.' });
   const authorization = request.headers.get('Authorization') ?? '';

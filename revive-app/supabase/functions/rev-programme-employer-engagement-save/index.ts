@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { programmeHubAllowedOrigins } from '../rev-programme-hub-save/programmeHubOrigins.ts';
 import { handleEmployerEngagementSave } from './employerEngagementBoundary.ts';
 
 const url = Deno.env.get('SUPABASE_URL')!;
@@ -11,7 +12,7 @@ const caller = (authorization: string) => createClient(url, anonKey, {
 const service = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
 Deno.serve((request) => handleEmployerEngagementSave(request, {
-  allowedOrigin: Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
+  allowedOrigin: programmeHubAllowedOrigins((name) => Deno.env.get(name)),
   getUserId: async (authorization) => {
     const { data, error } = await caller(authorization).auth.getUser();
     return error ? null : data.user?.id ?? null;

@@ -97,6 +97,8 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const [adviserUserId, setAdviserUserId] = useState('');
   const [assignmentParticipantId, setAssignmentParticipantId] = useState('');
   const [assignmentAdviserId, setAssignmentAdviserId] = useState('');
+  const [unassignId, setUnassignId] = useState<string | null>(null);
+  useEffect(() => { setUnassignId(null); }, [workspaceId, userId, selectedProgrammeId, assignmentParticipantId]);
   const [caseloadSearch, setCaseloadSearch] = useState('');
   const [caseloadPage, setCaseloadPage] = useState(1);
   const [specialistFilter, setSpecialistFilter] = useState('all');
@@ -251,7 +253,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     (pending.operation === 'participant_note' || pending.operation === 'participant_contact') ? String(pending.payload.participantId) : null;
   const selectedParticipantId = pendingParticipantId ?? (openRecordRequest?.programmeId === selectedProgrammeId ? openRecordRequest.participantId : null);
   const selectedParticipants = programmeParticipants.filter((participant) => participant.id === selectedParticipantId);
-  const recordNavigationLocked = busy || !!pending || !!participantEdit || contactEditing || employerLocked || teamLocked;
+  const recordNavigationLocked = busy || !!pending || !!participantEdit || contactEditing || employerLocked || teamLocked || !!unassignId;
   const pendingArea: ProgrammeArea | null = !pending ? null : pending.operation === 'programme' ? 'settings' : pending.operation === 'adviser' || pending.operation === 'participant_adviser' ? 'team' : pending.operation === 'vacancy' ? 'jobs' : pending.operation === 'employer' || pending.operation === 'contact' ? 'employers' : 'caseload';
   const currentArea: ProgrammeArea = teamLocked ? 'team' : employerLocked ? 'employers' : pendingArea ?? area ?? (isManager ? data.programmes.length ? 'team' : 'settings' : 'caseload');
   const changeArea = (next: ProgrammeArea) => {
@@ -269,6 +271,10 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     item.participantId === assignmentParticipantId &&
     item.adviserUserId === assignmentAdviserId,
   ) ?? null;
+
+  const assignmentParticipant = programmeParticipants.find((item) => item.id === assignmentParticipantId);
+  const currentAssignments = assignmentParticipant ? currentCaseload(assignmentParticipant, data) : [];
+  const replacingAssignedSpecialist = currentAssignments.some((item) => item.adviserUserId !== assignmentAdviserId);
 
   const openParticipantRecord = (participant: ProgrammeHubParticipant) => {
     if (recordNavigationLocked || !selectedProgramme || participant.workspaceId !== workspaceId || participant.programmeId !== selectedProgramme.id || !programmeParticipants.some((item) => item.id === participant.id)) return;
@@ -647,15 +653,15 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             {renderSaveFeedback('adviser')}
           {activeProgrammeAdvisers.length > 0 && <ul aria-label="Active programme Employment Specialists" className="mt-3 flex flex-wrap gap-2 text-sm">{activeProgrammeAdvisers.map((adviser) => <li key={adviser.id} className="rounded bg-neutral-100 px-3 py-2">{adviserLabel(adviser.userId, data, userId)}</li>)}</ul>}
           </details>
-          <details className="mt-4 rounded border p-4" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'participant_adviser' && (busy || pending)) event.currentTarget.open = true; }} open={feedbackTarget === 'participant_adviser' && (busy || !!pending || !!error || !!message)}><summary className="cursor-pointer font-medium">Assign an Employment Specialist</summary>
+          <details className="mt-4 rounded border p-4" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'participant_adviser' && (busy || pending || unassignId)) event.currentTarget.open = true; }} open={feedbackTarget === 'participant_adviser' && (busy || !!pending || !!error || !!message || !!unassignId)}><summary className="cursor-pointer font-medium">Assign an Employment Specialist</summary>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <select disabled={busy || !!pending} aria-label="Service user for caseload" className={inputClass} value={assignmentParticipantId} onChange={(event) => setAssignmentParticipantId(event.target.value)}>
+            <select disabled={busy || !!pending || !!unassignId} aria-label="Service user for caseload" className={inputClass} value={assignmentParticipantId} onChange={(event) => setAssignmentParticipantId(event.target.value)}>
               <option value="">Select Service user</option>{programmeParticipants.map((participant) => <option key={participant.id} value={participant.id}>{participant.preferredName} - {participant.caseReference}</option>)}
             </select>
-            <select disabled={busy || !!pending} aria-label="Employment Specialist for caseload" className={inputClass} value={assignmentAdviserId} onChange={(event) => setAssignmentAdviserId(event.target.value)}>
+            <select disabled={busy || !!pending || !!unassignId} aria-label="Employment Specialist for caseload" className={inputClass} value={assignmentAdviserId} onChange={(event) => setAssignmentAdviserId(event.target.value)}>
               <option value="">Select Employment Specialist</option>{activeProgrammeAdvisers.map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)}</option>)}
             </select>
-            <button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!assignmentParticipantId || !assignmentAdviserId || selectedCaseloadAssignment?.active || busy || !!pending} onClick={() => void saveAttempt(attempt(
+            <button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={!assignmentParticipantId || !assignmentAdviserId || selectedCaseloadAssignment?.active || replacingAssignedSpecialist || !!unassignId || busy || !!pending} onClick={() => { if (replacingAssignedSpecialist || unassignId) return; void saveAttempt(attempt(
               'participant_adviser',
               selectedProgramme.id,
               selectedCaseloadAssignment?.id ?? null,
@@ -666,8 +672,23 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
                 setAssignmentParticipantId('');
                 setAssignmentAdviserId('');
               }
-            })}>{busy && feedbackTarget === 'participant_adviser' ? 'Saving...' : selectedCaseloadAssignment?.active ? 'Already assigned' : selectedCaseloadAssignment ? 'Restore assignment' : 'Assign ES'}</button>{renderSaveFeedback('participant_adviser')}
+            }); }}>{busy && feedbackTarget === 'participant_adviser' ? 'Saving...' : selectedCaseloadAssignment?.active ? 'Already assigned' : selectedCaseloadAssignment ? 'Restore assignment' : 'Assign ES'}</button>{renderSaveFeedback('participant_adviser')}
           </div>
+          {assignmentAdviserId && replacingAssignedSpecialist && <p className="mt-3 text-sm">This Service user already has another ES. Unassign the current ES below before assigning a replacement.</p>}
+          {currentAssignments.length > 0 && <div className="mt-4" aria-label="Current Service-user ES assignments">
+            <h3 className="font-semibold">Current ES assignments</h3>
+            <ul className="mt-2 space-y-2">{currentAssignments.map((assignment) => <li key={assignment.id} className="rounded border p-3">
+              <p>{adviserLabel(assignment.adviserUserId, data, userId)}</p>
+              {unassignId !== assignment.id && <button type="button" className="btn-secondary mt-2" disabled={busy || !!pending || !!unassignId} onClick={() => setUnassignId(assignment.id)}>Unassign ES</button>}
+              {unassignId === assignment.id && <div role="group" aria-label="Confirm ES unassignment" className="mt-2 space-y-2">
+                <p>Unassign {adviserLabel(assignment.adviserUserId, data, userId)} from {assignmentParticipant?.preferredName}? Saved records and assignment history will remain. No replacement is assigned automatically.</p>
+                <button type="button" className="btn-primary" disabled={busy || !!pending} onClick={() => void saveAttempt(attempt('participant_adviser', selectedProgramme.id, assignment.id, assignment.version, {
+                  participantId: assignment.participantId, adviserUserId: assignment.adviserUserId, active: false,
+                }), 'ES unassigned. You can now assign a replacement.').then((confirmed) => { if (confirmed) setUnassignId(null); })}>Confirm unassignment</button>
+                <button type="button" className="btn-secondary ml-2" disabled={busy || !!pending} onClick={() => setUnassignId(null)}>Keep assignment</button>
+              </div>}
+            </li>)}</ul>
+          </div>}
           {activeProgrammeAdvisers.length === 0 && <p className="mt-2 text-sm text-neutral-600">Add an ES to this programme first.</p>}
 
           </details>
