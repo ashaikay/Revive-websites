@@ -65,3 +65,41 @@ is included. Keep PR #4 unmerged until preview and hosted settings are verified.
   and lookalike preview rejection, and legacy/empty configuration.
 - git diff --check passed. Hosted email delivery, redirect configuration and
   preview writes were not exercised by these local checks.
+
+## Caseload scope and Auth configuration follow-up
+
+User confirmed hosted Auth Site URL is http://localhost:3000 and the sole allowed
+redirect is https://rev11.netlify.app/**. The signup code requests the current
+preview origin; it is not allowlisted, so Auth can fall back to the localhost
+Site URL. Proposed dashboard changes: Site URL https://rev11.netlify.app and add
+https://deploy-preview-4--rev11.netlify.app/** while retaining the production
+redirect entry. These are hosted Auth dashboard changes, separate from Edge
+Function CORS. Do not delete or recreate existing staff accounts to test them.
+
+A further user report exposed a dashboard scope bug: CompactCaseload received all
+programme participants while its list/pagination used the selected ES/status/search
+filters. It now receives the full filtered caseload (before pagination), so KPI
+and unassigned totals match the chosen scope. Shared participants appear once in
+each ES's caseload as intended; equal counts can be correct where assignments
+overlap. New mounted regression changes all/owner/other ES/unassigned, active
+status and search with shared plus separate assignments and verifies totals,
+visible rows and page counts without writes. Existing export tests retain their
+full-match/across-page guarantees.
+
+Caseload UI separators, record labels, range labels and the shared footer now
+use plain ASCII punctuation. No participant names or persisted records are
+rewritten. Existing app source contained correct Unicode punctuation rather than
+the reported mojibake; simplifying the UI avoids those punctuation bytes in
+these labels without claiming a proven root cause for an older deployed bundle.
+The dashboard heading is Caseload summary instead of My Caseload for manager
+views. Job readiness, work outcomes and employment percentage remain unavailable
+in the current data contract: do not invent progress from assignment counts.
+
+Caseload validation: full Vitest run passed 104 unaffected files; twenty cases in
+the Programme Hub file initially failed because its shared open-record selector
+was incorrectly updated to the list-row colon separator rather than the article
+hyphen separator. Corrected that test helper and reran the entire Programme Hub
+file: all 70 tests passed, including the new scope regression. All 547 Node tests
+passed separately. Explicit Supabase build and git diff --check passed. No
+application source changed after the broad run; the final correction was only
+the shared test helper. GitHub must verify the pushed head before release.

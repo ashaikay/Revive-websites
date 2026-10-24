@@ -537,17 +537,17 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   };
   const summaryParticipants = filterCaseload(programmeParticipants, data, userId, { specialist: effectiveSpecialist, status: 'all', search: '' });
   const caseloadTools = selectedProgramme && (isManager || isAdviser) ? <div className="mt-4 space-y-3" aria-label="Employment Specialist overview">
-    <p className="font-medium">{isManager ? 'Active Service users' : 'My active caseload'}: {summaryParticipants.filter((participant) => participant.active).length}{isManager && specialistFilter === 'all' ? ` · Unassigned: ${programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).length === 0).length}` : ''}</p>
+    <p className="font-medium">{isManager ? 'Active Service users' : 'My active caseload'}: {summaryParticipants.filter((participant) => participant.active).length}{isManager && specialistFilter === 'all' ? ` - Unassigned: ${programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).length === 0).length}` : ''}</p>
     <div className="grid gap-3 sm:grid-cols-2">
       {isManager && <label className="text-sm font-medium">View ES caseload<select className={`${inputClass} mt-1`} value={specialistFilter} onChange={(event) => { setSpecialistFilter(event.target.value); setCaseloadPage(1); }}>
         <option value="all">All Employment Specialists</option><option value="unassigned">Unassigned Service users</option>
-        {activeProgrammeAdvisers.map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)} · {programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).some((assignment) => assignment.adviserUserId === adviser.userId)).length} active</option>)}
+        {activeProgrammeAdvisers.map((adviser) => <option key={adviser.id} value={adviser.userId}>{adviserLabel(adviser.userId, data, userId)} - {programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).some((assignment) => assignment.adviserUserId === adviser.userId)).length} active</option>)}
       </select></label>}
       <label className="text-sm font-medium">Record status<select className={`${inputClass} mt-1`} value={recordStatusFilter} onChange={(event) => { setRecordStatusFilter(event.target.value as 'all' | 'active' | 'inactive'); setCaseloadPage(1); }}><option value="all">All records</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
     </div>
     <button type="button" className="btn-secondary" disabled={busy || !!pending || exporting || !visibleCaseload.length} onClick={() => { setExportMessage(''); setExportPreview((value) => !value); }}>Export caseload</button>
     {exportPreview && <div className="rounded border border-neutral-200 p-3 text-sm" aria-label="Caseload export preview">
-      <p className="font-medium">{visibleCaseload.length} filtered {visibleCaseload.length === 1 ? 'Service user' : 'Service users'} · Excel (.xlsx) · All matching pages</p>
+      <p className="font-medium">{visibleCaseload.length} filtered {visibleCaseload.length === 1 ? 'Service user' : 'Service users'} - Excel (.xlsx) - All matching pages</p>
       <p className="mt-2">Includes: {caseloadColumns.join('; ')}.</p>
       <p className="mt-2">Excludes case notes, contact details, address evidence and restricted information. Active means an active record, not an employment outcome.</p>
       <button type="button" className="btn-primary mt-3" disabled={busy || !!pending || exporting} onClick={() => void exportCaseload()}>{exporting ? 'Checking access...' : 'Download Excel'}</button>
@@ -679,9 +679,9 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
 
       <div hidden={currentArea !== 'caseload'} className="space-y-6">
       {selectedProgramme && (isManager || isAdviser) && <section className="card p-5">
-        <h2 className="text-xl font-semibold">{!isManager ? 'My caseload' : specialistFilter === 'all' ? 'All Service users' : specialistFilter === 'unassigned' ? 'Unassigned Service users' : `${adviserLabel(specialistFilter, data, userId)} — caseload`}</h2>
+        <h2 className="text-xl font-semibold">{!isManager ? 'My caseload' : specialistFilter === 'all' ? 'All Service users' : specialistFilter === 'unassigned' ? 'Unassigned Service users' : `${adviserLabel(specialistFilter, data, userId)} - caseload`}</h2>
           {caseloadTools}
-          <CompactCaseload workspaceId={workspaceId} programmeId={selectedProgramme.id} participants={programmeParticipants} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} />
+          <CompactCaseload workspaceId={workspaceId} programmeId={selectedProgramme.id} participants={visibleCaseload} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} />
       </section>}
       {selectedProgramme && (isManager || isAdviser) && selectedParticipants.map((participant) => <section key={participant.id} className="card p-5" aria-label="Selected Service-user record">
         <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">Service-user record</h2><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => setOpenRecordRequest(null)}>Close record</button></div>
@@ -817,24 +817,24 @@ function CompactCaseload({ workspaceId, programmeId, participants, visible, tota
   const [showHelp, setShowHelp] = useState(false);
   return <section className="mt-5 border-t border-neutral-200 pt-5" aria-label="Caseload overview">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="text-xl font-semibold">My Caseload</h3><p className="mt-1 text-base text-neutral-600">Employment progress dashboard</p></div>
+      <div><h3 className="text-xl font-semibold">Caseload summary</h3><p className="mt-1 text-base text-neutral-600">Employment progress dashboard</p></div>
       <button type="button" className="btn-secondary" aria-expanded={showHelp} onClick={() => setShowHelp((value) => !value)}>Help</button>
     </div>
     {showHelp && <p className="mt-3 rounded-lg bg-neutral-50 p-3 text-base text-neutral-700">Employment journey progress will be calculated from verified milestones. Until job-start and readiness evidence is connected, REV will not guess percentages or mark anyone as in work. Vocational assessment progress remains visible separately.</p>}
-    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3" role="group" aria-label="Caseload totals">
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-3xl font-bold">{participants.length}</p><p className="mt-1 text-base">Service users</p></div>
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-xl font-semibold text-neutral-600">Not tracked</p><p className="mt-1 text-base">Job ready</p></div>
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-xl font-semibold text-neutral-600">Not tracked</p><p className="mt-1 text-base">In work</p></div>
     </div>
-    <div className="mt-5 flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-semibold">Caseload progress</h4><span className="text-sm text-neutral-600">Search · Filter · Export</span></div>
-    <p className="mt-1 text-base text-neutral-600">{participants.length} {participants.length === 1 ? 'Service user' : 'Service users'}{unassigned ? ` · ${unassigned} unassigned` : participants.length ? ' · All assigned' : ''}</p>
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-semibold">Caseload progress</h4><span className="text-sm text-neutral-600">Search - Filter - Export</span></div>
+    <p className="mt-1 text-base text-neutral-600">{participants.length} {participants.length === 1 ? 'Service user' : 'Service users'}{unassigned ? ` - ${unassigned} unassigned` : participants.length ? ' - All assigned' : ''}</p>
     <label className="mt-4 block text-base font-medium">Search caseload<input className={`${inputClass} mt-2`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Name, case reference or ES" /></label>
-    {visible.length === 0 ? <p className="mt-4 text-base text-neutral-600">{participants.length ? 'No Service users match this search.' : 'No Service users available in this programme.'}</p>
+    {visible.length === 0 ? <p className="mt-4 text-base text-neutral-600">{search.trim() ? 'No Service users match this search.' : 'No Service users match the selected caseload filters.'}</p>
       : <ul className="mt-4 space-y-3">{visible.map((participant) => {
         const assignments = currentCaseload(participant, data);
         return <li key={participant.id} className="rounded-xl border border-neutral-200 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><p className="text-lg font-semibold">{participant.preferredName} {String.fromCharCode(183)} {participant.caseReference}{!participant.active ? String.fromCharCode(32,183,32) + "Inactive record" : ""}</p></div>
+            <div><p className="text-lg font-semibold">{participant.preferredName}: {participant.caseReference}{!participant.active ? " - Inactive record" : ""}</p></div>
             <button type="button" className="btn-secondary" aria-label="Open Service-user record" aria-pressed={selectedId === participant.id} disabled={locked} onClick={() => openRecord(participant)}>{selectedId === participant.id ? 'Viewing' : 'Open record'}</button>
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-base font-medium">Employment journey</p><span className="text-base text-neutral-600">Not yet tracked</span></div>
@@ -845,7 +845,7 @@ function CompactCaseload({ workspaceId, programmeId, participants, visible, tota
         </li>;
       })}</ul>}
     {totalMatches > 0 && <nav className="mt-4 flex flex-wrap items-center gap-3 text-base" aria-label="Caseload pages">
-      <span>{(page - 1) * 10 + 1}–{Math.min(page * 10, totalMatches)} of {totalMatches}</span>
+      <span>{(page - 1) * 10 + 1}-{Math.min(page * 10, totalMatches)} of {totalMatches}</span>
       <button type="button" className="btn-secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
       <span>Page {page} of {pages}</span>
       <button type="button" className="btn-secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
@@ -964,7 +964,7 @@ function ParticipantRecord({
     recordRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   }, [openRequest]);
   const notesDisclosureOpen = notesOpen || !!noteDraft.trim() || keepNotesOpen;
-  return <article ref={recordRef} tabIndex={-1} aria-label={`${participant.preferredName} — ${programme.name} record`} className="rounded border border-neutral-200 p-4 focus:outline-none focus:ring-2 focus:ring-primary-500">
+  return <article ref={recordRef} tabIndex={-1} aria-label={`${participant.preferredName} - ${programme.name} record`} className="rounded border border-neutral-200 p-4 focus:outline-none focus:ring-2 focus:ring-primary-500">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h3 className="font-semibold">{participant.preferredName}</h3>
@@ -986,14 +986,14 @@ function ParticipantRecord({
     </details>
     {contactDetails(openRequest)}
     <details className="mt-4 border-t border-neutral-200 pt-4" open={notesDisclosureOpen} onToggle={(event) => { if (!event.currentTarget.open && (noteDraft.trim() || keepNotesOpen)) event.currentTarget.open = true; setNotesOpen(event.currentTarget.open); }}>
-      <summary className="cursor-pointer font-medium">Case notes ({notesError ? 'could not load' : !notesReady ? 'loading' : notes.length}){!notesError && notesReady && notes[0] ? ` · Latest: ${formatProgrammeDate(notes[0].createdAt, programme.timezone)}` : ''}</summary>
+      <summary className="cursor-pointer font-medium">Case notes ({notesError ? 'could not load' : !notesReady ? 'loading' : notes.length}){!notesError && notesReady && notes[0] ? ` - Latest: ${formatProgrammeDate(notes[0].createdAt, programme.timezone)}` : ''}</summary>
       <p className="mt-1 text-xs text-neutral-600">Record employment-support facts, agreed actions and relevant progress. Avoid diagnoses and unnecessary sensitive details.</p>
       {notesError && <p className="mt-2 text-sm text-amber-800">{notesError}</p>}
       {!notesError && !notesReady && <p className="mt-2 text-sm text-neutral-600">Loading notes...</p>}
       {!notesError && notesReady && notes.length === 0 && <p className="mt-2 text-sm text-neutral-600">No notes have been added to this participant's {programme.name} record.</p>}
       {!notesError && notes.length > 0 && <ol className="mt-3 space-y-2">{notes.map((note) => <li key={note.id} className="rounded bg-neutral-50 p-3 text-sm">
         <p className="whitespace-pre-wrap text-neutral-800">{note.body}</p>
-        <p className="mt-1 text-xs text-neutral-500">{formatProgrammeDate(note.createdAt, programme.timezone)} · {adviserLabel(note.authorUserId, data, userId)}</p>
+        <p className="mt-1 text-xs text-neutral-500">{formatProgrammeDate(note.createdAt, programme.timezone)} - {adviserLabel(note.authorUserId, data, userId)}</p>
       </li>)}</ol>}
       <label className="mt-3 block text-sm font-medium text-neutral-700">Add a note
         <textarea className={`${inputClass} mt-1 min-h-24`} maxLength={2000} value={noteDraft} onChange={(event) => setNote(event.target.value)} disabled={!!notesError || busy} />
