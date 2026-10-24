@@ -794,7 +794,12 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
         )}
       </div>
 
-      {!isManager && !isAdviser && ready && <div className="card p-6 text-neutral-700">You do not have an active Programme Hub adviser assignment.</div>}
+      {!isManager && !isAdviser && ready && <div className="card space-y-3 p-6 text-neutral-700" role="status">
+        <h2 className="font-semibold">Programme access needs to be assigned</h2>
+        <p>You are signed in, but you do not have an active Programme Hub adviser assignment for this programme.</p>
+        <p>Ask your organisation manager to open Employment Specialists, add your existing staff account to the intended programme, and assign your Service users. Accepting a team invitation does not complete these steps.</p>
+        <p>Other sections appear only when your organisation manager grants access. Check the current workspace shown above if you expected a different organisation.</p>
+      </div>}
     </main>
   );
 }

@@ -44,11 +44,16 @@ export function WorkspaceInvitationPanel({ invitationId, onAccepted }: { invitat
       <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void run(async () => {
         if (!supabaseClient) throw new Error('REV sign-in is unavailable.');
         if (mode === 'create') {
-          const { error } = await supabaseClient.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: invitationLink(invitationId, window.location) } });
+          const { data, error } = await supabaseClient.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: invitationLink(invitationId, window.location) } });
           if (!alive.current) return;
           setPassword('');
-          if (error) throw new Error('Account could not be created. Check the details or sign in if you already have an account.');
-          setMessage('Check your email and confirm your account, then return to this invitation. If you already have an account, sign in.');
+          if (error) throw new Error('Account could not be created. If you already registered with this email, choose Sign in or use Forgot or need a password? below.');
+          if (data?.session && data.user) {
+            setAccount({ id: data.user.id, email: data.user.email ?? '' });
+            setMessage('You are signed in. Accept the invitation below to join your team.');
+          } else {
+            setMessage('The account request was received, but a confirmation email is not guaranteed. If you already registered with this email, choose Sign in or use Forgot or need a password? below. For a new account, check your inbox and spam for a confirmation link, then return to this invitation.');
+          }
         } else {
           const { data, error } = await supabaseClient.auth.signInWithPassword({ email: email.trim(), password });
           if (!alive.current) return;

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { programmeHubAllowedOrigins } from './programmeHubOrigins.ts';
 import {
   classifyProgrammeHubDatabaseError,
   handleProgrammeHubSave,
@@ -12,7 +13,7 @@ const caller = (authorization: string) => createClient(url, anonKey, {
 });
 
 Deno.serve((request) => handleProgrammeHubSave(request, {
-  allowedOrigin: Deno.env.get('REV_PROGRAMME_HUB_ALLOWED_ORIGINS') ?? Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
+  allowedOrigin: programmeHubAllowedOrigins((name) => Deno.env.get(name)),
   getUserId: async (authorization) => {
     const { data, error } = await caller(authorization).auth.getUser();
     return error ? null : data.user?.id ?? null;

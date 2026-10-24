@@ -1334,3 +1334,14 @@ describe('Outcomes / Programme Hub employer foundation', () => {
   });
 
 });
+
+it('explains unassigned staff access without granting management controls', async () => {
+  setRows('member');
+  mocks.rows.programme_hub_advisers = [];
+  render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+  expect(await screen.findByRole('heading', {name: 'Programme access needs to be assigned'})).toBeVisible();
+  expect(screen.getByText(/Accepting a team invitation does not complete these steps/)).toBeVisible();
+  expect(screen.getByText(/Other sections appear only when your organisation manager grants access/)).toBeVisible();
+  expect(screen.queryByRole('button', {name:'Add Employment Specialist'})).toBeNull();
+  expect(mocks.invoke).not.toHaveBeenCalled();
+});
