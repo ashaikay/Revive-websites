@@ -1,0 +1,24 @@
+name: REV scheduling reporting verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scheduling-reporting:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm test -- src/tests/schedulingReporting.test.ts src/tests/schedulingReportingUI.test.tsx src/tests/schedulingMonthPlannerUI.test.tsx
+      - run: npm run build

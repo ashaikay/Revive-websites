@@ -171,9 +171,9 @@ async function renderHub(element: React.ReactElement, area = 'Caseload') {
 async function openServiceUser(name = 'Alex') {
   await navigateHub('Caseload');
   const overview = await screen.findByLabelText('Caseload overview');
-  const row = within(overview).getByText(new RegExp(`^${name} ·`)).closest('li')!;
+  const row = within(overview).getByText(new RegExp(`^${name}:`)).closest('li')!;
   fireEvent.click(within(row).getByRole('button', { name: 'Open Service-user record' }));
-  return await screen.findByRole('article', { name: new RegExp(`^${name} —`) });
+  return await screen.findByRole('article', { name: new RegExp(`^${name} -`) });
 }
 
 describe('Outcomes / Programme Hub employer foundation', () => {
@@ -418,15 +418,15 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     mocks.rows.programme_hub_programmes = [programmeRow, secondProgrammeRow];
     mocks.rows.programme_hub_participants = [participantRow, secondParticipantRow];
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
-    expect(await screen.findByText('Alex · CASE-001')).toBeVisible();
-    expect(screen.queryByText('Sam · CASE-002')).toBeNull();
+    expect(await screen.findByText('Alex: CASE-001')).toBeVisible();
+    expect(screen.queryByText('Sam: CASE-002')).toBeNull();
     fireEvent.click(screen.getByText('New Service user'));
     fireEvent.change(screen.getByLabelText('Service user ID'), { target: { value: 'DRAFT-OLD' } });
     fireEvent.change(screen.getByLabelText('Choose a programme'), { target: { value: secondProgrammeId } });
     await navigateHub('Caseload');
     expect(await screen.findByText(/You are viewing/)).toHaveTextContent('Youth Employment');
-    expect(screen.getByText('Sam · CASE-002')).toBeVisible();
-    expect(screen.queryByText('Alex · CASE-001')).toBeNull();
+    expect(screen.getByText('Sam: CASE-002')).toBeVisible();
+    expect(screen.queryByText('Alex: CASE-001')).toBeNull();
     expect(screen.getByLabelText('Service user ID')).toHaveValue('');
   });
 
@@ -444,8 +444,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
 
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     expect(await screen.findByLabelText('Choose a programme')).toHaveValue(secondProgrammeId);
-    expect(screen.getByText('Sam · CASE-002')).toBeVisible();
-    expect(screen.queryByText('Alex · CASE-001')).toBeNull();
+    expect(screen.getByText('Sam: CASE-002')).toBeVisible();
+    expect(screen.queryByText('Alex: CASE-001')).toBeNull();
   });
 
   it('does not reuse a programme preference after the signed-in user changes', async () => {
@@ -457,8 +457,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     mocks.rows.workspace_members = [{ workspace_id: workspaceId, user_id: secondUserId, role: 'owner', status: 'active' }];
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={secondUserId} />, 'Caseload');
     expect(await screen.findByLabelText('Choose a programme')).toHaveValue(programmeId);
-    expect(screen.getByText('Alex · CASE-001')).toBeVisible();
-    expect(screen.queryByText('Sam · CASE-002')).toBeNull();
+    expect(screen.getByText('Alex: CASE-001')).toBeVisible();
+    expect(screen.queryByText('Sam: CASE-002')).toBeNull();
     expect(window.localStorage.getItem(`rev-programme-hub-selection:${workspaceId}:${secondUserId}`)).toBe(programmeId);
   });
 
@@ -481,8 +481,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     window.localStorage.setItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`, secondProgrammeId);
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     expect(await screen.findByLabelText('Choose a programme')).toHaveValue(programmeId);
-    expect(screen.getByText('Alex · CASE-001')).toBeVisible();
-    expect(screen.queryByText('Sam · CASE-002')).toBeNull();
+    expect(screen.getByText('Alex: CASE-001')).toBeVisible();
+    expect(screen.queryByText('Sam: CASE-002')).toBeNull();
     expect(window.localStorage.getItem(`rev-programme-hub-selection:${workspaceId}:${ownerId}`)).toBe(programmeId);
   });
 
@@ -568,11 +568,11 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     const alex = await openServiceUser();
     fireEvent.change(within(alex).getByLabelText('Add a note'), { target: { value: 'Keep my draft' } });
     await openServiceUser('Sam');
-    expect(screen.queryByRole('article', { name: /^Alex —/ })).toBeNull();
+    expect(screen.queryByRole('article', { name: /^Alex -/ })).toBeNull();
     expect(screen.getAllByRole('article', { name: / record$/ })).toHaveLength(1);
     const restored = await openServiceUser();
     expect(within(restored).getByLabelText('Add a note')).toHaveValue('Keep my draft');
-    expect(screen.queryByRole('article', { name: /^Sam —/ })).toBeNull();
+    expect(screen.queryByRole('article', { name: /^Sam -/ })).toBeNull();
   });
 
   it('shows contact validation beside its save action rather than at the top of the page', async () => {
@@ -667,8 +667,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     const overview = await screen.findByLabelText('Caseload overview');
     fireEvent.change(within(overview).getByLabelText('Search caseload'), { target: { value: 'CASE-002' } });
-    expect(within(overview).getByText('Sam · CASE-002')).toBeVisible();
-    expect(within(overview).queryByText('Alex · CASE-001')).toBeNull();
+    expect(within(overview).getByText('Sam: CASE-002')).toBeVisible();
+    expect(within(overview).queryByText('Alex: CASE-001')).toBeNull();
     fireEvent.change(within(overview).getByLabelText('Search caseload'), { target: { value: 'no such person' } });
     expect(within(overview).getByText('No Service users match this search.')).toBeVisible();
     expect(mocks.invoke).not.toHaveBeenCalled();
@@ -708,8 +708,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     fireEvent.change(screen.getByLabelText('Choose a programme'), { target: { value: secondProgrammeId } });
     await navigateHub('Caseload');
     expect(within(overview).getByLabelText('Search caseload')).toHaveValue('');
-    expect(within(overview).getByText('Sam · CASE-002')).toBeVisible();
-    expect(within(overview).queryByText('Alex · CASE-001')).toBeNull();
+    expect(within(overview).getByText('Sam: CASE-002')).toBeVisible();
+    expect(within(overview).queryByText('Alex: CASE-001')).toBeNull();
   });
 
   it('shows an assigned ES the connection on the Service-user record without manager controls', async () => {
@@ -744,7 +744,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.queryByText(/no duplicate assignment will be submitted/)).toBeNull();
     await navigateHub('Caseload');
     const overview = screen.getByLabelText('Caseload overview');
-    expect(within(overview).getByText('1 Service user · All assigned')).toBeVisible();
+    expect(within(overview).getByText('1 Service user - All assigned')).toBeVisible();
     expect(within(overview).queryByText('View dates')).toBeNull();
     const record = await openServiceUser();
     const dates = within(record).getByText('View dates').closest('details')!;
@@ -765,7 +765,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     const overview = await screen.findByLabelText('Caseload overview');
     fireEvent.click(within(overview).getByRole('button', { name: 'Open Service-user record' }));
-    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    const card = screen.getByRole('article', { name: 'Alex - Employment Support record' });
     await waitFor(() => expect(card).toHaveFocus());
     expect(within(card).getByText('Programme: Employment Support')).toBeVisible();
     expect(within(card).getByText('customer_service')).toBeVisible();
@@ -795,12 +795,12 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     mocks.rows.programme_hub_participants = [participantRow, secondParticipantRow];
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
-    expect(screen.getByRole('article', { name: 'Alex — Employment Support record' })).toHaveFocus();
+    expect(screen.getByRole('article', { name: 'Alex - Employment Support record' })).toHaveFocus();
     fireEvent.change(screen.getByLabelText('Choose a programme'), { target: { value: secondProgrammeId } });
     await navigateHub('Caseload');
-    expect(screen.queryByRole('article', { name: 'Alex — Employment Support record' })).toBeNull();
-    expect(screen.queryByRole('article', { name: 'Sam — Youth Employment record' })).toBeNull();
-    expect(screen.getByText('Sam · CASE-002')).toBeVisible();
+    expect(screen.queryByRole('article', { name: 'Alex - Employment Support record' })).toBeNull();
+    expect(screen.queryByRole('article', { name: 'Sam - Youth Employment record' })).toBeNull();
+    expect(screen.getByText('Sam: CASE-002')).toBeVisible();
   });
 
   it('saves optional contact details through the trusted boundary and reads them after remount', async () => {
@@ -812,7 +812,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     });
     const first = await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
-    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    const card = screen.getByRole('article', { name: 'Alex - Employment Support record' });
     fireEvent.click(await within(card).findByRole('button', { name: 'Add contact details' }));
     fireEvent.change(within(card).getByLabelText('Phone number'), { target: { value: '0121 555 0100' } });
     fireEvent.change(within(card).getByLabelText('Email address'), { target: { value: 'alex@example.test' } });
@@ -833,7 +833,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     setRows('owner', true); mocks.contactReadFails = true;
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
-    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    const card = screen.getByRole('article', { name: 'Alex - Employment Support record' });
     expect(await within(card).findByRole('alert')).toHaveTextContent('Contact details are unavailable');
     expect(within(card).queryByText('No contact details added.')).toBeNull();
     expect(within(card).getByText('customer_service')).toBeVisible();
@@ -845,7 +845,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('network unavailable') });
     const first = await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
-    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    const card = screen.getByRole('article', { name: 'Alex - Employment Support record' });
     fireEvent.click(await within(card).findByRole('button', { name: 'Add contact details' }));
     fireEvent.change(within(card).getByLabelText('Phone number'), { target: { value: '0121 555 0200' } });
     fireEvent.click(within(card).getByRole('button', { name: 'Save contact details' }));
@@ -853,7 +853,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     const original = mocks.invoke.mock.calls[0][1].body;
     first.unmount();
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
-    const restoredCard = await screen.findByRole('article', { name: 'Alex — Employment Support record' });
+    const restoredCard = await screen.findByRole('article', { name: 'Alex - Employment Support record' });
     expect(await within(restoredCard).findByLabelText('Phone number')).toHaveValue('0121 555 0200');
     expect(within(restoredCard).getByLabelText('Phone number')).toHaveValue('0121 555 0200');
     mocks.invoke.mockResolvedValueOnce({ data: { operation: 'participant_contact', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
@@ -866,7 +866,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     setRows('owner', true);
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     fireEvent.click(within(await screen.findByLabelText('Caseload overview')).getByRole('button', { name: 'Open Service-user record' }));
-    const card = screen.getByRole('article', { name: 'Alex — Employment Support record' });
+    const card = screen.getByRole('article', { name: 'Alex - Employment Support record' });
     fireEvent.click(await within(card).findByRole('button', { name: 'Add contact details' }));
     fireEvent.change(within(card).getByLabelText('UK postcode'), { target: { value: 'unknown' } });
     fireEvent.click(within(card).getByRole('button', { name: 'Save contact details' }));
@@ -911,22 +911,22 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     const overview = await screen.findByLabelText('Caseload overview');
     expect(within(overview).getAllByRole('listitem')).toHaveLength(10);
-    expect(within(overview).getByText('1–10 of 25')).toBeVisible();
+    expect(within(overview).getByText('1-10 of 25')).toBeVisible();
     expect(screen.queryByLabelText('Selected Service-user record')).toBeNull();
     expect(mocks.selections.programme_hub_participant_contacts).toBeUndefined();
     fireEvent.click(within(overview).getByRole('button', { name: 'Next' }));
-    expect(within(overview).getByText('11–20 of 25')).toBeVisible();
+    expect(within(overview).getByText('11-20 of 25')).toBeVisible();
     const record = await openServiceUser('Person 11');
     fireEvent.click(within(overview).getByRole('button', { name: 'Next' }));
     expect(within(overview).getAllByRole('listitem')).toHaveLength(5);
     expect(within(overview).getByRole('button', { name: 'Next' })).toBeDisabled();
     expect(record).toBeVisible();
     fireEvent.change(within(overview).getByLabelText('Search caseload'), { target: { value: 'Person 25' } });
-    expect(within(overview).getByText('1–1 of 1')).toBeVisible();
+    expect(within(overview).getByText('1-1 of 1')).toBeVisible();
     expect(within(overview).getAllByRole('listitem')).toHaveLength(1);
     expect(record).toBeVisible();
     fireEvent.change(within(overview).getByLabelText('Search caseload'), { target: { value: '' } });
-    expect(within(overview).getByText('1–10 of 25')).toBeVisible();
+    expect(within(overview).getByText('1-10 of 25')).toBeVisible();
     fireEvent.click(within(overview).getByRole('button', { name: 'Next' }));
     fireEvent.click(within(overview).getByRole('button', { name: 'Previous' }));
     expect(within(overview).getByText('Page 1 of 3')).toBeVisible();
@@ -948,11 +948,11 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     for (const button of within(overview).getAllByRole('button', { name: 'Open Service-user record' })) expect(button).toBeDisabled();
     fireEvent.click(within(overview).getAllByRole('button', { name: 'Open Service-user record' })[1]);
     expect(within(card).getByLabelText('Phone number')).toHaveValue('0121 555 0100');
-    expect(screen.queryByRole('article', { name: /^Sam —/ })).toBeNull();
+    expect(screen.queryByRole('article', { name: /^Sam -/ })).toBeNull();
     fireEvent.click(within(card).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Close record' })).toBeEnabled());
     await openServiceUser('Sam');
-    expect(screen.queryByRole('article', { name: /^Alex —/ })).toBeNull();
+    expect(screen.queryByRole('article', { name: /^Alex -/ })).toBeNull();
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
@@ -969,7 +969,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.getByLabelText('Jobs of interest')).toHaveValue('retail, hospitality');
     fireEvent.click(within(screen.getByLabelText('Selected Service-user record')).getByRole('button', { name: 'Cancel' }));
     await openServiceUser('Sam');
-    expect(screen.queryByRole('article', { name: /^Alex —/ })).toBeNull();
+    expect(screen.queryByRole('article', { name: /^Alex -/ })).toBeNull();
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
@@ -1021,17 +1021,17 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     setupEsOverview();
     await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />, 'Caseload');
     const tools = await screen.findByLabelText('Employment Specialist overview');
-    expect(within(tools).getByText('Active Service users: 2 · Unassigned: 1')).toBeVisible();
+    expect(within(tools).getByText('Active Service users: 2 - Unassigned: 1')).toBeVisible();
     const filter = within(tools).getByLabelText('View ES caseload');
-    expect(within(filter).getByText('Employment Specialist ending 333333 · 1 active')).toBeInTheDocument();
-    expect(within(filter).getByText('You · 0 active')).toBeInTheDocument();
+    expect(within(filter).getByText('Employment Specialist ending 333333 - 1 active')).toBeInTheDocument();
+    expect(within(filter).getByText('You - 0 active')).toBeInTheDocument();
     fireEvent.change(filter, { target: { value: adviserId } });
     const overview = screen.getByLabelText('Caseload overview');
-    expect(within(overview).getByText('Alex · CASE-001')).toBeVisible();
-    expect(within(overview).queryByText('Sam · CASE-002')).toBeNull();
+    expect(within(overview).getByText('Alex: CASE-001')).toBeVisible();
+    expect(within(overview).queryByText('Sam: CASE-002')).toBeNull();
     fireEvent.change(filter, { target: { value: 'unassigned' } });
     fireEvent.change(within(tools).getByLabelText('Record status'), { target: { value: 'active' } });
-    expect(within(overview).getByText('Sam · CASE-002')).toBeVisible();
+    expect(within(overview).getByText('Sam: CASE-002')).toBeVisible();
     expect(within(overview).queryByText(/Inactive person/)).toBeNull();
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
@@ -1076,7 +1076,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     mocks.rows.programme_hub_participants[0] = { ...participantRow, preferred_name: 'Alex Updated' };
     fireEvent.click(screen.getByRole('button', { name: 'Download Excel' }));
     expect(await screen.findByText('Caseload changed. Review the updated list, then export again.')).toBeVisible();
-    expect(screen.getByText('Alex Updated · CASE-001')).toBeVisible();
+    expect(screen.getByText('Alex Updated: CASE-001')).toBeVisible();
     expect(mocks.download).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Export caseload' }));
     fireEvent.click(screen.getByRole('button', { name: 'Download Excel' }));
@@ -1150,14 +1150,14 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     const es = within(list).getByText('Employment Specialist ending 333333').closest('li')!;
     expect(within(es).getByText('1 active Service user')).toBeVisible();
     fireEvent.click(within(es).getByRole('button', { name: 'Open caseload' }));
-    expect(screen.getByRole('heading', { name: 'Employment Specialist ending 333333 — caseload' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Employment Specialist ending 333333 - caseload' })).toBeVisible();
     expect(screen.getByText('Active Service users: 1')).toBeVisible();
-    expect(screen.getByText('Alex · CASE-001')).toBeVisible();
-    expect(within(screen.getByLabelText('Caseload overview')).queryByText('Sam · CASE-002')).toBeNull();
+    expect(screen.getByText('Alex: CASE-001')).toBeVisible();
+    expect(within(screen.getByLabelText('Caseload overview')).queryByText('Sam: CASE-002')).toBeNull();
     expect(screen.queryByRole('button', { name: 'SAVE ENGAGEMENT PLAN' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Job opportunities' })).toBeNull();
     await openServiceUser();
-    expect(screen.getByRole('article', { name: 'Alex — Employment Support record' })).toBeVisible();
+    expect(screen.getByRole('article', { name: 'Alex - Employment Support record' })).toBeVisible();
   });
 
   it('keeps unsaved employer, job and note drafts when navigating between related areas', async () => {
@@ -1172,11 +1172,11 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     fireEvent.change(within(card).getByLabelText('Add a note'), { target: { value: 'Keep note draft' } });
     await navigateHub('Employers');
     expect(screen.getByLabelText('Employer name')).toHaveValue('Keep employer draft');
-    expect(screen.queryByRole('article', { name: /^Alex —/ })).toBeNull();
+    expect(screen.queryByRole('article', { name: /^Alex -/ })).toBeNull();
     await navigateHub('Job opportunities');
     expect(screen.getByLabelText('Vacancy title')).toHaveValue('Keep opportunity draft');
     await navigateHub('Caseload');
-    expect(screen.getByRole('article', { name: /^Alex —/ })).toBeVisible();
+    expect(screen.getByRole('article', { name: /^Alex -/ })).toBeVisible();
     expect(within(card).getByLabelText('Add a note')).toHaveValue('Keep note draft');
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
@@ -1281,7 +1281,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(within(list).getByText('Michael Blackwood (you)')).toBeVisible();
     const jane = within(list).getByText('Jane Specialist').closest('li')!;
     fireEvent.click(within(jane).getByRole('button', { name: 'Open caseload' }));
-    expect(screen.getByRole('heading', { name: 'Jane Specialist — caseload' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Jane Specialist - caseload' })).toBeVisible();
     expect(within(screen.getByLabelText('Caseload overview')).getByText('Assigned to Jane Specialist')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Export caseload' }));
     fireEvent.click(screen.getByRole('button', { name: 'Download Excel' }));
@@ -1333,4 +1333,91 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(sessionStorage.getItem(`rev-scheduling-permission:${workspaceId}:${ownerId}`)).toBeNull();
   });
 
+});
+
+it('explains unassigned staff access without granting management controls', async () => {
+  setRows('member');
+  mocks.rows.programme_hub_advisers = [];
+  render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+  expect(await screen.findByRole('heading', {name: 'Programme access needs to be assigned'})).toBeVisible();
+  expect(screen.getByText(/Accepting a team invitation does not complete these steps/)).toBeVisible();
+  expect(screen.getByText(/Other sections appear only when your organisation manager grants access/)).toBeVisible();
+  expect(screen.queryByRole('button', {name:'Add Employment Specialist'})).toBeNull();
+  expect(mocks.invoke).not.toHaveBeenCalled();
+});
+
+
+it('keeps dashboard totals, rows and pages in the selected specialist, status and search scope', async () => {
+  setRows('owner', true);
+  mocks.rows.workspace_members.push({workspace_id:workspaceId,user_id:adviserId,role:'member',status:'active'});
+  mocks.rows.programme_hub_advisers = [ownerId,adviserId].map((user_id,index)=>({
+    id:index ? secondParticipantId : savedId,workspace_id:workspaceId,programme_id:programmeId,user_id,active:true,version:1,
+  }));
+  const ids = [participantId,secondParticipantId,'77777777-7777-4777-8777-777777777777',
+    '88888888-8888-4888-8888-888888888888','99999999-9999-4999-8999-999999999999'];
+  mocks.rows.programme_hub_participants = ids.map((id,index)=>({...participantRow,id,
+    participant_key:`PERSON-${index}`,preferred_name:['Shared','Mike only','Robert only','Unassigned','Inactive'][index],
+    case_reference:`CASE-${index}`,active:index!==4,
+  }));
+  mocks.rows.programme_hub_participant_advisers = [[0,ownerId],[0,adviserId],[1,ownerId],[2,adviserId],[4,ownerId]].map(([index,adviser_user_id],i)=>({
+    id:`aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12,'0')}`,workspace_id:workspaceId,programme_id:programmeId,
+    participant_id:ids[Number(index)],adviser_user_id,active:true,version:1,
+  }));
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId}/>, 'Caseload');
+  const overview=screen.getByLabelText('Caseload overview');
+  const total=()=>within(within(overview).getByRole('group',{name:'Caseload totals'})).getByText('Service users').parentElement!;
+  const rows=()=>within(overview).getAllByRole('button',{name:'Open Service-user record'});
+  expect(total()).toHaveTextContent(/^5Service users$/);expect(rows()).toHaveLength(5);
+  const specialist=screen.getByLabelText('View ES caseload');
+  fireEvent.change(specialist,{target:{value:ownerId}});
+  expect(total()).toHaveTextContent(/^3Service users$/);expect(rows()).toHaveLength(3);
+  expect(within(overview).getByText('Shared: CASE-0')).toBeVisible();
+  fireEvent.change(specialist,{target:{value:adviserId}});
+  expect(total()).toHaveTextContent(/^2Service users$/);expect(rows()).toHaveLength(2);
+  expect(within(overview).getByText('Shared: CASE-0')).toBeVisible();
+  expect(within(overview).queryByText('Mike only: CASE-1')).toBeNull();
+  expect(within(overview).queryByText(/unassigned$/)).toBeNull();
+  fireEvent.change(specialist,{target:{value:'unassigned'}});
+  expect(total()).toHaveTextContent(/^1Service users$/);expect(rows()).toHaveLength(1);
+  expect(within(overview).getByText('Unassigned: CASE-3')).toBeVisible();
+  fireEvent.change(specialist,{target:{value:ownerId}});
+  fireEvent.change(screen.getByLabelText('Record status'),{target:{value:'active'}});
+  expect(total()).toHaveTextContent(/^2Service users$/);expect(rows()).toHaveLength(2);
+  fireEvent.change(within(overview).getByLabelText('Search caseload'),{target:{value:'Mike only'}});
+  expect(total()).toHaveTextContent(/^1Service users$/);expect(rows()).toHaveLength(1);
+  expect(within(overview).getByText('1-1 of 1')).toBeVisible();
+  expect(overview.textContent).not.toMatch(/\u00c2|\u00e2|\ufffd/);
+  expect(mocks.invoke).not.toHaveBeenCalled();
+});
+
+it('requires confirmed ES unassignment before offering a replacement and preserves the existing record', async () => {
+  setRows('owner', true);
+  mocks.rows.workspace_members.push({workspace_id:workspaceId,user_id:adviserId,role:'member',status:'active'});
+  mocks.rows.programme_hub_advisers=[ownerId,adviserId].map((user_id,index)=>({id:index?secondParticipantId:participantId,
+    workspace_id:workspaceId,programme_id:programmeId,user_id,active:true,version:1}));
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId}/>, 'My team');
+  fireEvent.click(screen.getByText('Assign an Employment Specialist',{selector:'summary'}));
+  fireEvent.change(screen.getByLabelText('Service user for caseload'),{target:{value:participantId}});
+  fireEvent.change(screen.getByLabelText('Employment Specialist for caseload'),{target:{value:ownerId}});
+  expect(screen.getByRole('button',{name:'Assign ES'})).toBeDisabled();
+  const assignments=screen.getByLabelText('Current Service-user ES assignments');
+  fireEvent.click(within(assignments).getByRole('button',{name:'Unassign ES'}));
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Keep assignment'}));
+  expect(screen.queryByRole('group',{name:'Confirm ES unassignment'})).toBeNull();
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  fireEvent.click(within(assignments).getByRole('button',{name:'Unassign ES'}));
+  mocks.invoke.mockImplementation(async (_name:string,{body}:{body:Record<string,unknown>})=>{
+    expect(body).toMatchObject({operation:'participant_adviser',recordId:savedId,expectedVersion:1,
+      payload:{participantId,adviserUserId:adviserId,active:false}});
+    const record=mocks.rows.programme_hub_participant_advisers[0] as Record<string,unknown>;
+    record.active=false;record.version=2;
+    return {data:{operation:'participant_adviser',recordId:savedId,workspaceId,programmeId,version:2},error:null};
+  });
+  fireEvent.click(screen.getByRole('button',{name:'Confirm unassignment'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Assign ES'})).toBeEnabled());
+  expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  expect(mocks.rows.programme_hub_participants).toHaveLength(1);
+  expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
+  expect(screen.queryByRole('group',{name:'Confirm ES unassignment'})).toBeNull();
 });

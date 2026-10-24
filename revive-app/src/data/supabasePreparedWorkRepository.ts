@@ -21,6 +21,10 @@ import type { PreparedMeetingProposal } from '@/services/meetingProposalService'
 import type { MeetingExecutionResult } from '@/services/meetingExecutionClient';
 import { mapMeetingOutcome, type MeetingOutcome } from '@/domain/meetingOutcome';
 import { mapMeetingReminderDraft, type MeetingReminderDraft } from '@/domain/meetingReminder';
+import {
+  mapMeetingReminderDelivery,
+  type MeetingReminderDelivery,
+} from '@/domain/meetingReminderDelivery';
 
 const PREPARED_EVENT = 'FOLLOW_UP_PREPARED';
 
@@ -46,6 +50,8 @@ export interface LivePendingAction extends LiveREVAction {
   meetingDryRun?: MeetingExecutionResult;
   meetingReminderDraft?: MeetingReminderDraft;
   meetingReminderUnavailable?: string;
+  meetingReminderDelivery?: MeetingReminderDelivery;
+  meetingReminderDeliveryUnavailable?: string;
   meetingOutcome?: MeetingOutcome;
   meetingOutcomeUnavailable?: string;
 }
@@ -116,7 +122,7 @@ function throwOnError(error: { message: string } | null): void {
 
 function optionalMeetingStorageUnavailableMessage(
   error: { message: string; code?: string } | null,
-  tableName: 'meeting_reminder_drafts' | 'meeting_outcomes',
+  tableName: 'meeting_reminder_drafts' | 'meeting_outcomes' | 'meeting_reminder_deliveries',
 ): string | undefined {
   if (!error) return undefined;
   const missingStorage = error.code === 'PGRST205'
@@ -125,6 +131,11 @@ function optionalMeetingStorageUnavailableMessage(
     return missingStorage
       ? 'Reminder drafts are unavailable because reminder storage has not been deployed. Other REV information remains available.'
       : 'Reminder drafts are unavailable because reminder storage could not be loaded. Other REV information remains available.';
+  }
+  if (tableName === 'meeting_reminder_deliveries') {
+    return missingStorage
+      ? 'Reminder email delivery is unavailable because delivery storage has not been deployed. Reminder drafts and other REV information remain available.'
+      : 'Reminder email delivery is unavailable because delivery records could not be loaded. Reminder drafts and other REV information remain available.';
   }
   return missingStorage
     ? 'Meeting outcomes are unavailable because outcome storage has not been deployed. Other REV information remains available.'
@@ -292,7 +303,7 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
 
   async loadPendingActions(workspaceId) {
     const client = requiredClient();
-    const [actions, approvals, meetingProposals, meetingExecutions, meetingReminderDrafts, meetingOutcomes] = await Promise.all([
+    const [actions, approvals, meetingProposals, meetingExecutions, meetingReminderDrafts, meetingOutcomes, meetingReminderDeliveries] = await Promise.all([
       client
         .from('rev_actions')
         .select('*')
@@ -323,6 +334,10 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
         .from('meeting_outcomes')
         .select('id,workspace_id,meeting_proposal_id,outcome_type,summary,occurred_at,recorded_by_user_id,version,created_at,updated_at')
         .eq('workspace_id', workspaceId),
+      client
+        .from('meeting_reminder_deliveries')
+        .select('id,workspace_id,meeting_proposal_id,reminder_draft_id,approved_draft_version,status,approved_by_user_id,approved_at,send_authorized_by_user_id,send_authorized_at,provider_key,result_summary,failure_code,version,created_at,updated_at')
+        .eq('workspace_id', workspaceId),
     ]);
 
     throwOnError(actions.error);
@@ -336,6 +351,10 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
     const meetingOutcomeUnavailable = optionalMeetingStorageUnavailableMessage(
       meetingOutcomes.error,
       'meeting_outcomes',
+    );
+    const meetingReminderDeliveryUnavailable = optionalMeetingStorageUnavailableMessage(
+      meetingReminderDeliveries.error,
+      'meeting_reminder_deliveries',
     );
 
     const approvalByAction = new Map(
@@ -359,6 +378,12 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
       (meetingReminderDrafts.data ?? []).map((row) => {
         const draft = mapMeetingReminderDraft(row, workspaceId);
         return [draft.meetingProposalId, draft] as const;
+      }),
+    );
+    const meetingReminderDeliveryByProposal = new Map(
+      (meetingReminderDeliveries.data ?? []).map((row) => {
+        const delivery = mapMeetingReminderDelivery(row, workspaceId);
+        return [delivery.meetingProposalId, delivery] as const;
       }),
     );
     const meetingDryRunByAction = new Map(
@@ -393,6 +418,12 @@ export const browserSupabasePreparedWorkGateway: LivePreparedWorkGateway = {
           : undefined,
         meetingReminderUnavailable: action.actionType === 'meeting_proposal'
           ? meetingReminderUnavailable
+          : undefined,
+        meetingReminderDelivery: action.actionType === 'meeting_proposal' && meeting
+          ? meetingReminderDeliveryByProposal.get(meeting.id)
+          : undefined,
+        meetingReminderDeliveryUnavailable: action.actionType === 'meeting_proposal'
+          ? meetingReminderDeliveryUnavailable
           : undefined,
         meetingOutcome: action.actionType === 'meeting_proposal' && meeting
           ? meetingOutcomeByProposal.get(meeting.id)

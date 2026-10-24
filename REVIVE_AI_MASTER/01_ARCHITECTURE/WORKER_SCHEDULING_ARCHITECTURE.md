@@ -59,6 +59,19 @@ Authenticated server boundaries verify the caller and workspace role.
 Trusted RPCs recheck active authority within the mutation transaction.
 Every relationship between scheduling records includes workspace identity.
 
+### Agreed Scheduling access requirements — not implemented
+
+The agreed future Scheduling personas are:
+
+- **Owner** — organisation administration, invitations, permissions, access revocation and AI spending limits.
+- **Manager/Scheduler** — jobs, private documents, reviewed AI recommendations and assignments.
+- **Worker** — only their own schedule, documents for jobs assigned to them and report uploads for assigned jobs.
+- **Read-only viewer** — only explicitly permitted schedules and reports, without editing.
+
+These personas do not change the current schema or authority. Scheduling management, document upload/read, AI analysis, requirement confirmation and assignment remain owner/admin-only. A scheduling worker record still does not create a login, membership or permission, and worker self-service remains pending.
+
+Future implementation must define how these personas map to the existing `owner | admin | member | viewer` membership contract. New role values require an explicit migration and compatibility plan. Server-side functions, RLS and private-storage policies must recheck active membership, workspace identity, assignment/document relationships and operation-specific authority. Revocation or suspension must remove access, including access through retained links or sessions, and important actions must record the authenticated actor.
+
 ## Assignment authority
 
 Assignment requires an active worker and an open job/shift in the same workspace.
@@ -124,12 +137,23 @@ Existing customer-calendar and meeting workflows must remain intact.
 Automatic allocation, worker self-service, outbound notifications, payroll, timesheets,
 travel-time calculation, dispatch, route optimisation and external calendar sync.
 
-### Planned worker briefs and assignment communications — not implemented
+### Private job documents and reviewed AI extraction implemented locally; provider disabled and assignment communications unavailable
 
-Managers may upload a private job brief. Each worker's recipient email address must be stored separately from any REV login identity; a login address is not an implicit recipient. After a worker assignment is confirmed, a future communication flow may send shift details and a secure, access-controlled link to the relevant brief using the organisation's separately authorised sending account.
+The first private job-document foundation is implemented locally for existing open jobs. Active owners/admins may upload a PDF or UTF-8 text source through a trusted boundary into a private workspace/job-scoped bucket. Exact request identity, content hash, metadata, immutable source retention, restrictive read policy and audit evidence protect uncertain retries and tenant isolation. Worker self-service remains deferred, so no worker role receives broader Scheduling or document access.
 
-The future flow must provide duplicate-send protection and durable `sent`, `failed` and `not_sent` status. Assignment changes and cancellations require corresponding updates, protected by the same request identity and idempotency safeguards. Calendar read consent does not authorise email sending; sending requires its own organisation-level authority, verified recipients and delivery controls. This is roadmap-only scope: no uploads, worker-email fields, brief links, notification execution or sending permissions are implemented or authorised here.
-These are not dependencies for the first supervised scheduling release.
+Stored documents remain private. Each owner/admin open or download action must recheck active workspace authority and the exact workspace/job/document binding before creating a new short-lived signed URL. Signed URLs are never stored. PDFs may open in a new tab, downloads retain the original filename and text is displayed only as escaped plain text rather than rendered HTML. Changing workspace or job invalidates in-flight document actions.
+
+The extraction contract requires page or section evidence for every extracted task, skill, qualification, location, date or duration. Missing and ambiguous information remains explicit. The local server adapter uses OpenAI Responses with pinned `gpt-4.1-mini-2025-04-14`, strict JSON Schema, `store:false`, no tools and a document-as-untrusted-evidence instruction. PDF and UTF-8 text are supported up to 2 MB; unsupported or unreadable files are refused before analysis.
+
+Each explicit analysis request has a durable claim. Only its first successful claim may attempt the provider; exact retries return durable success/failure or pending/unknown state and do not resend. Provider refusals, outages and invalid output are recorded without a fabricated fallback. Extracted requirements are read-only evidence until an owner/admin explicitly confirms the exact analysis and current job version. Confirmation records an immutable review revision, updates canonical job skills in the same transaction and invalidates the review after a later job change. It never assigns a worker.
+
+Existing deterministic suitability then uses confirmed job skills, worker skills, working patterns, assignments, leave, sickness and unavailable periods. Confirmed qualifications cannot be compared because worker qualification evidence is not recorded; every recommendation remains unknown and trusted assignment is blocked for that job. Manual assignment continues through the existing versioned boundary and is never automatic.
+
+Runtime analysis remains disabled until server-only `OPENAI_API_KEY` and `REV_SCHEDULING_DOCUMENT_AI_ENABLED=true` are configured and the local migration/functions are reviewed and deployed. No live provider call has been made. The provider's default API posture does not use API data for training, but abuse-monitoring logs may retain content for up to 30 days. Production use with sensitive employment documents requires an accepted retention decision; approved Zero Data Retention or Modified Abuse Monitoring is the stronger option. Published `gpt-4.1-mini` pricing is approximately $0.40 per million input tokens and $1.60 per million output tokens; a representative 10,000-input/2,000-output extraction is about $0.007 before extra PDF image tokens.
+
+Each worker's future recipient email address must be stored separately from any REV login identity; a login address is not an implicit recipient. After a worker assignment is confirmed, a future communication flow may send shift details and a secure, access-controlled link to the relevant brief using the organisation's separately authorised sending account.
+
+The future communication flow must provide duplicate-send protection and durable `sent`, `failed` and `not_sent` status. Assignment changes and cancellations require corresponding updates, protected by the same request identity and idempotency safeguards. Calendar read consent does not authorise email sending; sending requires its own organisation-level authority, verified recipients and delivery controls. Worker-email fields, brief links, notification execution and sending permissions remain unimplemented and unauthorised.
 ## Optional location planning and visual planner
 
 Authorised product requirements recorded on 30 September 2026.

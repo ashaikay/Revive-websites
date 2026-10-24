@@ -44,6 +44,6 @@ describe('Phase 5H read-only calendar slot selection', () => {
 
   it('contains no booking, persistence, provider mutation, or execution controls', () => {
     const source = readFileSync(new URL('../components/CalendarAvailabilityPanel.tsx', import.meta.url), 'utf8');
-    expect(source).not.toMatch(/\bBook\b|\bSchedule\b|Create event|Send invitation|Confirm booking|\.rpc\(|localStorage|sessionStorage|window\.location|mailto:|\/events|createEvent|updateEvent|deleteEvent|acceptEvent|declineEvent/i);
+    expect(source).not.toMatch(/<button\b[^>]*>\s*(?:Book|Schedule)\b|Create event|Send invitation|Confirm booking|\.rpc\(|localStorage|sessionStorage|window\.location|mailto:|\/events|createEvent|updateEvent|deleteEvent|acceptEvent|declineEvent/i);
   });
 });

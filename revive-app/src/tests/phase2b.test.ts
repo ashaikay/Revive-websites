@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+
+// Keep mock-provider tests independent of local development settings.
+vi.hoisted(() => { vi.stubEnv('VITE_REV_PROVIDER_MODE', 'mock'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 import { readFileSync } from 'node:fs';
 import { createMockDataProvider } from '@/data/mockProvider';
 import { seedData } from '@/data/seedFixtures';

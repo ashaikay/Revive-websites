@@ -19,6 +19,10 @@ const tests = [
   'trustedMeetingProviderServer.test.ts',
   'meetingProviderHttpService.test.ts',
 ].map(name => shared + name);
+tests.push(
+  'supabase/functions/rev-meeting-reminder-deliver/meetingReminderDeliveryBoundary.test.ts',
+  'supabase/functions/rev-meeting-reminder-deliver/meetingReminderEmailOrchestrator.test.ts',
+);
 
 
 function run(label, executable, args, options = {}) {

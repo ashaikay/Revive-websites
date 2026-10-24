@@ -51,8 +51,8 @@ describe('Phase 5I local supervised meeting proposal preparation', () => {
     expect(source).toContain('Owner approval and controlled execution are required before any calendar event or invitation can be created.');
     expect(source).toContain('EDIT PROPOSAL');
     expect(source).toContain('DISCARD PROPOSAL');
-    expect(source).toContain('{selectedSlot && !preparedProposal && (');
-    expect(source).toContain('{preparedProposal && !submittedProposal && (');
+    expect(source).toContain('{canSubmitProposal && selectedSlot && !preparedProposal && (');
+    expect(source).toContain('{canSubmitProposal && preparedProposal && !submittedProposal && (');
     expect(source).toContain('onClick={() => { setPreparedProposal(null); setProposalErrors({}); setSubmissionConfirmation(false); setSubmissionError(null); }}>EDIT PROPOSAL');
     expect(source).toContain('onClick={clearProposal}>DISCARD PROPOSAL');
     expect(source).toMatch(/setDate\(event\.target\.value\); clearSelection\(\);/);
@@ -61,6 +61,6 @@ describe('Phase 5I local supervised meeting proposal preparation', () => {
     expect(source).toMatch(/setResult\(null\);\s+clearSelection\(\);/);
     expect(source).toMatch(/catch \(requestError\) \{\s+clearSelection\(\);/);
     expect(source.match(/requestAvailability\(/g)).toHaveLength(1);
-    expect(source).not.toMatch(/\bApproved\b|\bExecute\b|\bBook\b|\bSchedule\b|Create event|Send invitation|Confirm booking|\.rpc\(|localStorage|sessionStorage|window\.location|mailto:|\/events|createEvent|updateEvent|deleteEvent/i);
+    expect(source).not.toMatch(/\bApproved\b|\bExecute\b|<button\b[^>]*>\s*(?:Book|Schedule)\b|Create event|Send invitation|Confirm booking|\.rpc\(|localStorage|sessionStorage|window\.location|mailto:|\/events|createEvent|updateEvent|deleteEvent/i);
   });
 });

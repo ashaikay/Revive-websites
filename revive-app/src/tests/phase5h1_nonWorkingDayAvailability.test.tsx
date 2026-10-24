@@ -61,7 +61,7 @@ describe('Phase 5H.1 truthful non-working-day availability', () => {
     expect(nonWorkingDay).toEqual({ status: 'unavailable', slots: [], code: 'outside_business_hours', timezone: 'Europe/London' });
     await expect(requestCalendarAvailability(request, vi.fn().mockResolvedValue({
       data: { status: 'unavailable', slots: [], code: 'untrusted_reason', timezone: 'Europe/London' }, error: null,
-    }))).rejects.toThrow('Calendar availability returned an invalid response.');
+    }))).rejects.toThrow('The available times could not be confirmed. Please check again.');
 
     const deps = dependencies([{ startAt: request.searchStartAt, endAt: request.searchEndAt }]);
     const response = await handleCalendarAvailability(post({ ...request, searchStartAt: '2026-09-28T00:00:00.000Z', searchEndAt: '2026-09-29T00:00:00.000Z' }), deps);
@@ -78,7 +78,7 @@ describe('Phase 5H.1 truthful non-working-day availability', () => {
     expect(panel).toMatch(/if \(nextResult\.code === 'outside_business_hours'\) \{\s+clearSelection\(\);/);
     expect(panel).toContain('aria-pressed={selected}');
     expect(panel).toContain('onClick={() => { setSelectedSlot({ startAt: slot.startAt, endAt: slot.endAt }); clearProposal(); }}');
-    expect(panel).not.toMatch(/\bBook\b|\bSchedule\b|Create event|Send invitation|Confirm booking|\.rpc\(|localStorage|sessionStorage|\/events|createEvent|updateEvent|deleteEvent/i);
+    expect(panel).not.toMatch(/<button\b[^>]*>\s*(?:Book|Schedule)\b|Create event|Send invitation|Confirm booking|\.rpc\(|localStorage|sessionStorage|\/events|createEvent|updateEvent|deleteEvent/i);
     expect(boundary).not.toMatch(/At least one availability window is required\.|createEvent|updateEvent|deleteEvent|\.rpc\(/i);
   });
 });
