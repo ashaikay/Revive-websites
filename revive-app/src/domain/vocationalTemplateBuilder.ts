@@ -1,4 +1,5 @@
-﻿import {
+import { isCoreVocationalQuestion } from './vocationalCore';
+import {
   defaultVocationalSections,
   type VocationalFieldType,
   type VocationalProfileTemplate,
@@ -13,7 +14,7 @@ export function createVocationalTemplate(
 ): VocationalProfileTemplate {
   const now = new Date().toISOString();
 
-  return {
+  const template: VocationalProfileTemplate = {
     id: crypto.randomUUID(),
     workspaceId,
     programmeId,
@@ -31,6 +32,7 @@ export function createVocationalTemplate(
     updatedAt: now,
     createdBy,
   };
+  return addCoreVocationalQuestions(template);
 }
 
 function editable(template: VocationalProfileTemplate): void {
@@ -121,4 +123,32 @@ export function addVocationalQuestion(
     }),
     updatedAt: new Date().toISOString(),
   };
+}
+
+
+// Definitions only; no participant answers or saved templates are changed.
+export function addCoreVocationalQuestions(template: VocationalProfileTemplate): VocationalProfileTemplate {
+  editable(template);
+  const starters: Array<[string, string, import('./vocationalProfile').VocationalStandardField | undefined]> = [
+    ['Employment goals and aspirations', 'What kind of work would you like to do?', 'employment_goal'],
+    ['Work history', 'What work or volunteering have you done?', 'work_history'],
+    ['Skills and experience', 'Which skills would you like to use at work?', 'skills'],
+    ['Education and qualifications', 'What qualifications or training have you completed?', 'qualifications'],
+    ['Preferred job sectors', 'Which job sectors interest you?', 'preferred_sector'],
+    ['Availability and working hours', 'What days and hours could you work?', 'availability'],
+    ['Travel and transport', 'How far could you travel for work?', 'travel_radius'],
+    ['Action planning and next steps', 'What is your next step towards employment?', undefined],
+  ];
+  let next = template;
+  for (const [title, label, standardField] of starters) {
+    if (next.sections.some(section => section.questions.some(question => isCoreVocationalQuestion(section, question) && (question.label === label || (standardField && question.standardField === standardField))))) continue;
+    let section = next.sections.find(section => section.title.toLowerCase() === title.toLowerCase() && isCoreVocationalQuestion(section, {label, sensitive: false}));
+    if (!section) { next = addVocationalSection(next, title); section = next.sections[next.sections.length - 1]; }
+    next = addVocationalQuestion(next, section.id, label, 'long_text');
+    const sectionId = section.id;
+    next = { ...next, sections: next.sections.map(section => section.id === sectionId ? {
+      ...section, questions: section.questions.map((question, index) => index === section.questions.length - 1 ? { ...question, standardField } : question),
+    } : section) };
+  }
+  return next;
 }

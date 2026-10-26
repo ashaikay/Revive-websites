@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { coreVocationalSections } from '../domain/vocationalCore';
 import { supabaseClient } from '@/data/supabaseClient';
 import { VocationalStatusPanel } from './VocationalStatusPanel';
 import { VocationalConsentManager } from './VocationalConsentManager';
@@ -11,18 +12,11 @@ type Assessment = { assessmentId: string; version: number; status: string; answe
 // safeguarding or other sensitive information. Optional support requires a
 // separate consented workflow and must not be mixed into the ordinary answers RPC.
 const optionalSupportSection = /criminal justice|resettlement|conviction|sentenc|offen[cs]e|prison|probation|safeguard|inclusive employment support/i;
-const restrictedQuestion = /conviction|sentenc|offen[cs]e|prison|probation|criminal record|safeguard|medical|diagnos|disabilit|mental health/i;
-const ordinarySections = (sections: Section[]) => sections
-  .filter((section) => !optionalSupportSection.test(section.title))
-  .map((section) => ({
-    ...section,
-    questions: section.questions.filter((question) => !question.sensitive && !restrictedQuestion.test(`${question.label} ${question.description ?? ''}`)),
-  }))
-  .filter((section) => section.questions.length > 0);
+const ordinarySections = coreVocationalSections;
 const hasOptionalSupportSection = (sections: Section[]) => sections.some((section) => optionalSupportSection.test(section.title));
 const answered = (value: unknown) => value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
 
-export function ParticipantVocationalAssessment({ workspaceId, programmeId, participantId, participantName, caseReference, assignedSpecialists = [], isManager = false, consentAdvisers = [] }: { workspaceId: string; programmeId: string; participantId: string; participantName?: string; caseReference?: string; assignedSpecialists?: string[]; isManager?: boolean; consentAdvisers?: { userId: string; label: string }[] }) {
+export function ParticipantVocationalAssessment({ workspaceId, programmeId, participantId, participantName, caseReference, assignedSpecialists = [], isManager = false, consentAdvisers = [], onReviewQuestionnaire }: { workspaceId: string; programmeId: string; participantId: string; participantName?: string; caseReference?: string; assignedSpecialists?: string[]; isManager?: boolean; consentAdvisers?: { userId: string; label: string }[]; onReviewQuestionnaire?: () => void }) {
   const [open, setOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [selected, setSelected] = useState('');
@@ -203,7 +197,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       </details>}
       {assessment && !loading && isManager && <VocationalConsentManager key={assessment.assessmentId} assessmentId={assessment.assessmentId} advisers={consentAdvisers} />}
       {assessment && !loading && <>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3">
+        {allQuestions.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3">
           <div className="min-w-0 flex-1">
             <span className="text-base font-medium text-neutral-800">Core vocational profile: {coreProgressPercent}% · {unanswered.length} unanswered · {requiredMissing.length} required</span>
             <div role="progressbar" aria-label="Core vocational profile answer progress" aria-valuenow={coreProgressPercent} aria-valuemin={0} aria-valuemax={100} className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
@@ -211,12 +205,18 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
             </div>
           </div>
           <button type="button" className="btn-secondary" onClick={() => { setShowMissing(v => !v); if (!showMissing && unanswered.length) setExpandedSection(sections.find(s => s.questions.some(q => !answered(answers[q.id])))?.id ?? null); }}>{showMissing ? 'Show all questions' : 'Show unanswered questions'}</button>
-        </div>
+        </div>}
         {optionalSupportAvailable && <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3" role="note">
           <p className="text-base font-medium text-neutral-900">Optional inclusive employment support</p>
           <p className="mt-1 text-base text-neutral-700">This programme has a separate criminal justice or resettlement support section. It is excluded from core profile progress and ordinary matching. Participants do not need to disclose convictions or other sensitive information to complete their core vocational profile. Sensitive support must use a separately authorised, consented workflow; it is not collected on this screen.</p>
         </div>}
-        {sections.length === 0 && <p role="status" className="text-base text-amber-800">This published questionnaire has no ordinary questions available. Ask a manager to publish a reviewed questionnaire.</p>}
+        {sections.length === 0 && <div role="status" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-base text-amber-900">
+          <p>This published questionnaire has no core employment questions. Its optional support questions do not form a complete vocational profile. A manager needs to publish a reviewed revision with core questions.</p>
+          {isManager && onReviewQuestionnaire ? <button type="button" className="btn-secondary" onClick={onReviewQuestionnaire}>Review programme questionnaire</button> : <button type="button" className="btn-secondary" onClick={async () => {
+            try { await navigator.clipboard.writeText('Please review the vocational questionnaire for my programme. The published version has no core employment questions. Create a draft revision, add core questions, save and publish it.'); setNotice('Setup request copied. Send it to your programme manager. No notification has been sent automatically.'); }
+            catch { setNotice('Copy unavailable. Tell your programme manager that the published questionnaire needs core employment questions.'); }
+          }}>Copy setup request for manager</button>}
+        </div>}
         {sections.length === 1 && <p className="text-base text-amber-800">Only one section is available in this published version. The newer draft questionnaire must be reviewed and published separately.</p>}
         {dirty && <p className="text-base font-medium text-amber-800">Unsaved changes</p>}
         <div className="space-y-2">{sections.map((section) => {

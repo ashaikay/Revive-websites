@@ -1,10 +1,12 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   createVocationalTemplate,
   renameVocationalTemplate,
   addVocationalSection,
   addVocationalQuestion,
+  addCoreVocationalQuestions,
 } from '../domain/vocationalTemplateBuilder';
+import { coreVocationalQuestionCount } from '../domain/vocationalCore';
 import { validateVocationalTemplate } from '../domain/vocationalProfile';
 
 describe('REV vocational template builder', () => {
@@ -34,7 +36,7 @@ describe('REV vocational template builder', () => {
       ['Construction', 'Retail', 'Hospitality']
     );
 
-    expect(result.sections[result.sections.length - 1].questions).toHaveLength(1);
+    expect(result.sections[result.sections.length - 1].questions).toHaveLength(section.questions.length + 1);
     expect(validateVocationalTemplate(result)).toEqual([]);
   });
 
@@ -61,4 +63,33 @@ describe('REV vocational template builder', () => {
       )
     ).toThrow();
   });
+});
+
+
+it('starts new drafts with eight ordinary employment questions and does not duplicate them', () => {
+  const template = createVocationalTemplate('workspace', 'manager', 'programme');
+  expect(coreVocationalQuestionCount(template.sections)).toBe(8);
+  expect(template.sections.flatMap(section => section.questions).every(question => !question.sensitive && !question.required)).toBe(true);
+  expect(addCoreVocationalQuestions(template).sections).toEqual(template.sections);
+  expect(validateVocationalTemplate(template)).toEqual([]);
+  expect(() => addCoreVocationalQuestions({...template,status:'published'})).toThrow();
+});
+it('adds core definitions to an optional-only draft without changing optional questions', () => {
+  const template = createVocationalTemplate('workspace','manager');
+  const support = {...template.sections[0],title:'Criminal Justice and Resettlement Support',questions:[{
+    id:'support-question',sectionId:template.sections[0].id,label:'Would you like employment support?',type:'long_text' as const,required:false,order:0,sensitive:false,
+  }]};
+  const original = {...template,sections:[support]};
+  expect(coreVocationalQuestionCount(original.sections)).toBe(0);
+  const repaired = addCoreVocationalQuestions(original);
+  expect(coreVocationalQuestionCount(repaired.sections)).toBe(8);
+  expect(repaired.sections[0]).toEqual(support);
+  expect(original.sections).toHaveLength(1);
+});
+it('excludes sensitive descriptions and optional support from core readiness', () => {
+  const template = createVocationalTemplate('workspace','manager');
+  const section=template.sections.find(section=>section.questions.length)!;
+  expect(coreVocationalQuestionCount([{...section,description:'Medical information'}])).toBe(0);
+  expect(coreVocationalQuestionCount([{...section,questions:section.questions.map(question=>({...question,label:'Have you been convicted?'}))}])).toBe(0);
+  expect(coreVocationalQuestionCount([{...section,questions:section.questions.map(question=>({...question,sensitive:true}))}])).toBe(0);
 });

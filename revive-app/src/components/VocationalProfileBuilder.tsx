@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { coreVocationalQuestionCount } from '../domain/vocationalCore';
 import { supabaseClient } from '@/data/supabaseClient';
-import { createVocationalTemplate, addVocationalSection, addVocationalQuestion } from '../domain/vocationalTemplateBuilder';
+import { createVocationalTemplate, addVocationalSection, addVocationalQuestion, addCoreVocationalQuestions } from '../domain/vocationalTemplateBuilder';
 import { validateVocationalTemplate, vocationalStandardFields, isRestrictedVocationalQuestion, type VocationalStandardField, type VocationalFieldType, type VocationalProfileTemplate, type VocationalQuestion } from '../domain/vocationalProfile';
 
 const types: { value: VocationalFieldType; label: string }[] = [
@@ -55,6 +56,15 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   const scope = `${workspaceId}:${programmeId ?? 'organisation'}:${userId}`;
   const generation = useRef(0);
   const saveLock = useRef(false);
+  const feedback = useRef<HTMLDivElement>(null);
+  const sectionHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    sectionHeading.current?.focus({ preventScroll: true });
+    sectionHeading.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeId]);
+  useEffect(() => {
+    if (message || error) { feedback.current?.focus({ preventScroll: true }); feedback.current?.scrollIntoView?.({ block: 'nearest' }); }
+  }, [message, error]);
   const pendingKey = `rev-vocational-pending:${scope}`;
   const currentScope = useRef(scope);
   if (currentScope.current !== scope) {
@@ -63,10 +73,10 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
     saveLock.current = false;
   }
 
-  const load = async () => {
+  const load = async (confirmReload = false) => {
     const seq = ++generation.current;
     setLoading(true);
-    setError('');
+    setError(''); setMessage('');
     try {
       if (!supabaseClient) throw Error('Supabase is unavailable.');
       let query = supabaseClient.from('programme_hub_vocational_templates')
@@ -90,6 +100,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         setPreview(loaded.status === 'published');
       } else { savedId.current = null; setTemplate(null); setActiveId(''); }
       setDirty(false);
+      if (confirmReload) setMessage('Saved questionnaire reloaded.');
     } catch (cause) {
       if (seq === generation.current) setError(cause instanceof Error ? cause.message : 'Unable to load templates.');
     } finally { if (seq === generation.current) setLoading(false); }
@@ -146,9 +157,10 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
 
   const publish = async () => {
     if (!template || !savedId.current || dirty || pending || busy || saveLock.current || recoveryBlocked || !supabaseClient) return;
+    if (coreVocationalQuestionCount(template.sections) === 0) { setError('Add core employment questions before publishing. Optional support questions do not count towards the core profile.'); return; }
     if (!window.confirm('Publish this questionnaire? The published version cannot be edited.')) return;
     const seq = generation.current;
-    saveLock.current = true; setBusy(true); setError('');
+    saveLock.current = true; setBusy(true); setError(''); setMessage('');
     try {
       const { data, error: rpcError } = await supabaseClient.rpc('publish_rev_vocational_template', {
         target_workspace_id: workspaceId, target_template_id: savedId.current,
@@ -284,7 +296,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         try {
           const created = createVocationalTemplate(workspaceId, userId, programmeId);
           savedId.current = null; setTemplate(created); setDirty(true);
-          setActiveId(created.sections[0]?.id ?? '');
+          setActiveId(created.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? created.sections[0]?.id ?? '');
           setError('');
         } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to create template'); }
       }}>Create vocational template</button>
@@ -292,6 +304,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   );
 
   const selected = template.sections.find(s => s.id === activeId) ?? template.sections[0];
+  const coreQuestions = coreVocationalQuestionCount(template.sections);
   const totalQuestions = template.sections.reduce((sum, s) => sum + s.questions.length, 0);
   const errors = validateVocationalTemplate(template);
 
@@ -304,23 +317,38 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
       <div className="flex flex-wrap gap-2">
         {template.status === 'published' && <button type="button" className={button} disabled={busy || Boolean(pending) || recoveryBlocked} onClick={() => void createRevision()}>Create editable draft version</button>}
         <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || !dirty} onClick={() => void save()}>{busy ? 'Working...' : 'Save draft'}</button>
-        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || dirty || !savedId.current} onClick={() => void publish()}>Publish template</button>
-        <button type="button" className={button} disabled={busy || Boolean(pending) || dirty} onClick={() => void load()}>Reload saved template</button>
+        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || dirty || !savedId.current || coreQuestions === 0 || errors.length > 0} onClick={() => void publish()}>Publish template</button>
+        <button type="button" className={button} disabled={busy || Boolean(pending) || dirty} onClick={() => void load(true)}>Reload saved template</button>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+        {template.status === 'published' ? <p>This questionnaire is published and read-only. Use Create editable draft version to revise it, or Create another questionnaire for a separate form. Existing published versions and participant answers remain available.</p> : <p>Review the core questions, save the draft, then publish it so assigned Employment Specialists can complete it. Optional support questions are separate from core profile progress.</p>}
+        <button type="button" className={`${button} mt-2`} disabled={busy || Boolean(pending) || recoveryBlocked} onClick={() => {
+          if (busy || pending || recoveryBlocked || saveLock.current) return;
+          if (!window.confirm(dirty ? 'Discard unsaved edits and create a separate questionnaire? Saved questionnaires and answers remain unchanged.' : 'Create a separate questionnaire? Existing published questionnaires and answers remain available.')) return;
+          const created = createVocationalTemplate(workspaceId, userId, programmeId);
+          savedId.current = null; setTemplate(created); setActiveId(created.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? created.sections[0]?.id ?? '');
+          setPreview(false); setDirty(true); setError(''); setMessage('New questionnaire draft created. Review the starter questions and save it before publishing.');
+        }}>Create another questionnaire</button>
+      </div>
+      <div ref={feedback} tabIndex={-1} className="sticky top-4 z-10 rounded-lg bg-white focus:outline-none" aria-label="Questionnaire action feedback" aria-live="polite">
+        {busy && <p role="status" className="rounded-lg border p-3 text-sm">Working on your questionnaire. Please wait for confirmation.</p>}
+        {message && <p role="status" className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">{message}</p>}
+        {error && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       </div>
       {pending && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">Save not confirmed. Do not edit or publish until resolved. <button type="button" className={button} disabled={busy} onClick={() => void save(true)}>Retry same save</button></div>}
-      {message && <p role="status" className="text-sm text-green-700">{message}</p>}
       {recoveryWarning}
       {dirty && <p className="text-sm text-amber-700">Unsaved changes. Save before leaving this page.</p>}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Sections</div><div className="text-xl font-semibold">{template.sections.length}</div></div>
         <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Questions</div><div className="text-xl font-semibold">{totalQuestions}</div></div>
+        <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Core questions</div><div className="text-xl font-semibold">{coreQuestions}</div></div>
         <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Status</div><div className="text-sm font-semibold">{template.status}{dirty ? ' - Unsaved changes' : ''}</div></div>
       </div>
       <label className="block space-y-1 text-sm font-medium">Template title
         <input className={field} value={template.title} disabled={template.status === 'published' || busy || Boolean(pending) || recoveryBlocked} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
       </label>
-      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {coreQuestions === 0 && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This questionnaire has no core employment questions. Employment Specialists cannot complete a core profile from it. {template.status === 'published' ? 'Create an editable draft version, add core employment questions, save and publish the revision.' : 'Add core employment questions before publishing. Optional or restricted support questions do not count as core questions.'}</p>}
       {errors.length > 0 && <div role="status" className="text-sm text-amber-700">{errors.slice(0, 3).map((message, i) => <p key={i}>{message}</p>)}</div>}
       {preview || template.status === 'published' ? (
         <div className="space-y-4"><h3 className="text-lg font-semibold">{template.title || 'Untitled profile'} - Participant preview</h3><p className="text-sm text-slate-500">Preview only. Answers are not recorded.</p>
@@ -331,10 +359,18 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
           <aside className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Profile sections</h3>
             <div className="space-y-1">{template.sections.map((s, index) => (
-              <button type="button" key={s.id} onClick={() => setActiveId(s.id)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left text-sm ${selected?.id === s.id ? 'border-slate-500 bg-white font-semibold' : 'border-transparent hover:bg-white'}`}><span>{index + 1}. {s.title}</span><span className="text-xs text-slate-500">{s.questions.length}</span></button>
+              <button type="button" key={s.id} onClick={() => setActiveId(s.id)} aria-pressed={selected?.id === s.id} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left text-sm ${selected?.id === s.id ? 'border-slate-500 bg-white font-semibold' : 'border-transparent hover:bg-white'}`}><span>{index + 1}. {s.title}</span><span className="text-xs text-slate-500">{s.questions.length}</span></button>
             ))}</div>
             {template.status === 'draft' && (
               <div className="space-y-2 border-t border-slate-200 pt-3">
+                <button type="button" className={button} onClick={() => {
+                  const before = coreVocationalQuestionCount(template.sections);
+                  const next = addCoreVocationalQuestions(template);
+                  if (update(() => next)) {
+                    setActiveId(next.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? activeId);
+                    setMessage(coreVocationalQuestionCount(next.sections) > before ? 'Core employment questions added. Review and save the draft before publishing.' : 'Core starter questions are already present.');
+                  }
+                }}>Add core employment questions</button>
                 <button type="button" className={button} disabled={busy || Boolean(pending)} onClick={addResettlementPreset}>Add optional resettlement support section</button>
                 <button type="button" className={button} disabled={busy || Boolean(pending)} onClick={addConvictionSentencingPreset}>Add restricted conviction and sentencing section</button>
                 <p className="text-xs text-slate-600">Support needs only. Do not enter convictions, sentence details, licence conditions, or other criminal-offence information here. Restricted records require a separate authorised workflow.</p>
@@ -347,11 +383,12 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
                 if (!update(() => next)) return;
                 setActiveId(next.sections[next.sections.length - 1].id);
                 setNewSection('');
-                setError('');
+                setError(''); setMessage('Section added to the draft. Add its questions, then save.');
               } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to add section'); }
             }}>+ Add section</button></div>
           </aside>
           <main className="min-w-0 space-y-4 rounded-xl border border-slate-200 p-4">
+            <h3 ref={sectionHeading} tabIndex={-1} className="font-semibold focus:outline-none">{selected?.title ?? 'Choose a section'}</h3>
             {!selected ? <p className="text-sm text-slate-500">Add a section to begin.</p> : <>
               <div className="space-y-2"><label className="block text-sm font-semibold">Section name</label><input className={field} aria-label="Selected section name" value={selected.title} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, title: e.target.value } : s))} />
                 <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={template.sections[0]?.id === selected.id} onClick={() => { const i = template.sections.findIndex(s => s.id === selected.id); const list = [...template.sections]; [list[i - 1], list[i]] = [list[i], list[i - 1]]; changeSections(list); }}>Move up</button><button type="button" className={button} disabled={template.sections[template.sections.length - 1]?.id === selected.id} onClick={() => { const i = template.sections.findIndex(s => s.id === selected.id); const list = [...template.sections]; [list[i + 1], list[i]] = [list[i], list[i + 1]]; changeSections(list); }}>Move down</button><button type="button" className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700" onClick={() => { if (!window.confirm(`Delete section "${selected.title}" and its questions?`)) return; const list = template.sections.filter(s => s.id !== selected.id); changeSections(list); setActiveId(list[0]?.id ?? ''); }}>Delete section</button></div>
@@ -382,7 +419,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
                   if (update(t => {
                     const added = addVocationalQuestion(t, selected.id, questionLabel, questionType, optionsText.split(/\r?\n/));
                     return { ...added, sections: added.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map((q, i) => i === s.questions.length - 1 ? { ...q, required, standardField: standardField && !isRestrictedVocationalQuestion(s.title, q) ? standardField : undefined } : q) } : s) };
-                  })) { setQuestionLabel(''); setOptionsText(''); setRequired(false); setStandardField(''); }
+                  })) { setQuestionLabel(''); setOptionsText(''); setRequired(false); setStandardField(''); setMessage('Question added to the draft. Save before publishing.'); }
                 }}>+ Add question</button>
               </div>
             </>}

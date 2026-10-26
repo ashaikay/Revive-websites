@@ -5,13 +5,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ParticipantVocationalAssessment } from '@/components/ParticipantVocationalAssessment';
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), supportOnly: false }));
 vi.mock('@/data/supabaseClient', () => ({ supabaseClient: {
   rpc: (...args: unknown[]) => mocks.rpc(...args),
   from: (table: string) => {
     const rows = table === 'programme_hub_vocational_templates' ? [{ id: 'template' }] : [{
       id: 'snapshot', template_id: 'template', version: 1, title: 'Core questionnaire',
-      sections: [{ id: 'goals', title: 'Employment goals', questions: [{
+      sections: [{ id: 'goals', title: mocks.supportOnly ? 'Criminal Justice and Resettlement Support' : 'Employment goals', questions: [{
         id: 'role', label: 'Preferred role', type: 'short_text', required: false, sensitive: false,
       }] }], published_at: '2026-10-01T09:00:00Z',
     }];
@@ -40,7 +40,7 @@ async function openProfile() {
   return screen.getByLabelText('Preferred role');
 }
 beforeEach(() => {
-  mocks.rpc.mockReset();
+  mocks.rpc.mockReset(); mocks.supportOnly = false;
   mocks.rpc.mockImplementation((_name, args) => Promise.resolve({ data: assessment(args.target_participant_id), error: null }));
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -161,4 +161,27 @@ describe('vocational assessment writes', () => {
     expect(currentInput).toHaveValue('Saved alice');
     expect(screen.queryByText('Draft saved. You can return to this assessment later.')).not.toBeInTheDocument();
   });
+});
+
+
+it('lets staff copy a manager setup request without exposing optional support as core questions',async()=>{
+  mocks.supportOnly=true;const writeText=vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal('navigator',{clipboard:{writeText}});
+  render(<ParticipantVocationalAssessment {...props}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Open profile'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Copy setup request for manager'}));
+  expect(await screen.findByText(/Setup request copied/)).toHaveTextContent('No notification has been sent automatically');
+  expect(writeText).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('progressbar',{name:'Core vocational profile answer progress'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Mark completed'})).toBeNull();
+  expect(screen.queryByLabelText('Preferred role')).toBeNull();
+  vi.unstubAllGlobals();
+});
+it('gives managers a direct review action when a published questionnaire has no core questions',async()=>{
+  mocks.supportOnly=true;const review=vi.fn();
+  render(<ParticipantVocationalAssessment {...props} isManager onReviewQuestionnaire={review}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Open profile'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Review programme questionnaire'}));
+  expect(review).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button',{name:'Copy setup request for manager'})).toBeNull();
 });
