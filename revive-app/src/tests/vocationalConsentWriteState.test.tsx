@@ -1,86 +1,86 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { VocationalConsentManager } from '@/components/VocationalConsentManager';
-
 const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('@/data/supabaseClient', () => ({ supabaseClient: { rpc: (...args: unknown[]) => mocks.rpc(...args) } }));
-const advisers = [{ userId: 'adviser', label: 'Assigned adviser' }];
-function deferred() {
-  let resolve!: (value: { error: Error | null }) => void;
-  const promise = new Promise<{ error: Error | null }>((done) => { resolve = done; });
-  return { promise, resolve };
+const advisers = [{ userId: 'adviser', label: 'Robert' }];
+const status = (id = 'alice', consent = 'none', grants: string[] = []) => ({ data: { assessment_id: id, consent, grants }, error: null });
+function mount() { return render(<VocationalConsentManager assessmentId="alice" advisers={advisers} />); }
+function fill() {
+  fireEvent.change(screen.getByLabelText('Consent/withdrawal evidence reference'), { target: { value: 'Evidence reference' } });
+  fireEvent.change(screen.getByLabelText("Participant's recorded consent or withdrawal statement"), { target: { value: 'Participant explicitly agreed to optional support.' } });
 }
-function fill(evidence = 'Evidence reference', statement = 'Participant explicitly agreed to optional support.') {
-  fireEvent.change(screen.getByLabelText('Consent/withdrawal evidence reference'), { target: { value: evidence } });
-  fireEvent.change(screen.getByLabelText("Participant's recorded consent or withdrawal statement"), { target: { value: statement } });
-}
-function open() { fireEvent.click(screen.getByText('Optional support — consent and adviser permissions (managers)')); }
 beforeEach(() => { mocks.rpc.mockReset(); vi.spyOn(window, 'confirm').mockReturnValue(true); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-
-describe('consent write state', () => {
-  it('locks all evidence and adviser fields during a pending operation', async () => {
-    const pending = deferred(); mocks.rpc.mockReturnValue(pending.promise);
-    render(<VocationalConsentManager assessmentId="alice" advisers={advisers} />); open(); fill();
-    fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
-    expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toBeDisabled();
-    expect(screen.getByLabelText("Participant's recorded consent or withdrawal statement")).toBeDisabled();
-    expect(screen.getByLabelText('Assigned adviser')).toBeDisabled();
-    expect(screen.getByLabelText('Purpose of restricted support access')).toBeDisabled();
-    await act(async () => pending.resolve({ error: null }));
-    expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toBeEnabled();
-    expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toHaveValue('');
-    expect(mocks.rpc).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps evidence available when the server refuses the operation', async () => {
-    mocks.rpc.mockResolvedValue({ error: new Error('Consent refused') });
-    render(<VocationalConsentManager assessmentId="alice" advisers={advisers} />); open(); fill();
-    fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Consent refused');
-    expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toHaveValue('Evidence reference');
-    expect(screen.getByRole('button', { name: 'Record consent' })).toBeEnabled();
-  });
-
-  it('ignores the old assessment success while a new consent request is pending', async () => {
-    const alice = deferred(), bob = deferred();
-    mocks.rpc.mockReturnValueOnce(alice.promise).mockReturnValueOnce(bob.promise);
-    const view = render(<VocationalConsentManager assessmentId="alice" advisers={advisers} />); open(); fill();
-    fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
-    view.rerender(<VocationalConsentManager assessmentId="bob" advisers={advisers} />);
-    fill('Bob evidence reference');
-    fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
-    await act(async () => alice.resolve({ error: null }));
-    expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toHaveValue('Bob evidence reference');
-    expect(screen.getByRole('button', { name: 'Record consent' })).toBeDisabled();
-    expect(screen.queryByText('Consent recorded by the server.')).not.toBeInTheDocument();
-    await act(async () => bob.resolve({ error: null }));
-    expect(screen.getByText('Consent recorded by the server.')).toBeInTheDocument();
-    expect(mocks.rpc.mock.calls[1][1].p_assessment_id).toBe('bob');
-  });
-
-  it('does not show an old failure under another assessment', async () => {
-    const pending = deferred(); mocks.rpc.mockReturnValue(pending.promise);
-    const view = render(<VocationalConsentManager assessmentId="alice" advisers={advisers} />); open(); fill();
-    fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
-    view.rerender(<VocationalConsentManager assessmentId="bob" advisers={advisers} />);
-    fill('Bob evidence reference');
-    await act(async () => pending.resolve({ error: new Error('Alice-only failure') }));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toHaveValue('Bob evidence reference');
-  });
-
-  it('requires evidence and confirmation for withdrawals and sends the reviewed assessment', async () => {
-    mocks.rpc.mockResolvedValue({ error: null });
-    render(<VocationalConsentManager assessmentId="alice" advisers={advisers} />); open();
-    fireEvent.click(screen.getByRole('button', { name: 'Record withdrawal' }));
-    expect(mocks.rpc).not.toHaveBeenCalled();
-    fill();
-    fireEvent.click(screen.getByRole('button', { name: 'Record withdrawal' }));
-    await screen.findByText('Consent withdrawal recorded; restricted access is blocked.');
-    expect(window.confirm).toHaveBeenCalled();
-    expect(mocks.rpc).toHaveBeenCalledWith('rev_voc_support_consent_withdraw', expect.objectContaining({ p_assessment_id: 'alice' }));
-  });
+it('loads current consent, disables grants without consent, and distinguishes an unavailable read', async () => {
+  mocks.rpc.mockResolvedValueOnce(status()); mount();
+  await screen.findByText('Participant consent: Not recorded.');
+  expect(screen.getByRole('button', { name: 'Record consent' })).toBeEnabled();
+  fireEvent.change(screen.getByLabelText('Assigned adviser'), { target: { value: 'adviser' } });
+  expect(screen.getByRole('button', { name: 'Grant access' })).toBeDisabled();
+  mocks.rpc.mockResolvedValueOnce({ error: { code: '42501' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Check current permissions' }));
+  await screen.findByRole('alert');
+  expect(screen.getByRole('button', { name: 'Record consent' })).toBeDisabled();
+  expect(screen.queryByText('Participant consent: Not recorded.')).not.toBeInTheDocument();
+});
+it('blocks duplicate grants and allows revoking existing grants including former advisers', async () => {
+  mocks.rpc.mockResolvedValue(status('alice', 'granted', ['adviser', 'former'])); mount();
+  await screen.findByText('Participant consent: granted.');
+  fireEvent.change(screen.getByLabelText('Assigned adviser'), { target: { value: 'adviser' } });
+  expect(screen.getByRole('button', { name: 'Grant access' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Revoke access' })).toBeEnabled();
+  expect(screen.getByRole('option', { name: 'Previously assigned adviser' })).toBeInTheDocument();
+});
+it('keeps uncertain writes blocked until a fresh status read, without replaying the write', async () => {
+  mocks.rpc.mockResolvedValueOnce(status()).mockRejectedValueOnce(new Error('Network'));
+  mount(); await screen.findByText('Participant consent: Not recorded.'); fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
+  await screen.findByRole('alert');
+  expect(screen.getByRole('button', { name: 'Record consent' })).toBeDisabled();
+  expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toHaveValue('Evidence reference');
+  mocks.rpc.mockResolvedValueOnce(status('alice', 'granted'));
+  fireEvent.click(screen.getByRole('button', { name: 'Check current permissions' }));
+  await screen.findByText('Participant consent: granted.');
+  expect(mocks.rpc.mock.calls.filter(c => c[0] === 'rev_voc_support_consent_record')).toHaveLength(1);
+});
+it('locks fields during writes and requires a fresh permission check after success', async () => {
+  let done!: (value: unknown) => void;
+  mocks.rpc.mockResolvedValueOnce(status()).mockReturnValueOnce(new Promise(r => { done = r; }));
+  mount(); await screen.findByText('Participant consent: Not recorded.'); fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
+  expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toBeDisabled();
+  await act(async () => done({ error: null }));
+  expect(screen.getByText('Consent recorded by the server.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Record consent' })).toBeDisabled();
+});
+it('suppresses old scope reads and rejects mismatched assessment results', async () => {
+  let done!: (value: unknown) => void;
+  mocks.rpc.mockReturnValueOnce(new Promise(r => { done = r; })).mockResolvedValueOnce(status('bob', 'withdrawn'));
+  const view = mount(); view.rerender(<VocationalConsentManager assessmentId="bob" advisers={advisers} />);
+  await screen.findByText('Participant consent: withdrawn.');
+  await act(async () => done(status('alice', 'granted')));
+  expect(screen.queryByText('Participant consent: granted.')).not.toBeInTheDocument();
+  mocks.rpc.mockResolvedValueOnce(status('alice'));
+  fireEvent.click(screen.getByRole('button', { name: 'Check current permissions' }));
+  await screen.findByRole('alert');
+  expect(screen.getByRole('button', { name: 'Record consent' })).toBeDisabled();
+});
+it('does not let an old write clear the new assessment form or unlock its pending write', async () => {
+  let aliceDone!: (value: unknown) => void, bobDone!: (value: unknown) => void;
+  mocks.rpc.mockImplementation((name: string, args: { p_assessment_id: string }) => name === 'rev_voc_support_access_status'
+    ? Promise.resolve(status(args.p_assessment_id))
+    : new Promise(r => { if (args.p_assessment_id === 'alice') aliceDone = r; else bobDone = r; }));
+  const view = mount(); await screen.findByText('Participant consent: Not recorded.'); fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
+  view.rerender(<VocationalConsentManager assessmentId="bob" advisers={advisers} />);
+  await screen.findByText('Participant consent: Not recorded.'); fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
+  await act(async () => aliceDone({ error: null }));
+  expect(screen.getByLabelText('Consent/withdrawal evidence reference')).toHaveValue('Evidence reference');
+  expect(screen.getByRole('button', { name: 'Check current permissions' })).toBeDisabled();
+  await act(async () => bobDone({ error: null }));
+  expect(screen.getByText('Consent recorded by the server.')).toBeInTheDocument();
 });

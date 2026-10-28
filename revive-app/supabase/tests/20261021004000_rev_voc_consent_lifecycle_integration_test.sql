@@ -66,12 +66,20 @@ BEGIN
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  RAISE NOTICE 'PASS cross-workspace denied';
  PERFORM set_config('request.jwt.claim.sub',owner_a::text,true);
+ result:=public.rev_voc_support_access_status(ass);
+ IF result->>'consent' <> 'none' OR result->'grants' <> '[]'::jsonb THEN RAISE EXCEPTION 'FAIL initial status'; END IF;
  result:=public.rev_voc_support_consent_record(ass,'evidence-test-003','Participant provided informed consent recorded in test evidence');
  IF result->>'status' IS DISTINCT FROM 'granted' THEN RAISE EXCEPTION 'FAIL consent not granted: %',result; END IF;
  result:=public.rev_voc_restricted_access_set(ass,adviser_a,'grant','Vocational support for participant');
+ result:=public.rev_voc_support_access_status(ass);
+ IF result->>'assessment_id' <> ass::text OR result->>'consent' <> 'granted' OR NOT (result->'grants' @> jsonb_build_array(adviser_a)) OR (SELECT count(*) FROM jsonb_object_keys(result)) <> 3 THEN RAISE EXCEPTION 'FAIL status metadata'; END IF;
  RAISE NOTICE 'PASS owner recorded consent and granted adviser access';
  PERFORM set_config('request.jwt.claim.sub',adviser_a::text,true);
  IF NOT public.rev_voc_restricted_access_allowed(ass) THEN RAISE EXCEPTION 'FAIL assigned adviser denied despite grant'; END IF;
+ BEGIN
+ PERFORM public.rev_voc_support_access_status(ass);
+ RAISE EXCEPTION 'FAIL adviser read manager metadata';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  RAISE NOTICE 'PASS authorised adviser allowed';
  PERFORM set_config('request.jwt.claim.sub',owner_a::text,true);
  result:=public.rev_voc_restricted_access_set(ass,adviser_a,'revoke',NULL);
@@ -87,6 +95,14 @@ BEGIN
  IF result->>'status' IS DISTINCT FROM 'withdrawn' THEN RAISE EXCEPTION 'FAIL withdrawal: %',result; END IF;
  PERFORM set_config('request.jwt.claim.sub',adviser_a::text,true);
  IF public.rev_voc_restricted_access_allowed(ass) THEN RAISE EXCEPTION 'FAIL access after withdrawal'; END IF;
+ PERFORM set_config('request.jwt.claim.sub',owner_a::text,true);
+ result:=public.rev_voc_support_access_status(ass);
+ IF result->>'consent' <> 'withdrawn' THEN RAISE EXCEPTION 'FAIL withdrawn status'; END IF;
+ PERFORM set_config('request.jwt.claim.sub',owner_b::text,true);
+ BEGIN
+ PERFORM public.rev_voc_support_access_status(ass);
+ RAISE EXCEPTION 'FAIL cross workspace status';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  RAISE NOTICE 'PASS withdrawal immediately denies access';
 END $$;
 RESET ROLE;
