@@ -184,7 +184,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         <button type="button" className="btn-secondary" aria-expanded={showHelp} onClick={() => setShowHelp(v => !v)} aria-label="How vocational profiles work">Help</button>
       </div>
       {showHelp && <p className="rounded-lg bg-neutral-50 p-3 text-base text-neutral-800">This profile is linked to the service user shown above. Save answers as you go. Assigned Employment Specialists complete the profile; managers oversee progress. Access is controlled by the programme permissions.</p>}
-      <VocationalStatusPanel workspaceId={workspaceId} programmeId={programmeId} participantId={participantId} refresh={refreshStatus} />
+      {assessment && !loading && <VocationalStatusPanel key={`${selected}:${assessment.assessmentId}`} workspaceId={workspaceId} programmeId={programmeId} participantId={participantId} assessmentId={assessment.assessmentId} refresh={refreshStatus} />}
       {error && <p role="alert" className="text-base text-red-700">{error}</p>}
       {notice && <p role="status" className="text-base text-green-700">{notice}</p>}
       {loading && <p role="status" className="text-base">Loading profile...</p>}
@@ -217,7 +217,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
             catch { setNotice('Copy unavailable. Tell your programme manager that the published questionnaire needs core employment questions.'); }
           }}>Copy setup request for manager</button>}
         </div>}
-        {sections.length === 1 && <p className="text-base text-amber-800">Only one section is available in this published version. The newer draft questionnaire must be reviewed and published separately.</p>}
+        {sections.length > 0 && <p className="text-base text-neutral-700">Selected published version: {snapshot?.version}. {allQuestions.length} core {allQuestions.length === 1 ? 'question' : 'questions'} across {sections.length} {sections.length === 1 ? 'section' : 'sections'}. Draft changes are not included.</p>}
         {dirty && <p className="text-base font-medium text-amber-800">Unsaved changes</p>}
         <div className="space-y-2">{sections.map((section) => {
           const expanded = expandedSection === section.id;
