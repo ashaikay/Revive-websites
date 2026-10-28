@@ -68,7 +68,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         if (!active) return;
         const values = (data ?? []).filter((v) => Array.isArray(v.sections)) as Snapshot[];
         setSnapshots(values);
-        setSelected((prev) => values.some((v) => v.id === prev) ? prev : values[0]?.id ?? '');
+        setSelected(values[0]?.id ?? '');
       } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : 'Unable to load questionnaires.'); }
       finally { if (active) setLoading(false); }
     }
@@ -174,7 +174,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="text-lg font-semibold text-neutral-900">Vocational profile</h3>
         <p className="text-base text-neutral-700">{participantName || 'Service user'}{caseReference ? ` · ${caseReference}` : ''}</p></div>
-      <button type="button" className="btn-secondary" disabled={saving || completing} aria-expanded={open} onClick={() => { if (open && dirty && !window.confirm('Discard unsaved answers?')) return; setOpen(!open); }}>
+      <button type="button" className="btn-secondary" disabled={saving || completing} aria-expanded={open} onClick={() => { if (open && dirty && !window.confirm('Discard unsaved answers?')) return; if (open) { setSelected(''); setSnapshots([]); setAssessment(null); setAnswers({}); setDirty(false); setExpandedSection(null); setShowMissing(false); } setOpen(!open); }}>
         {open ? 'Close profile' : 'Open profile'}
       </button>
     </div>
@@ -188,9 +188,10 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       {error && <p role="alert" className="text-base text-red-700">{error}</p>}
       {notice && <p role="status" className="text-base text-green-700">{notice}</p>}
       {loading && <p role="status" className="text-base">Loading profile...</p>}
-      {!loading && !error && snapshots.length === 0 && <p className="text-base">No published questionnaire is available for this programme.</p>}
-      {snapshots.length > 0 && <details className="rounded-lg border border-neutral-200 p-3">
-        <summary className="cursor-pointer text-base font-medium">Questionnaire version</summary>
+      {!loading && !error && snapshots.length === 0 && <p className="text-base">Your manager has not made a questionnaire available for this programme yet.</p>}
+      {snapshots.length > 1 && <details className="rounded-lg border border-neutral-200 p-3">
+        <summary className="cursor-pointer text-base font-medium">Earlier questionnaires and saved answers</summary>
+        <p className="mt-2 text-sm">The current questionnaire opens automatically. Earlier answers stay with the questionnaire used to record them; they are not copied into new questions.</p>
         <select aria-label="Published questionnaire version" className="mt-2 w-full rounded border border-neutral-300 p-2 text-base" value={selected} disabled={loading || saving || completing} onChange={(e) => { if (dirty && !window.confirm('Discard unsaved answers and switch questionnaire?')) return; setSelected(e.target.value); setExpandedSection(null); }}>
           {snapshots.map((v) => <option key={v.id} value={v.id}>{v.title} · version {v.version}</option>)}
         </select>
@@ -211,13 +212,13 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
           <p className="mt-1 text-base text-neutral-700">This programme has a separate criminal justice or resettlement support section. It is excluded from core profile progress and ordinary matching. Participants do not need to disclose convictions or other sensitive information to complete their core vocational profile. Sensitive support must use a separately authorised, consented workflow; it is not collected on this screen.</p>
         </div>}
         {sections.length === 0 && <div role="status" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-base text-amber-900">
-          <p>This published questionnaire has no core employment questions. Its optional support questions do not form a complete vocational profile. A manager needs to publish a reviewed revision with core questions.</p>
+          <p>This published questionnaire has no core employment questions. Its optional support questions do not form a complete vocational profile. Ask your manager to edit the programme questionnaire and choose Save and make available.</p>
           {isManager && onReviewQuestionnaire ? <button type="button" className="btn-secondary" onClick={onReviewQuestionnaire}>Review programme questionnaire</button> : <button type="button" className="btn-secondary" onClick={async () => {
-            try { await navigator.clipboard.writeText('Please review the vocational questionnaire for my programme. The published version has no core employment questions. Create a draft revision, add core questions, save and publish it.'); setNotice('Setup request copied. Send it to your programme manager. No notification has been sent automatically.'); }
+            try { await navigator.clipboard.writeText('Please review the vocational questionnaire for my programme. The published version has no core employment questions. Choose Edit questionnaire, review the employment questions, then Save and make available.'); setNotice('Setup request copied. Send it to your programme manager. No notification has been sent automatically.'); }
             catch { setNotice('Copy unavailable. Tell your programme manager that the published questionnaire needs core employment questions.'); }
           }}>Copy setup request for manager</button>}
         </div>}
-        {sections.length > 0 && <p className="text-base text-neutral-700">Selected published version: {snapshot?.version}. {allQuestions.length} core {allQuestions.length === 1 ? 'question' : 'questions'} across {sections.length} {sections.length === 1 ? 'section' : 'sections'}. Draft changes are not included.</p>}
+        {sections.length > 0 && <p className="text-base text-neutral-700">{snapshot?.id === snapshots[0]?.id ? 'Current questionnaire' : 'Earlier questionnaire'}: {allQuestions.length} core {allQuestions.length === 1 ? 'question' : 'questions'} across {sections.length} {sections.length === 1 ? 'section' : 'sections'}. Draft changes are not included.</p>}
         {dirty && <p className="text-base font-medium text-amber-800">Unsaved changes</p>}
         <div className="space-y-2">{sections.map((section) => {
           const expanded = expandedSection === section.id;

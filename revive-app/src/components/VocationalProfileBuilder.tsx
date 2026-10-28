@@ -51,6 +51,9 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
+  const [availabilityUncertain, setAvailabilityUncertain] = useState(false);
+  const availabilityLock = useRef(false);
   const [recoveryBlocked, setRecoveryBlocked] = useState(false);
   const [pending, setPending] = useState<{ requestId: string; templateId: string | null; expectedVersion: number; title: string; description: string; sections: VocationalProfileTemplate['sections'] } | null>(null);
   const scope = `${workspaceId}:${programmeId ?? 'organisation'}:${userId}`;
@@ -70,10 +73,10 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   if (currentScope.current !== scope) {
     currentScope.current = scope;
     generation.current++;
-    saveLock.current = false;
+    saveLock.current = false; availabilityLock.current = false;
   }
 
-  const load = async (confirmReload = false) => {
+  const load = async (confirmReload = false, targetId?: string) => {
     const seq = ++generation.current;
     setLoading(true);
     setError(''); setMessage('');
@@ -83,10 +86,12 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         .select('id,workspace_id,programme_id,title,description,status,version,sections,created_at,updated_at,published_at,created_by_user_id')
         .eq('workspace_id', workspaceId);
       query = programmeId ? query.eq('programme_id', programmeId) : query.is('programme_id', null);
+      if (targetId) query = query.eq('id', targetId);
       const { data, error: readError } = await query.order('updated_at', { ascending: false }).limit(1);
       if (readError) throw readError;
       if (seq !== generation.current) return;
       const row = data?.[0];
+      if (targetId && (!row || row.id !== targetId)) throw Error('Questionnaire availability could not be verified. Try Check availability again.');
       if (row) {
         const loaded: VocationalProfileTemplate = {
           id: row.id, workspaceId, programmeId: row.programme_id,
@@ -100,7 +105,8 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         setPreview(loaded.status === 'published');
       } else { savedId.current = null; setTemplate(null); setActiveId(''); }
       setDirty(false);
-      if (confirmReload) setMessage('Saved questionnaire reloaded.');
+      setAvailabilityUncertain(false);
+      if (confirmReload) setMessage(row?.status === 'published' ? 'Questionnaire is available to assigned staff.' : 'Saved questionnaire loaded. Review it, then choose Save and make available.');
     } catch (cause) {
       if (seq === generation.current) setError(cause instanceof Error ? cause.message : 'Unable to load templates.');
     } finally { if (seq === generation.current) setLoading(false); }
@@ -109,6 +115,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   useEffect(() => {
     let valid = true;
     setPending(null); setBusy(false); setMessage(''); setDirty(false); setRecoveryBlocked(false);
+    setAvailabilityBusy(false); setAvailabilityUncertain(false); availabilityLock.current = false;
     setTemplate(null); savedId.current = null; setActiveId(''); setPreview(false);
     setNewSection(''); setQuestionLabel(''); setOptionsText('');
     setQuestionType('short_text'); setRequired(false); setStandardField('');
@@ -125,15 +132,15 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   }, [scope]);
 
   const save = async (retry = false) => {
-    if (!supabaseClient || saveLock.current || recoveryBlocked || loading || (!retry && !template)) return;
+    if (!supabaseClient || saveLock.current || recoveryBlocked || loading || (!retry && (!template || pending))) return null;
     const problems = template ? validateVocationalTemplate(template) : [];
-    if (!retry && problems.length) { setError(problems.join(' ')); return; }
+    if (!retry && problems.length) { setError(problems.join(' ')); return null; }
     const attempt = retry ? pending : template ? {
       requestId: crypto.randomUUID(), templateId: savedId.current,
       expectedVersion: savedId.current ? template.version : 0,
       title: template.title.trim(), description: template.description ?? '', sections: template.sections,
     } : null;
-    if (!attempt) return;
+    if (!attempt) return null;
     const seq = generation.current;
     try {
       saveLock.current = true; setBusy(true); setError(''); setMessage('');
@@ -144,19 +151,20 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         target_programme_id: programmeId, target_title: attempt.title,
         target_description: attempt.description, target_sections: attempt.sections,
       });
-      if (seq !== generation.current) return;
+      if (seq !== generation.current) return null;
       if (rpcError) throw rpcError;
       if (!data || typeof data.id !== 'string' || data.status !== 'draft' || Number(data.version) !== (attempt.templateId ? attempt.expectedVersion + 1 : 1)) throw Error('Unexpected save response.');
       window.sessionStorage.removeItem(pendingKey);
       setPending(null); savedId.current = data.id;
       setTemplate(current => current ? { ...current, id: data.id, version: Number(data.version), updatedAt: new Date().toISOString() } : current);
       setDirty(false); setMessage('Draft saved.');
-    } catch { if (seq === generation.current) setError('Save not confirmed. Retry the same save before making further changes.'); }
+      return { id: data.id as string, version: Number(data.version) };
+    } catch { if (seq === generation.current) setError('Save not confirmed. Retry the same save before making further changes.'); return null; }
     finally { if (seq === generation.current) { saveLock.current = false; setBusy(false); } }
   };
 
   const publish = async () => {
-    if (!template || !savedId.current || dirty || pending || busy || saveLock.current || recoveryBlocked || !supabaseClient) return;
+    if (!template || !savedId.current || dirty || pending || busy || availabilityUncertain || availabilityLock.current || saveLock.current || recoveryBlocked || !supabaseClient) return;
     if (coreVocationalQuestionCount(template.sections) === 0) { setError('Add core employment questions before publishing. Optional support questions do not count towards the core profile.'); return; }
     if (!window.confirm('Publish this questionnaire? The published version cannot be edited.')) return;
     const seq = generation.current;
@@ -171,12 +179,11 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
       if (!data || data.status !== 'published' || data.id !== savedId.current) throw Error('Publication not confirmed.');
       setTemplate(current => current ? { ...current, status: 'published' } : current);
       setPreview(true); setMessage('Template published.');
-    } catch { if (seq === generation.current) setError('Publication not confirmed. Refresh and verify the template status before retrying.'); }
+    } catch { if (seq === generation.current) { setAvailabilityUncertain(true); setError('Publication not confirmed. Choose Check availability before making further changes.'); } }
     finally { if (seq === generation.current) { saveLock.current = false; setBusy(false); } }
   };
   const createRevision = async () => {
-    if (!template || template.status !== 'published' || busy || saveLock.current || pending || recoveryBlocked || !supabaseClient || !savedId.current) return;
-    if (!window.confirm('Create an editable draft from this published questionnaire? The published version will remain available.')) return;
+    if (!template || template.status !== 'published' || busy || availabilityUncertain || availabilityLock.current || saveLock.current || pending || recoveryBlocked || !supabaseClient || !savedId.current) return;
     const seq = generation.current;
     saveLock.current = true; setBusy(true); setError(''); setMessage('');
     try {
@@ -191,19 +198,48 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         throw Error('Unexpected revision response.');
       }
       savedId.current = data.id;
-      setTemplate(current => current ? { ...current, id: data.id, version: Number(data.version), status: 'draft', publishedAt: undefined } : current);
-      setPreview(false); setDirty(false);
-      setMessage('Editable draft created. Published version retained.');
+      const draft: VocationalProfileTemplate = { ...template, id: data.id, version: Number(data.version), status: 'draft', publishedAt: undefined };
+      const needsCore = coreVocationalQuestionCount(draft.sections) === 0;
+      const editable = needsCore ? addCoreVocationalQuestions(draft) : draft;
+      setTemplate(editable); setActiveId(editable.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? editable.sections[0]?.id ?? '');
+      setPreview(false); setDirty(needsCore);
+      setMessage(needsCore ? 'Ready to edit. Suggested employment questions have been added for your review. Staff keep using the current questionnaire until you save and make these changes available.' : 'Ready to edit. Staff keep using the current questionnaire until you save and make your changes available.');
     } catch (cause) {
       if (seq === generation.current) setError(cause instanceof Error ? cause.message : 'Revision not confirmed. Reload before trying again.');
     } finally { if (seq === generation.current) { saveLock.current = false; setBusy(false); } }
+  };
+
+  const makeAvailable = async () => {
+    if (!template || template.status !== 'draft' || pending || busy || availabilityLock.current || saveLock.current || recoveryBlocked || availabilityUncertain || !supabaseClient) return;
+    if (!coreVocationalQuestionCount(template.sections)) { setError('Add suggested employment questions before making this questionnaire available.'); return; }
+    const problems = validateVocationalTemplate(template);
+    if (problems.length) { setError(problems.join(' ')); return; }
+    const seq = generation.current;
+    availabilityLock.current = true; setAvailabilityBusy(true); setError(''); setMessage('');
+    try {
+      const saved = dirty || !savedId.current ? await save() : {id: savedId.current, version: template.version};
+      if (!saved || seq !== generation.current) return;
+      saveLock.current = true; setBusy(true); setMessage('');
+      const {data, error: rpcError} = await supabaseClient.rpc('publish_rev_vocational_template', {
+        target_workspace_id: workspaceId, target_template_id: saved.id, expected_version: saved.version,
+      });
+      if (seq !== generation.current) return;
+      if (rpcError || !data || data.id !== saved.id || data.status !== 'published') throw Error('Availability not confirmed');
+      setTemplate(current => current?.id === saved.id ? {...current, status: 'published'} : current);
+      setPreview(true); setAvailabilityUncertain(false);
+      setMessage('Questionnaire is now available to assigned staff. Existing saved answers are unchanged.');
+    } catch {
+      if (seq === generation.current) { setAvailabilityUncertain(true); setError('Your questions were saved, but availability is not confirmed. Choose Check availability before making more changes.'); }
+    } finally {
+      if (seq === generation.current) { availabilityLock.current = false; saveLock.current = false; setAvailabilityBusy(false); setBusy(false); }
+    }
   };
 
   const savedId = useRef<string | null>(null);
 
 
   function update(operation: (current: VocationalProfileTemplate) => VocationalProfileTemplate): boolean {
-    if (!template || template.status !== 'draft' || busy || pending || recoveryBlocked) return false;
+    if (!template || template.status !== 'draft' || busy || availabilityLock.current || availabilityUncertain || pending || recoveryBlocked) return false;
     try {
       setTemplate(operation(template)); setDirty(true); setMessage('');
       setError('');
@@ -285,9 +321,9 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   if (loading) return <p role="status">Loading vocational templates...</p>;
   if (!template) return (
     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="text-xl font-semibold">Vocational Profile Templates</h2>
-      <p className="text-sm text-slate-600">Create a programme-specific vocational assessment with your own sections and questions.</p>
-      <p className="text-sm text-slate-600">Templates are saved to your programme workspace.</p>
+      <h2 className="text-xl font-semibold">Programme questionnaire</h2>
+      <p className="text-sm text-slate-600">Choose the employment questions for this programme. Starter questions are ready for you to review.</p>
+      <p className="text-sm text-slate-600">Assigned staff can use the questionnaire in their Service-user profiles once you make it available.</p>
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {recoveryWarning}
       {pending && <button className={button} disabled={busy} onClick={() => void save(true)}>Retry pending save</button>}
@@ -299,7 +335,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
           setActiveId(created.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? created.sections[0]?.id ?? '');
           setError('');
         } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to create template'); }
-      }}>Create vocational template</button>
+      }}>Set up questionnaire</button>
     </div>
   );
 
@@ -311,24 +347,30 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   return (
     <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h2 className="text-xl font-semibold">Vocational Profile Builder</h2><p className="text-sm text-slate-600">{template.programmeId ? 'Programme-specific' : 'Organisation-wide'} - Version {template.version}</p></div>
-        <button type="button" className={button} disabled={template.status === 'published'} onClick={() => setPreview(p => !p)}>{template.status === 'published' ? 'Published (read-only)' : preview ? 'Back to editor' : 'Preview participant form'}</button>
+        <div><h2 className="text-xl font-semibold">Programme questionnaire</h2><p className="text-sm text-slate-600">The questions assigned Employment Specialists use with their Service users.</p></div>
+        <button type="button" className={button} disabled={availabilityBusy || availabilityUncertain || template.status === 'published'} onClick={() => setPreview(p => !p)}>{template.status === 'published' ? 'Available to staff' : preview ? 'Back to editor' : 'Preview participant form'}</button>
       </div>
       <div className="flex flex-wrap gap-2">
-        {template.status === 'published' && <button type="button" className={button} disabled={busy || Boolean(pending) || recoveryBlocked} onClick={() => void createRevision()}>Create editable draft version</button>}
-        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || !dirty} onClick={() => void save()}>{busy ? 'Working...' : 'Save draft'}</button>
-        <button type="button" className={button} disabled={busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || dirty || !savedId.current || coreQuestions === 0 || errors.length > 0} onClick={() => void publish()}>Publish template</button>
-        <button type="button" className={button} disabled={busy || Boolean(pending) || dirty} onClick={() => void load(true)}>Reload saved template</button>
+        {template.status === 'published' && <button type="button" className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white" disabled={busy || Boolean(pending) || recoveryBlocked} onClick={() => void createRevision()}>Edit questionnaire</button>}
+        {template.status === 'draft' && !availabilityUncertain && <button type="button" className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white" disabled={availabilityBusy || busy || Boolean(pending) || recoveryBlocked || coreQuestions === 0 || errors.length > 0} onClick={() => void makeAvailable()}>{availabilityBusy ? 'Saving and making available...' : 'Save and make available'}</button>}
+        {availabilityUncertain && <button type="button" className={button} disabled={busy || availabilityBusy} onClick={() => void load(true, savedId.current ?? undefined)}>Check availability</button>}
       </div>
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-        {template.status === 'published' ? <p>This questionnaire is published and read-only. Use Create editable draft version to revise it, or Create another questionnaire for a separate form. Existing published versions and participant answers remain available.</p> : <p>Review the core questions, save the draft, then publish it so assigned Employment Specialists can complete it. Optional support questions are separate from core profile progress.</p>}
-        <button type="button" className={`${button} mt-2`} disabled={busy || Boolean(pending) || recoveryBlocked} onClick={() => {
-          if (busy || pending || recoveryBlocked || saveLock.current) return;
+      <details className="rounded-lg border border-slate-200 p-3">
+        <summary className="cursor-pointer font-medium">More options</summary>
+        <button type="button" className={button} disabled={availabilityBusy || availabilityUncertain || busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || !dirty} onClick={() => void save()}>{busy ? 'Working...' : 'Save draft'}</button>
+        <button type="button" className={button} disabled={availabilityBusy || availabilityUncertain || busy || template.status !== 'draft' || Boolean(pending) || recoveryBlocked || dirty || !savedId.current || coreQuestions === 0 || errors.length > 0} onClick={() => void publish()}>Publish template</button>
+        <button type="button" className={button} disabled={availabilityBusy || busy || Boolean(pending) || dirty} onClick={() => void load(true)}>Reload saved template</button>
+        <button type="button" className={`${button} mt-2`} disabled={availabilityBusy || availabilityUncertain || busy || Boolean(pending) || recoveryBlocked} onClick={() => {
+          if (busy || pending || recoveryBlocked || saveLock.current || availabilityLock.current || availabilityUncertain) return;
           if (!window.confirm(dirty ? 'Discard unsaved edits and create a separate questionnaire? Saved questionnaires and answers remain unchanged.' : 'Create a separate questionnaire? Existing published questionnaires and answers remain available.')) return;
           const created = createVocationalTemplate(workspaceId, userId, programmeId);
           savedId.current = null; setTemplate(created); setActiveId(created.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? created.sections[0]?.id ?? '');
-          setPreview(false); setDirty(true); setError(''); setMessage('New questionnaire draft created. Review the starter questions and save it before publishing.');
+          setPreview(false); setDirty(true); setError(''); setMessage('New questionnaire ready to edit. Choose Save and make available when ready.');
         }}>Create another questionnaire</button>
+      </details>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+        {template.status === 'published' ? <p>Staff can use this questionnaire. Choose Edit questionnaire to change the questions. More options lets you start a separate questionnaire. Existing published versions and participant answers remain available.</p> : <p>Review your questions, then choose Save and make available. REV takes care of saving and making the changes available to assigned Employment Specialists. Optional support questions are separate from core profile progress.</p>}
+
       </div>
       <div ref={feedback} tabIndex={-1} className="sticky top-4 z-10 rounded-lg bg-white focus:outline-none" aria-label="Questionnaire action feedback" aria-live="polite">
         {busy && <p role="status" className="rounded-lg border p-3 text-sm">Working on your questionnaire. Please wait for confirmation.</p>}
@@ -343,19 +385,19 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Sections</div><div className="text-xl font-semibold">{template.sections.length}</div></div>
         <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Questions</div><div className="text-xl font-semibold">{totalQuestions}</div></div>
         <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Core questions</div><div className="text-xl font-semibold">{coreQuestions}</div></div>
-        <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Status</div><div className="text-sm font-semibold">{template.status}{dirty ? ' - Unsaved changes' : ''}</div></div>
+        <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">Status</div><div className="text-sm font-semibold">{template.status === 'published' ? 'Available to staff' : dirty ? 'Unsaved changes' : 'Not yet available to staff'}</div></div>
       </div>
-      <label className="block space-y-1 text-sm font-medium">Template title
-        <input className={field} value={template.title} disabled={template.status === 'published' || busy || Boolean(pending) || recoveryBlocked} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
+      <label className="block space-y-1 text-sm font-medium">Questionnaire name
+        <input className={field} value={template.title} disabled={availabilityBusy || availabilityUncertain || template.status === 'published' || busy || Boolean(pending) || recoveryBlocked} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
       </label>
-      {coreQuestions === 0 && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This questionnaire has no core employment questions. Employment Specialists cannot complete a core profile from it. {template.status === 'published' ? 'Create an editable draft version, add core employment questions, save and publish the revision.' : 'Add core employment questions before publishing. Optional or restricted support questions do not count as core questions.'}</p>}
+      {coreQuestions === 0 && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This questionnaire has no core employment questions. Employment Specialists cannot complete a core profile from it. {template.status === 'published' ? 'Choose Edit questionnaire to review suggested questions, then Save and make available.' : 'Add core employment questions before publishing. Optional or restricted support questions do not count as core questions.'}</p>}
       {errors.length > 0 && <div role="status" className="text-sm text-amber-700">{errors.slice(0, 3).map((message, i) => <p key={i}>{message}</p>)}</div>}
       {preview || template.status === 'published' ? (
         <div className="space-y-4"><h3 className="text-lg font-semibold">{template.title || 'Untitled profile'} - Participant preview</h3><p className="text-sm text-slate-500">Preview only. Answers are not recorded.</p>
           {template.sections.map(s => <section className="space-y-3 rounded-lg border border-slate-200 p-4" key={s.id}><h4 className="font-semibold">{s.title}</h4>{s.questions.length === 0 && <p className="text-sm text-slate-500">No questions in this section.</p>}{s.questions.map(q => <PreviewQuestion key={q.id} question={q} />)}</section>)}
         </div>
       ) : (
-        <fieldset disabled={busy || Boolean(pending) || recoveryBlocked} className="grid gap-5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)]">
+        <fieldset disabled={availabilityBusy || availabilityUncertain || busy || Boolean(pending) || recoveryBlocked} className="grid gap-5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)]">
           <aside className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Profile sections</h3>
             <div className="space-y-1">{template.sections.map((s, index) => (
@@ -368,11 +410,11 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
                   const next = addCoreVocationalQuestions(template);
                   if (update(() => next)) {
                     setActiveId(next.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? activeId);
-                    setMessage(coreVocationalQuestionCount(next.sections) > before ? 'Core employment questions added. Review and save the draft before publishing.' : 'Core starter questions are already present.');
+                    setMessage(coreVocationalQuestionCount(next.sections) > before ? 'Suggested employment questions added. Review them, then choose Save and make available.' : 'Core starter questions are already present.');
                   }
-                }}>Add core employment questions</button>
-                <button type="button" className={button} disabled={busy || Boolean(pending)} onClick={addResettlementPreset}>Add optional resettlement support section</button>
-                <button type="button" className={button} disabled={busy || Boolean(pending)} onClick={addConvictionSentencingPreset}>Add restricted conviction and sentencing section</button>
+                }}>Add suggested questions</button>
+                <button type="button" className={button} disabled={availabilityBusy || availabilityUncertain || busy || Boolean(pending)} onClick={addResettlementPreset}>Add optional resettlement support section</button>
+                <button type="button" className={button} disabled={availabilityBusy || availabilityUncertain || busy || Boolean(pending)} onClick={addConvictionSentencingPreset}>Add restricted conviction and sentencing section</button>
                 <p className="text-xs text-slate-600">Support needs only. Do not enter convictions, sentence details, licence conditions, or other criminal-offence information here. Restricted records require a separate authorised workflow.</p>
               </div>
             )}
@@ -383,7 +425,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
                 if (!update(() => next)) return;
                 setActiveId(next.sections[next.sections.length - 1].id);
                 setNewSection('');
-                setError(''); setMessage('Section added to the draft. Add its questions, then save.');
+                setError(''); setMessage('Section added. Add its questions, then choose Save and make available.');
               } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to add section'); }
             }}>+ Add section</button></div>
           </aside>
@@ -419,7 +461,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
                   if (update(t => {
                     const added = addVocationalQuestion(t, selected.id, questionLabel, questionType, optionsText.split(/\r?\n/));
                     return { ...added, sections: added.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map((q, i) => i === s.questions.length - 1 ? { ...q, required, standardField: standardField && !isRestrictedVocationalQuestion(s.title, q) ? standardField : undefined } : q) } : s) };
-                  })) { setQuestionLabel(''); setOptionsText(''); setRequired(false); setStandardField(''); setMessage('Question added to the draft. Save before publishing.'); }
+                  })) { setQuestionLabel(''); setOptionsText(''); setRequired(false); setStandardField(''); setMessage('Question added. Choose Save and make available when ready.'); }
                 }}>+ Add question</button>
               </div>
             </>}

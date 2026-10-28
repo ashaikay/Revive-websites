@@ -27,8 +27,9 @@ late-response state changes, lost edits during saves, retained-request recovery,
 invalid opportunity evidence, and spreadsheet formula handling in CSV exports.
 
 Vitest and Node boundary suites now use their intended runners. CI builds both
-mock and Supabase frontends. Local verification passed 853 Vitest tests, 541 Node
-tests, and both frontend builds. Earlier isolated database verification applied
+mock and Supabase frontends. Latest local verification passed 876 Vitest tests and 548 Node
+tests. The Supabase frontend build passed; see the dated review reports for
+workflow validation and earlier build evidence. Earlier isolated database verification applied
 all 73 project migrations and passed 21 integration suites. The reminder provider
 execution constant remains false; no live integration was enabled by this work.
 
@@ -287,3 +288,14 @@ bindings to expose other possible competing listeners. Shell syntax and diff
 checks passed. GitHub execution of the revised workflow remains to be verified;
 this is a targeted mitigation for ephemeral allocation, not proof of the prior
 socket's owner. No cloud host sysctl setting was changed during verification.
+
+### Simpler questionnaire workflow on 28 October
+
+The new normal manager workflow is Edit questionnaire > Save and make available.
+Version copies, validated save acknowledgements and publication remain behind
+that interface. More options retains separate administrative actions. Staff
+profiles default to the newest questionnaire on opening while earlier saved
+answers remain available in history. No answer migration or automatic completion.
+See ../04_TESTING/SIMPLE_QUESTIONNAIRE_WORKFLOW_20261028.md for failure handling
+and all 1,424 passing local tests. The updated PR preview and exact-head hosted
+CI must still be verified before merging the production branch.
