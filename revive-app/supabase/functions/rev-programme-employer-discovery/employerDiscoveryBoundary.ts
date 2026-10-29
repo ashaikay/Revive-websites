@@ -49,14 +49,15 @@ const publicClaim = (claim: Claim) => ({
 export async function handleEmployerDiscovery(request: Request, dependencies: EmployerDiscoveryDependencies): Promise<Response> {
   const configuredOrigin = dependencies.allowedOrigin ?? 'http://localhost:5180';
   const origin = request.headers.get('Origin');
+  const allowed = !!origin && configuredOrigin.split(',').map(value => value.trim()).filter(Boolean).includes(origin);
   const headers = {
-    'Access-Control-Allow-Origin': origin === configuredOrigin ? origin : configuredOrigin,
+    ...(allowed ? { 'Access-Control-Allow-Origin': origin! } : {}),
     Vary: 'Origin',
     'Cache-Control': 'no-store',
     'Content-Type': 'application/json',
   };
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers });
-  if (origin !== configuredOrigin) return reply(403, { error: 'Origin unavailable.' });
+  if (!allowed) return reply(403, { error: 'Origin unavailable.' });
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info' } });
   if (request.method !== 'POST') return reply(405, { error: 'Method not allowed.' });
   const authorization = request.headers.get('Authorization') ?? '';

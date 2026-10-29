@@ -1,3 +1,4 @@
+import { programmeHubAllowedOrigins } from '../rev-programme-hub-save/programmeHubOrigins.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { discoverCompaniesHouseEmployers } from './companiesHouseEmployerDiscovery.ts';
 import { handleEmployerDiscovery } from './employerDiscoveryBoundary.ts';
@@ -22,7 +23,7 @@ const claim = (value: Record<string, unknown>) => ({
 });
 
 Deno.serve((request) => handleEmployerDiscovery(request, {
-  allowedOrigin: Deno.env.get('REV_CALENDAR_OAUTH_ALLOWED_ORIGIN'),
+  allowedOrigin: programmeHubAllowedOrigins((name) => Deno.env.get(name)),
   providerConfigured: enabled && Boolean(apiKey),
   getUserId: async (authorization) => {
     const { data, error } = await caller(authorization).auth.getUser();
