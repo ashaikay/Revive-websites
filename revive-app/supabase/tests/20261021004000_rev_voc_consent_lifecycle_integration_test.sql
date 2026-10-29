@@ -34,6 +34,15 @@ INSERT INTO public.programme_hub_vocational_template_versions(id,workspace_id,te
 VALUES ((SELECT id FROM rev_voc_test_ids WHERE key='template_version_a'),(SELECT id FROM rev_voc_test_ids WHERE key='workspace_a'),(SELECT id FROM rev_voc_test_ids WHERE key='template_a'),1,'Test vocational template','[]'::jsonb,(SELECT id FROM rev_voc_test_ids WHERE key='owner_a'));
 INSERT INTO public.programme_hub_vocational_assessments(id,workspace_id,programme_id,participant_id,template_version_id,created_by_user_id,updated_by_user_id)
 VALUES ((SELECT id FROM rev_voc_test_ids WHERE key='assessment_a'),(SELECT id FROM rev_voc_test_ids WHERE key='workspace_a'),(SELECT id FROM rev_voc_test_ids WHERE key='programme_a'),(SELECT id FROM rev_voc_test_ids WHERE key='participant_a'),(SELECT id FROM rev_voc_test_ids WHERE key='template_version_a'),(SELECT id FROM rev_voc_test_ids WHERE key='owner_a'),(SELECT id FROM rev_voc_test_ids WHERE key='owner_a'));
+INSERT INTO rev_voc_test_ids(key,id) VALUES ('second_version',gen_random_uuid()),('second_assessment',gen_random_uuid());
+UPDATE public.programme_hub_vocational_templates SET version=2 WHERE id=(SELECT id FROM rev_voc_test_ids WHERE key='template_a');
+INSERT INTO public.programme_hub_vocational_template_versions(id,workspace_id,template_id,version,title,sections,published_by_user_id)
+SELECT (SELECT id FROM rev_voc_test_ids WHERE key='second_version'),workspace_id,template_id,2,title,sections,published_by_user_id
+FROM public.programme_hub_vocational_template_versions WHERE id=(SELECT id FROM rev_voc_test_ids WHERE key='template_version_a');
+INSERT INTO public.programme_hub_vocational_assessments(id,workspace_id,programme_id,participant_id,template_version_id,created_by_user_id,updated_by_user_id)
+SELECT (SELECT id FROM rev_voc_test_ids WHERE key='second_assessment'),workspace_id,programme_id,participant_id,
+(SELECT id FROM rev_voc_test_ids WHERE key='second_version'),created_by_user_id,updated_by_user_id
+FROM public.programme_hub_vocational_assessments WHERE id=(SELECT id FROM rev_voc_test_ids WHERE key='assessment_a');
 GRANT SELECT ON rev_voc_test_ids TO authenticated;
 SET LOCAL ROLE authenticated;
 DO $$
@@ -66,6 +75,12 @@ BEGIN
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  RAISE NOTICE 'PASS cross-workspace denied';
  PERFORM set_config('request.jwt.claim.sub',owner_a::text,true);
+ result:=public.rev_voc_assessment_selected_status((SELECT id FROM rev_voc_test_ids WHERE key='workspace_a'),(SELECT id FROM rev_voc_test_ids WHERE key='programme_a'),(SELECT id FROM rev_voc_test_ids WHERE key='participant_a'),ass);
+ IF result->>'assessmentId' <> ass::text THEN RAISE EXCEPTION 'FAIL selected assessment replaced by newer snapshot'; END IF;
+ BEGIN
+ PERFORM public.rev_voc_assessment_selected_status((SELECT id FROM rev_voc_test_ids WHERE key='workspace_a'),(SELECT id FROM rev_voc_test_ids WHERE key='programme_b'),(SELECT id FROM rev_voc_test_ids WHERE key='participant_a'),ass);
+ RAISE EXCEPTION 'FAIL foreign programme selected status';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  result:=public.rev_voc_support_access_status(ass);
  IF result->>'consent' <> 'none' OR result->'grants' <> '[]'::jsonb THEN RAISE EXCEPTION 'FAIL initial status'; END IF;
  result:=public.rev_voc_support_consent_record(ass,'evidence-test-003','Participant provided informed consent recorded in test evidence');
@@ -75,6 +90,8 @@ BEGIN
  IF result->>'assessment_id' <> ass::text OR result->>'consent' <> 'granted' OR NOT (result->'grants' @> jsonb_build_array(adviser_a)) OR (SELECT count(*) FROM jsonb_object_keys(result)) <> 3 THEN RAISE EXCEPTION 'FAIL status metadata'; END IF;
  RAISE NOTICE 'PASS owner recorded consent and granted adviser access';
  PERFORM set_config('request.jwt.claim.sub',adviser_a::text,true);
+ result:=public.rev_voc_assessment_selected_status((SELECT id FROM rev_voc_test_ids WHERE key='workspace_a'),(SELECT id FROM rev_voc_test_ids WHERE key='programme_a'),(SELECT id FROM rev_voc_test_ids WHERE key='participant_a'),ass);
+ IF result->>'assessmentId' <> ass::text THEN RAISE EXCEPTION 'FAIL assigned adviser selected status'; END IF;
  IF NOT public.rev_voc_restricted_access_allowed(ass) THEN RAISE EXCEPTION 'FAIL assigned adviser denied despite grant'; END IF;
  BEGIN
  PERFORM public.rev_voc_support_access_status(ass);

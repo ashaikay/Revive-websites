@@ -35,13 +35,14 @@ it('reads status after the selected assessment opens, instead of retaining an ol
   expect(screen.queryByText('Core questionnaire not available. Programme setup needs review.')).toBeNull();
   expect(screen.getByText(/Current questionnaire:/)).toHaveTextContent('1 core question across 1 section');
   expect(screen.queryByText(/newer draft questionnaire/)).toBeNull();
-  expect(mocks.rpc.mock.calls.map(([name])=>name)).toEqual(['rev_voc_assessment_draft','rev_voc_assessment_status']);
+  expect(mocks.rpc.mock.calls.map(([name])=>name)).toEqual(['rev_voc_assessment_draft','rev_voc_assessment_selected_status']);
 });
 it('does not display another assessment status as the selected version status',async()=>{
   mocks.rpc.mockResolvedValue({data:status('old-assessment',0),error:null});
   render(<VocationalStatusPanel {...props} assessmentId="assessment-3"/>);
   expect(await screen.findByText(/Saved status for this questionnaire could not be verified/)).toBeVisible();
   expect(screen.queryByText('Core questionnaire not available. Programme setup needs review.')).toBeNull();
+  expect(mocks.rpc).toHaveBeenCalledWith('rev_voc_assessment_selected_status', expect.objectContaining({target_assessment_id:'assessment-3'}));
 });
 it('suppresses an older status reply after the assessment selection changes',async()=>{
   let resolve!:(value:unknown)=>void;

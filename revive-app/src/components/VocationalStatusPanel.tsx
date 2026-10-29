@@ -7,10 +7,10 @@ export function VocationalStatusPanel({workspaceId, programmeId, participantId, 
   const [error,setError]=useState('');
   useEffect(()=>{let live=true;setValue(null);setError('');
     if (!supabaseClient) {setError('Database unavailable');return;}
-    void Promise.resolve(supabaseClient.rpc('rev_voc_assessment_status',{target_workspace_id:workspaceId,target_programme_id:programmeId,target_participant_id:participantId})).then(({data,error})=>{
+    void Promise.resolve(supabaseClient.rpc(assessmentId ? 'rev_voc_assessment_selected_status' : 'rev_voc_assessment_status',{target_workspace_id:workspaceId,target_programme_id:programmeId,target_participant_id:participantId,...(assessmentId ? {target_assessment_id:assessmentId} : {})})).then(({data,error})=>{
       if(!live)return;
       if(error)setError('Status unavailable');
-      else if (assessmentId && data?.assessmentId !== assessmentId) setError('Saved status for this questionnaire could not be verified. Close and reopen the profile.');
+      else if (assessmentId && data?.assessmentId !== assessmentId) setError('Saved status for this questionnaire could not be verified. Your answers remain on screen.');
       else setValue(data as VocationalStatus);
     }).catch(() => { if (live) setError('Status unavailable'); });return()=>{live=false;};
   },[workspaceId,programmeId,participantId,refresh,assessmentId]);
