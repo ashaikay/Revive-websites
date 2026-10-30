@@ -147,11 +147,12 @@ function App() {
 
 
   const renderWorkspace = (allowedPages?: string[], allowedPage: Page = currentPage) => (
-    <div className="min-h-screen bg-neutral-50">
-      <Navigation allowedPages={allowedPages} onSignOut={dataProviderMode === 'supabase' ? handleSignOut : undefined} />
+    <div className="rev-app-shell">
+      <Navigation activePage={allowedPage} accountName={liveSession?.displayName} accountEmail={liveSession?.email} allowedPages={allowedPages} onSignOut={dataProviderMode === 'supabase' ? handleSignOut : undefined} />
 
+      <div className="rev-app-body">
       {/* Main Content */}
-      <main>
+      <main id="rev-main-content" className="rev-app-content" tabIndex={-1}>
         {dataProviderMode === 'supabase' && allowedPage === 'rev' && liveSession && <OutlookConnectionPanel key={currentWorkspaceId} workspaceId={currentWorkspaceId} userId={liveSession.userId} />}
         {allowedPage === 'home' && <HomeDashboard workspaceId={currentWorkspaceId} />}
         {allowedPage === 'rev' && <REVInterface workspaceId={currentWorkspaceId} />}
@@ -167,6 +168,7 @@ function App() {
       </main>
 
       <AppFooter />
+      </div>
     </div>
   );
   if (dataProviderMode === 'supabase' && liveSession) return <WorkspaceModuleGate key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} page={calendarOAuthReturn ? 'rev' : currentPage} onSignOut={handleSignOut}>{(pages,page) => calendarOAuthReturn ? (pages.includes('rev') ? <OutlookConnectionPanel workspaceId={currentWorkspaceId} userId={liveSession.userId} callback /> : <main className="p-6">Calendar connection access is unavailable for this account.</main>) : renderWorkspace(pages,page as Page)}</WorkspaceModuleGate>;
