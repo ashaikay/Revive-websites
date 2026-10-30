@@ -1,0 +1,28 @@
+name: REV unit and boundary tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-and-boundary:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: revive-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run test:all
+      - run: npm run build
+      - name: Build Supabase frontend
+        run: npm run build
+        env:
+          VITE_REV_PROVIDER_MODE: supabase

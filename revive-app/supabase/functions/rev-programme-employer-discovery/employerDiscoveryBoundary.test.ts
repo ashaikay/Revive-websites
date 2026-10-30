@@ -85,3 +85,19 @@ test('preserves an unknown completion without converting it to a provider failur
   assert.equal(failed, false);
   assert.equal((await response.json()).requestId, requestId);
 });
+
+test('preview and production use exact origins; denied preflight exposes no allow-origin header', async () => {
+  const preview = 'https://deploy-preview-4--rev11.netlify.app';
+  const production = 'https://rev11.netlify.app';
+  let calls = 0;
+  const dependencies = deps({allowedOrigin: `http://localhost:5180, ${production}, ${preview}`, getUserId: async () => { calls++; return userId; }});
+  for (const origin of [preview, production, 'http://localhost:5180']) {
+    const response = await handleEmployerDiscovery(new Request('https://example.invalid', {method:'OPTIONS', headers:{Origin:origin}}), dependencies);
+    assert.equal(response.status,204); assert.equal(response.headers.get('Access-Control-Allow-Origin'),origin);
+  }
+  for (const origin of [preview+'.evil.example', 'https://other.netlify.app', 'null']) {
+    const response = await handleEmployerDiscovery(new Request('https://example.invalid', {method:'OPTIONS', headers:{Origin:origin}}), dependencies);
+    assert.equal(response.status,403); assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);
+  }
+  assert.equal(calls,0);
+});

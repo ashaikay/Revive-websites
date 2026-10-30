@@ -632,6 +632,23 @@ Each role has specific permissions:
 - `can_view_analytics`
 - etc.
 
+### Agreed organisation-access requirements — not implemented
+
+One organisation/workspace must support multiple people using individual authenticated logins. Owners must be able to manage invitations, grant or change permissions and revoke access. Important actions must retain the authenticated actor so the audit history shows who performed them.
+
+The current durable membership contract remains `owner | admin | member | viewer`, with membership lifecycle `invited | active | suspended`. Existing capabilities continue to use their current operation-specific authority checks. The following labels are agreed product requirements, not current database roles or released capabilities:
+
+- **Owner** — organisation administration, invitations, permissions, access revocation and AI spending limits.
+- **Manager/Scheduler** — Scheduling jobs, private job documents, reviewed AI recommendations and assignments.
+- **Worker** — the worker's own schedule, documents for assigned jobs and report uploads for assigned jobs.
+- **Read-only viewer** — only schedules and reports explicitly permitted to that user, without editing.
+
+Employment Specialists must receive explicit authority for identified programmes and may access participant records only for active allocated caseloads. Authorised managers must have a defined oversight scope; workspace membership alone must not silently grant programme or caseload access.
+
+All permissions must be enforced in trusted server and database boundaries, not only by hiding browser controls. This includes private storage authorization, row-level tenant controls and cross-workspace denial. A revoked or suspended user must lose access even if an earlier browser session or link remains available.
+
+Implementing the proposed roles requires a separately reviewed mapping to the existing membership roles and capability checks. Any new persisted role values require an explicit additive migration, trusted-boundary updates, RLS/storage-policy review, audit coverage, compatibility plan and authorization tests. Do not reinterpret the existing `member`, `viewer`, Scheduling owner/admin or Programme Hub adviser contracts without that plan.
+
 ### Session Management
 - JWT tokens expire after 24 hours
 - Refresh tokens good for 30 days

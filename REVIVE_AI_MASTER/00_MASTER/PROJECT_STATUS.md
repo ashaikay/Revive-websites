@@ -1,4 +1,4 @@
-## Current Checkpoint — Scheduling Sickness Save Hosted and User-Confirmed (2026-10-09)
+## Current Checkpoint — Manual Meeting-Reminder Delivery Implemented Locally (2026-10-09)
 
 ## Controlled Outlook booking and invitation receipt (user-verified)
 
@@ -39,7 +39,20 @@ The UI states **“Reminder draft saved. Delivery is not enabled.”** No sent o
 
 **Verification:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; the trusted reminder boundary suite passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. Local-validator syntax, TypeScript, Deno entry-point check, production build and `git diff --check` passed; the build retained the existing large-chunk advisory. The implementation is commit `e2b10acfedd9f52d17a5d56d6f944026b98b0066`. GitHub Actions run [#115](https://github.com/ashaikay/Revive-websites/actions/runs/37931746067) passed both the meeting and database jobs for that exact commit. The reminder validator was an unconditional command in the successful fail-fast database step, establishing that it executed and exited successfully. Raw validator PASS-marker logs were unavailable and were not inspected. A separate local database run remained unavailable because Docker Desktop returned an engine API 500.
 
-**Release state:** reminder preparation is committed and verified in isolated CI. Migration `20261009134000_rev_meeting_reminder_preparation.sql` is registered in hosted Supabase. On 9 October 2026, `rev-meeting-reminder-save` version 1 was verified ACTIVE with JWT verification enabled; downloaded hosted `index.ts` and `meetingReminderBoundary.ts` matched the reviewed local source. No live hosted reminder-draft save was invoked, so persistence and UI behavior against the hosted function remain manually unverified. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
+**Release state:** reminder preparation is committed and verified in isolated CI. Migration `20261009134000_rev_meeting_reminder_preparation.sql` is registered in hosted Supabase. On 9 October 2026, `rev-meeting-reminder-save` version 1 was verified ACTIVE with JWT verification enabled; downloaded hosted `index.ts` and `meetingReminderBoundary.ts` matched the reviewed local source. No live hosted reminder-draft save was invoked, so persistence and UI behavior against the hosted function remain manually unverified. The separately authorized manual delivery slice is now implemented locally as recorded below. RSVP/response ingestion remains unfinished. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
+
+### Phase 5E manual meeting-reminder email delivery — implemented and locally tested only
+
+- Added an additive tenant-scoped delivery lifecycle that binds approval to the exact current reminder draft version and fingerprint, records a separate explicit send-consent act, and permits one irreversible provider claim per meeting proposal.
+- The trusted boundary rechecks a future meeting start, provider-accepted booking evidence, no recorded outcome, current approval, sender configuration, active owner/admin authority, workspace policy and the dedicated `SEND_MEETING_REMINDER_EMAIL` capability before claim.
+- Recipient, subject and body are derived server-side from saved proposal and draft records. The existing follow-up email endpoint contract is unchanged.
+- The existing Microsoft Graph email adapter is reused. Accepted, rejected and uncertain outcomes are durable; provider acceptance is shown as **“Accepted by provider — delivery not confirmed.”** No claimed or uncertain attempt is automatically retried.
+- REV provides exact-draft approval, separate sending consent, durable state after refresh and exact retained-request recovery before claim. Missing delivery storage disables only delivery controls and does not hide the reminder draft or other REV sections.
+- Restrictive RLS, service-only writes/RPC calls, transaction locks, request ledgers and append-only audit evidence preserve tenant authority and duplicate prevention.
+
+**Local verification:** focused reminder/outcome/REV UI tests passed 38/38; the complete registered mounted selection passed 195/195 across 26 files; dedicated boundary/orchestrator tests passed 8/8; the complete workflow Node selection resolved 51 patterns to 54 files and passed 414/414; and the aggregate meeting verifier passed 58/58 before TypeScript/Vite production build completed successfully with the existing chunk-size advisory. Deno checks and validator syntax checks passed.
+
+**Release boundary:** this delivery slice is uncommitted, unstaged, undeployed and not CI-verified. Migration `20261009170000_rev_meeting_reminder_delivery.sql` has not been applied to hosted Supabase and `rev-meeting-reminder-deliver` has not been deployed. Its hard provider gate remains disabled, no live message was sent and no provider call was made. The behavioral database/concurrency validator is implemented and registered in CI, but a local run remains pending because Docker Desktop returned an Engine API HTTP 500 while Supabase inspected its database container. Do not infer database PASS from syntax/static checks. Removal-control visibility/usability remains deferred and not user-verified.
 
 The previous 2026-10-08 blocker investigation below is historical and superseded for the manual check. Do not claim the exact causes of every earlier credential or availability failure were proven.
 
@@ -111,6 +124,12 @@ Product priority:
 **Verification:** the implementation was committed at `ea829630c5c07314beba351475369a5fa8382caf`. The visible sickness form and safe retained-retry handling were completed in commit `53d8dbd3ce731d73e10c54ab1286257a9e58b556`; GitHub Actions run [#119](https://github.com/ashaikay/Revive-websites/actions/runs/37948467949) passed both the meeting and isolated-database jobs for that exact commit. Focused sickness UI tests passed 7/7, worker-unavailability browser/service tests passed 18/18, and TypeScript/Vite build and `git diff --check` passed with the existing large-chunk advisory.
 
 **Hosted/manual state:** authorised migrations `20261009123000_rev_meeting_outcomes.sql`, `20261009134000_rev_meeting_reminder_preparation.sql` and `20261009150000_rev_scheduling_sickness.sql` were applied to project `ntbowgutwyyhhnmkadlv`. `rev-worker-unavailability-save` version 6 is ACTIVE with JWT verification enabled, and downloaded hosted source matched the reviewed sickness-aware source. The user then confirmed that sickness saving works and the entries appear in the planner. Meeting-outcome and reminder functions are now deployed and source-verified, but their live save paths remain untested. No retained request was automatically retried, and no provider gate, notification, assignment mutation or Annual Leave mutation occurred.
+
+### Scheduling planner shortcut and lifecycle-control clarification — committed and CI-green; removal usability deferred
+
+Commit `8664ea11b344f82e93778c2224552a6f3f8738c0` added the Week-planner **BOOK WORKER OFF** shortcut through the existing trusted Generic Unavailable flow, clearer discard/cancel/archive wording, prepared-follow-up discard through the existing rejected/not-sent decision, and focused lifecycle interaction coverage. GitHub Actions run [#122](https://github.com/ashaikay/Revive-websites/actions/runs/37955808130) passed both the meeting and database jobs for that exact commit.
+
+The user confirms that the planner looks good. This is user-reported visual confirmation of the planner only. The user could not find the removal/delete controls, so their visibility and usability remain unresolved and are deferred. Existing archive, restore, cancel and discard behavior must not be described as user-verified. No hard-delete contract, browser-side database delete, provider action, migration, deployment or gate change was introduced by this slice.
 
 ---
 
@@ -219,7 +238,7 @@ Define the next separately authorized Phase 5E reminder-delivery contract withou
 ### Remaining Phase 5 MVP work — not verified complete
 
 - Customer-managed Outlook connection, discovery, selection and availability are implemented and manually verified for the controlled customer account. Google calendar integration is not implemented, and the controlled Outlook evidence does not establish general production rollout.
-- Manual channel-neutral reminder-draft preparation is implemented and verified in isolated CI but is not deployed; timing and delivery are not implemented.
+- Manual channel-neutral reminder-draft preparation is implemented, verified in isolated CI, and its hosted migration/function are deployed and source-verified; live hosted draft saving remains untested. Timing and delivery are not implemented.
 - RSVP tracking and response detection are not implemented.
 - Meeting outcome recording into the broader customer/opportunity workflow is not complete.
 - Goal-progress updates from booked or completed meetings are not complete.
@@ -227,7 +246,7 @@ Define the next separately authorized Phase 5E reminder-delivery contract withou
 
 ### Next unfinished roadmap task
 
-Reminder preparation has completed registered isolated CI. The next existing roadmap work is reminder delivery, followed by RSVP/response ingestion, but its timing, channel, consent and execution contract must be agreed before implementation and is not authorized to begin automatically.
+Reminder preparation has completed registered isolated CI and hosted source verification. The next unfinished existing MVP task is meeting reminder delivery, followed by RSVP/response ingestion. Preserve the scope freeze: the smallest delivery slice is a manual, explicitly approved email reminder for an eligible future provider-accepted meeting, with separate sending consent, durable duplicate prevention, fail-closed tenant authority, audited provider evidence and no automatic retry after a claimed or uncertain send. Scheduling, autonomous delivery, RSVP ingestion, commercial mutation and the deferred removal-control usability work remain outside that slice.
 
 **Prerequisites:** preserve the rule that booking, RSVP and manually recorded outcome are separate facts; retain tenant isolation and auditable trusted writes; and require separate provider/read-permission design and authorization for any reminder or RSVP integration.
 

@@ -1,4 +1,4 @@
-# Current Handover — Scheduling Sickness Save Hosted and User-Confirmed (2026-10-09)
+# Current Handover — Manual Meeting-Reminder Delivery Implemented Locally (2026-10-09)
 
 ## Controlled booking and invitation receipt (user-verified, 2026-10-09)
 
@@ -17,6 +17,62 @@ The REV layout tidy-up is implemented and committed at `e19f205`: compact expand
 The earlier additional-account credential-load and empty-availability blockers are resolved for this manual check. Their exact underlying causes were not all proven; do not claim otherwise. The workspace-timezone date fix addresses a demonstrated local-date boundary defect but does not prove that it caused every earlier empty result or credential-load failure.
 
 **Safety/release state:** Live calendar booking and email sending remain disabled. “Approved but not booked” is not permission to create an event. Worker job-brief uploads and assignment emails remain planned, not implemented, and are not automatically prioritized.
+
+## Agreed organisation access — requirements only, not implemented
+
+REV must support multiple individual logins within one organisation/workspace. Owners must manage invitations, permissions, access revocation and AI spending limits. The agreed future Scheduling personas are Owner, Manager/Scheduler, Worker and Read-only viewer: managers/schedulers manage jobs, private documents, reviewed AI recommendations and assignments; workers see their own schedule and assigned-job documents and may upload reports only for assigned jobs; read-only viewers see only explicitly permitted schedules/reports without editing.
+
+Employment Specialists must be explicitly authorised for identified programmes and limited to active allocated caseloads. Authorised managers require a defined programme-oversight scope. Permissions must be enforced server-side across trusted functions, RLS and private storage, with cross-workspace denial, actor audit evidence and immediate loss of access after suspension or revocation.
+
+This records requirements only. Current durable workspace roles remain `owner | admin | member | viewer`. Current Scheduling management, document access and AI review remain owner/admin-only, and worker self-service is pending. Do not add or reinterpret roles without an explicit migration and implementation plan covering role mapping, backward compatibility, revocation, audit, RLS/storage policies and authorization tests.
+
+## Programme Hub employer discovery and engagement — implemented locally, undeployed
+
+The first useful employer-discovery and engagement slice is implemented locally inside the existing authenticated Outcomes / Programme Hub. It is not a separate CRM. The selected programme remains visible and all discovery, reviewed employers, contacts, engagement state/history and outreach drafts are workspace/programme scoped.
+
+Business-facing wording is now **Service users**, **Employment Specialists** and **Job opportunities**. Canonical `participant`, `adviser` and `vacancy` contracts remain unchanged. The simple programme structure keeps overview/setup, Employment Specialists/caseload, employers/contacts, Job opportunities and Service users together; the employer section adds Find employers, an employer engagement workspace and Prepared outreach.
+
+Pilot discovery defaults are editable: Birmingham / West Midlands; construction, retail, warehousing/logistics, traffic management, rail/train-related work, Royal Mail/postal delivery and Post Office branch roles; barbering excluded by default. Royal Mail/postal delivery and Post Office branches remain separate filters. These are search defaults, not programme eligibility rules.
+
+The concrete provider is Companies House advanced company search. It returns public registry identity, company status, registered office and SIC evidence only. REV explicitly marks local operating presence, vacancies and contacts as unknown and never guesses them. Registry discovery is unavailable unless `COMPANIES_HOUSE_API_KEY` and `REV_PROGRAMME_EMPLOYER_DISCOVERY_ENABLED=true` are configured server-side. The official API is free, has a default 600-request/five-minute limit and requires Open Government Licence v3.0 attribution.
+
+Reviewed results may be saved manually to the selected programme. Company number provides reliable source deduplication; name/address similarities are flagged for review and are never silently merged. Engagement state supports To review, Ready to contact, Contacted, Conversation underway, Opportunity identified and Not pursuing, with a responsible Employment Specialist, next action, follow-up date and append-only history. Manually recorded contact is labelled separately from REV-prepared artifacts.
+
+Employer-specific draft preparation uses the existing OpenAI Responses pattern with pinned `gpt-4.1-mini-2025-04-14`, strict output, no tools and `store:false`. It requires a saved programme offer, branding, sender identity and employer evidence. A separate `REV_PROGRAMME_EMPLOYER_OUTREACH_AI_ENABLED=true` capability and `OPENAI_API_KEY` are required; the default daily workspace limit is 10. Published standard token pricing at this checkpoint is US$0.40/million input and US$1.60/million output, making a typical bounded draft approximately US$0.0009–US$0.0018. Default OpenAI abuse-monitoring retention may be up to 30 days; `store:false` is not Zero Data Retention.
+
+All provider capabilities remain disabled and unconfigured. No live Companies House/OpenAI call, provider secret, sending, scheduling, hosted migration, deployment or gate enablement has occurred. Drafts remain **Prepared — not sent** and editable as immutable revisions. Suppressed contacts are refused server-side. Discovery, saves, engagement updates and drafts use exact request claims; changed retries fail, concurrent retries do not duplicate records/provider calls, and stale provider output cannot replace newer evidence.
+
+The additive migration is `20261011010000_rev_programme_employer_discovery_engagement.sql`. New trusted functions are `rev-programme-employer-discovery`, `rev-programme-employer-engagement-save` and `rev-programme-employer-outreach-draft`. The existing Programme Hub CI workflow registers mounted UI, boundary, Deno, build and isolated local-database validation. Hosted database/provider verification remains pending.
+
+Commit `5d8e7a5` registered this slice, but its isolated employer database job failed at `DISCOVERED_EMPLOYER_CONCURRENT_REPLAY`. The focused local fix is currently unstaged: the employer engagement trusted write now follows the established Programme Hub boundary by locking the workspace row before authority and idempotency-ledger reads, while retaining the request advisory lock, exact-payload comparison, deduplication, permissions and audit write. Failure-only validator output now records both RPC status/payload results without weakening the requirement that both exact concurrent saves return HTTP 200 and the same durable employer ID. Validator syntax, the focused engagement boundary tests (3/3) and `git diff --check` pass. The database replay remains pending because Docker Desktop returns Linux Engine HTTP 500 during local Supabase container inspection; this fix is not yet CI-verified, deployed or applied to hosted data.
+
+### Agreed next Programme Hub list/export pass — requirements only
+
+The next separately scoped pass must add selected-programme list views for employers/employer contacts and Service users, with understandable columns, search and supported filters. The selected programme remains visible, and switching programme/workspace must clear stale list and export state.
+
+Employer contacts already support optional business email and phone. The current Service user record does not contain email, phone, postal address or postcode, so these require an additive migration and extension of the existing trusted participant write; they must not be simulated in browser storage. Only necessary contact details should be collected. Postcode is contact/location information and must never by itself establish programme eligibility.
+
+Explicitly requested `.xlsx` downloads should reuse the hardened Scheduling export approach where suitable and include only authorised records in the selected programme that match the current filters. Programme notes, sensitive evidence, suppression reasons and other unselected personal data are excluded by default. Contacts are never fabricated and personal information is never exported automatically.
+
+Programme Hub should remain one page with clearly labelled collapsible sections in existing REV styling. Collapsed summaries show factual loaded counts/state only. The selected programme, active forms, validation errors and uncertain-save retry controls remain visible; collapsing preserves entered data and exact retry payloads. Saving, permissions, stale-context protection and export correctness take priority over visual polish. This requirement does not authorize a navigation redesign, provider enablement, outreach sending, job fairs/events, matching or applications.
+
+Documented next slices remain job fairs/events, Service user-to-Job opportunity matching and applications. This pass does not implement them.
+
+### Planned Service-user vocational profile, action plan and REV Brain sequence
+
+This is planned work only. Do not start it while the current Programme Hub forms, notes, buttons, save feedback, retained retries and section checks are still being finished and verified.
+
+The agreed implementation order is:
+
+1. Finish and verify existing forms and participant notes, including clear disabled states, definitive rejection versus uncertain outcome handling, exact retries and programme/workspace stale-context protection.
+2. Build the employment-focused vocational profile and versioned action plan.
+3. Connect REV Brain to approved job and training sources for source-linked, explained suggestions reviewed by an authorised Employment Specialist.
+
+The future vocational profile covers employment goals, strengths, skills, qualifications, relevant experience, work/location/travel preferences, training interests and functionally expressed support needs. Unknowns remain unknown. The action plan records agreed goals and discrete actions with owner, review/target date, status, evidence and version/audit history; REV does not automatically complete actions, change outcomes, apply for jobs or enrol someone on training.
+
+Safeguarding/probation information requires a separately approved data-protection and authorization contract before schema work. Collect only necessary employment-support restrictions, required appointments, approved contact routes or agreed safeguarding actions, with purpose, source, author, review/expiry, restrictive server-side access, retention and audited disclosure. Do not collect offence narratives, allegations, diagnoses, clinical histories or unrestricted case records. Do not send this information to employers/providers, use it for automatic exclusion/ranking or treat REV Brain as an emergency-reporting route.
+
+No future profile, action-plan schema, trusted write, provider integration or suggestion workflow is implemented by the current tidy-up. No provider is selected or enabled, and no migration or deployment is authorised by this requirement.
 
 ## Phase 5E.1 explicit meeting outcomes — hosted function verified; live save pending
 
@@ -40,7 +96,19 @@ The proposal UI states **“Reminder draft saved. Delivery is not enabled.”** 
 
 **Verification state:** focused reminder/outcome UI-domain-client tests passed 12/12; the complete registered 21-file mounted selection passed 163/163; trusted reminder boundary tests passed 5/5; the complete workflow Node selection resolved 46 patterns to 49 files and passed 378/378. Local-validator syntax, TypeScript, Deno entry-point check, production build and `git diff --check` passed with the existing large-chunk advisory. The implementation is commit `e2b10acfedd9f52d17a5d56d6f944026b98b0066`. GitHub Actions run [#115](https://github.com/ashaikay/Revive-websites/actions/runs/37931746067) passed both the meeting and database jobs. The reminder validator was an unconditional command in the successful fail-fast database step, establishing that it executed and exited successfully. Raw validator PASS-marker logs were unavailable and were not inspected. A separate local database run remained unavailable because Docker Desktop returned an engine API 500.
 
-**Release state and next checkpoint:** reminder preparation is committed and verified in isolated CI. Migration `20261009134000_rev_meeting_reminder_preparation.sql` is registered in hosted Supabase. `rev-meeting-reminder-save` version 1 is ACTIVE with JWT verification enabled; downloaded hosted `index.ts` and `meetingReminderBoundary.ts` matched the reviewed local source. No live hosted reminder-draft save was invoked, so persistence and UI behavior against the hosted function remain manually unverified. Delivery, scheduling, sending consent and RSVP/response ingestion remain unfinished and require separate authorization. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
+**Release state:** reminder preparation is committed and verified in isolated CI. Migration `20261009134000_rev_meeting_reminder_preparation.sql` is registered in hosted Supabase. `rev-meeting-reminder-save` version 1 is ACTIVE with JWT verification enabled; downloaded hosted `index.ts` and `meetingReminderBoundary.ts` matched the reviewed local source. No live hosted reminder-draft save was invoked, so persistence and UI behavior against the hosted function remain manually unverified. The separately authorized manual delivery slice is now implemented locally as recorded below. RSVP/response ingestion remains unfinished. The REV Business Guide and Video Walkthroughs remain planned; none has been created, reviewed or released.
+
+## Phase 5E manual meeting-reminder email delivery — implemented and locally tested only
+
+The reviewed slice adds one tenant-scoped durable delivery lifecycle for each meeting proposal. Approval is bound to the current reminder draft ID, version and fingerprint, and correcting the draft invalidates that approval. Sending requires a separate explicit consent action. The trusted server derives recipient, subject and body from saved proposal/draft records and rechecks the future meeting time, provider-accepted booking evidence, absence of a recorded outcome, current approval, configured sender, active owner/admin authority, workspace execution policy and the dedicated capability before an atomic provider claim.
+
+At most one provider attempt can be claimed for a meeting reminder. The existing Graph adapter is reused with fakes in tests. Accepted, rejected and unknown outcomes are durable; accepted means **“Accepted by provider — delivery not confirmed.”** A claimed or unknown outcome is never automatically resent. Exact retained requests are preserved only before claim. The existing follow-up email endpoint contract is unchanged.
+
+The REV proposal details now expose exact-draft approval, separate sending consent, durable state after refresh and safe retained-request recovery. Missing delivery storage produces a delivery-specific unavailable state while preserving reminder drafts and unrelated REV content. Restrictive RLS, service-only writes/RPC execution, request ledgers, advisory transaction locks and append-only audit events preserve tenant boundaries and evidence.
+
+**Local verification:** focused reminder/outcome/REV UI tests passed 38/38; the complete registered mounted UI selection passed 195/195 across 26 files; dedicated trusted boundary/orchestrator tests passed 8/8; the complete workflow Node selection resolved 51 patterns to 54 files and passed 414/414; and the aggregate meeting verifier passed 58/58 before the TypeScript/Vite production build completed with the existing chunk-size advisory. Deno checks and database-validator syntax checks passed.
+
+**Release state:** these delivery changes are uncommitted, unstaged, undeployed and not CI-verified. Migration `20261009170000_rev_meeting_reminder_delivery.sql` has not been applied to hosted Supabase and `rev-meeting-reminder-deliver` has not been deployed. `SEND_MEETING_REMINDER_EMAIL` is disabled by the function's hard gate, and no live message or provider call occurred. The behavioral database/concurrency/audit validator is implemented and registered in CI but could not execute locally because Docker Desktop returned an Engine API HTTP 500 while Supabase inspected the database container. Do not describe database behavior as verified until that isolated validator passes. RSVP/response ingestion remains unfinished. Removal-control visibility/usability remains deferred and is not user-verified.
 
 ## REV Business Guide and Video Walkthroughs — planned, not created
 
@@ -142,6 +210,14 @@ Private manager-uploaded job briefs and worker assignment emails remain planned 
 **Verification:** the implementation was committed at `ea829630c5c07314beba351475369a5fa8382caf`. The visible sickness form and safe retained-retry handling were committed at `53d8dbd3ce731d73e10c54ab1286257a9e58b556`; GitHub Actions run [#119](https://github.com/ashaikay/Revive-websites/actions/runs/37948467949) passed both the meeting and isolated-database jobs for that exact commit. Focused sickness UI tests passed 7/7, worker-unavailability browser/service tests passed 18/18, and TypeScript/Vite build and `git diff --check` passed with the existing chunk-size advisory.
 
 **Hosted/manual state:** authorised migrations `20261009123000_rev_meeting_outcomes.sql`, `20261009134000_rev_meeting_reminder_preparation.sql` and `20261009150000_rev_scheduling_sickness.sql` were applied to hosted project `ntbowgutwyyhhnmkadlv`. `rev-worker-unavailability-save` version 6 is ACTIVE with JWT verification enabled; downloaded hosted source matched the reviewed sickness-aware source. The user confirmed that sickness saving works and the entries appear in the planner. Meeting-outcome and reminder functions are deployed and source-verified, but their live save paths remain untested. No retained request was automatically retried, and no notification, provider call or execution-gate change occurred.
+
+### Scheduling planner shortcut and lifecycle-control clarification — committed and CI-green; removal usability deferred
+
+- Commit `8664ea11b344f82e93778c2224552a6f3f8738c0` added the Week-planner **BOOK WORKER OFF** shortcut through the existing trusted Generic Unavailable flow, clearer lifecycle wording and confirmations, and focused mounted coverage.
+- GitHub Actions run [#122](https://github.com/ashaikay/Revive-websites/actions/runs/37955808130) passed both the meeting and database jobs for that exact commit.
+- The user confirms that the planner looks good. Record this as user-reported visual confirmation, not browser-tool verification.
+- The user could not find the removal/delete controls. Their visibility and usability remain unresolved and are deferred. Do not claim the archive, restore, cancel or discard controls are user-verified.
+- No hard-delete path, migration, deployment, provider call, notification, gate change or automatic assignment cancellation/reallocation was introduced.
 
 The `meeting_outcomes` and `meeting_reminder_drafts` migrations and trusted save functions are now deployed and source-verified. The REV resilience fix at `5b51ef3339cab0805d02bd499114291ce8030ee7` keeps existing sections visible if those stores or functions become unavailable; GitHub Actions run [#117](https://github.com/ashaikay/Revive-websites/actions/runs/37940342939) passed. Deployment evidence alone does not establish live hosted save behavior; both capabilities still require separately authorized manual save verification.
 
@@ -691,3 +767,53 @@ See RISKS_AND_BLOCKERS.md for full risk register.
 - Test early and often (especially RLS policies)
 
 **You are cleared to proceed when approved.** ✅
+
+
+## Agreed Service-user implementation order — 15 October 2026
+[REV-SERVICE-USER-PLAN-20261015]
+
+Status: agreed future requirements, not implemented capabilities.
+Current caseload UI has passed 58 focused tests and the full local build.
+User prefers short wording, clear local save confirmation and minimal clutter.
+
+Implementation order:
+1. Finish caseload-to-record navigation. Open the existing authorised
+   Service-user profile with that programme's case notes automatically
+   visible, newest first. Keep author and programme-timezone timestamps.
+   Verify, commit the scoped checkpoint and check CI.
+2. Add persistent contact details through additive schema and trusted writes.
+3. Define purpose, restricted permissions, retention and audit requirements
+   for justice-support information before collecting it.
+4. Add one private Documents area per programme record: CV, vocational
+   profile, action plan, initial/final assessments and restricted disclosure
+   letters. Include uploader, timestamp, category, versions, open/download.
+   Notes may link to files without duplicating uploads. Do not silently
+   overwrite files. Disclosure uploads depend on restricted access being ready.
+5. Add structured vocational profiles, agreed action plans and initial/final
+   assessments. Reuse existing identity and programme enrolment architecture.
+6. Add editable quarterly AI report drafts from authorised dated records.
+   Show source references and missing evidence. Preserve original notes;
+   require ES review before export. Provider and spending limits remain
+   separate configuration work.
+7. Connect reviewed profiles to approved job, apprenticeship and training
+   sources, with evidence-backed suggestions and human approval.
+
+Search requirement:
+Provide a simple Service-user search bar in REV using authorised records.
+Support partial names, case references and names containing spaces.
+Reuse the existing record view; do not create a duplicate profile.
+Do not expose other workspaces, programmes or unassigned caseload records.
+
+Restricted information:
+Justice-support details may include necessary probation contacts, licence
+dates, work/location restrictions and exclusion zones, only after purpose
+and access are defined. Offence details and disclosure letters must not be
+unrestricted fields or enter AI processing, employer outreach or standard
+exports by default. Do not disclose anything to employers automatically.
+
+Preserve exact save retries, tenant isolation, active caseload permissions,
+existing notes and attribution. Distinguish loading, read failure and no notes.
+Keep current folder, branch, localhost:5180, authentication, Scheduling,
+email and unrelated uncommitted work unchanged.
+
+This plan does not enable providers, sending, matching, uploads or reporting.

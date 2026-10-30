@@ -45,6 +45,38 @@ The future connection point is `src/data/supabaseAdapter.ts`. It intentionally t
 
 ## Commands
 
+Use Node.js 22.18+ or 24 (the Node test runner needs TypeScript stripping).
+Run commands from `revive-app/`:
+
+- `npm test`: Vitest unit/component suites, with two workers by default.
+- `npm run test:node`: Node unit/boundary suites, with two workers.
+- `npm run test:all`: both runners; both must pass for the complete unit/boundary check.
+- `npm test -- src/tests/programmeHubUI.test.tsx`: one Vitest suite.
+- `npm run build`: TypeScript check and production bundle.
+- `npm run test:db:local`: six vocational SQL suites and 15 local API harnesses
+  against an already started, migrated local Supabase stack.
+
+Runner discovery checks `.test.*` files under `src/tests/` and
+`supabase/functions/` and assigns each by its runner import. Unknown or mixed
+runner imports stop discovery rather than silently omitting tests. Node suites
+are intentionally not executed by Vitest. No test timeout has been increased.
+
+Database SQL and `*_local_validation.mjs` integration harnesses are separate from
+these commands. Follow their documented local Supabase/CI setup; do not point
+them at production. Passing the unit/boundary suites does not establish database
+migration or live-provider readiness.
+
+The local database command captures `supabase@2.117.0 status -o env` privately,
+requires API URL `http://127.0.0.1:55321`, and replaces inherited harness URLs
+and key aliases with the local bindings. It does not link, reset, migrate, or
+deploy a project. SQL runs in `supabase_db_revive-app` with `ON_ERROR_STOP`.
+The HTTP harnesses create synthetic local fixtures, so use a disposable stack;
+the six vocational SQL suites use read-only assertions or rolled-back fixtures.
+Results and redacted logs are written to the gitignored
+`local-db-validation.local/` directory, and any failed suite gives a nonzero exit.
+See [the local validation report](../REVIVE_AI_MASTER/04_TESTING/LOCAL_DATABASE_VALIDATION_20261023.md)
+for tested scope and cloud startup notes.
+
 ```text
 npm run dev
 npm test

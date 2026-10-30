@@ -28,6 +28,16 @@ import {
 import { submitMeetingOutcome } from '@/services/meetingOutcomeService';
 import type { MeetingOutcomeType } from '@/domain/meetingOutcome';
 import { submitMeetingReminderDraft } from '@/services/meetingReminderService';
+import {
+  clearMeetingReminderSend,
+  rememberMeetingReminderSend,
+  restoreMeetingReminderSend,
+  submitMeetingReminderDelivery,
+} from '@/services/meetingReminderDeliveryService';
+import type {
+  MeetingReminderDeliveryRequest,
+  MeetingReminderDeliveryResponse,
+} from '@/domain/meetingReminderDelivery';
 
 interface REVInterfaceProps {
   workspaceId: string;
@@ -948,6 +958,9 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
   const [meetingExecutionResults, setMeetingExecutionResults] = useState<Record<string, MeetingExecutionResult>>({});
   const [meetingReminderBusyId, setMeetingReminderBusyId] = useState<string | null>(null);
   const [meetingReminderErrors, setMeetingReminderErrors] = useState<Record<string, string>>({});
+  const [meetingReminderDeliveryBusyId, setMeetingReminderDeliveryBusyId] = useState<string | null>(null);
+  const [meetingReminderDeliveryErrors, setMeetingReminderDeliveryErrors] = useState<Record<string, string>>({});
+  const [meetingReminderDeliveryResults, setMeetingReminderDeliveryResults] = useState<Record<string, MeetingReminderDeliveryResponse>>({});
   const [meetingOutcomeBusyId, setMeetingOutcomeBusyId] = useState<string | null>(null);
   const [meetingOutcomeErrors, setMeetingOutcomeErrors] = useState<Record<string, string>>({});
 
@@ -1135,6 +1148,113 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
       throw reminderError;
     } finally {
       setMeetingReminderBusyId(null);
+    }
+  };
+
+  const retainedReminderSend = (action: LivePendingAction): MeetingReminderDeliveryRequest | null => {
+    if (!action.meetingProposalId) return null;
+    try {
+      return restoreMeetingReminderSend(
+        window.sessionStorage,
+        workspaceId,
+        currentUser.id,
+        action.meetingProposalId,
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const handleReminderDeliveryApproval = async (action: LivePendingAction) => {
+    if (meetingReminderDeliveryBusyId || !action.meetingProposalId) return;
+    setMeetingReminderDeliveryBusyId(action.id);
+    setMeetingReminderDeliveryErrors((current) => ({ ...current, [action.id]: '' }));
+    try {
+      const result = await submitMeetingReminderDelivery({
+        operation: 'approve',
+        workspaceId,
+        requestId: crypto.randomUUID(),
+        meetingProposalId: action.meetingProposalId,
+      });
+      setMeetingReminderDeliveryResults((current) => ({ ...current, [action.id]: result }));
+      await reload();
+    } catch (approvalError) {
+      setMeetingReminderDeliveryErrors((current) => ({
+        ...current,
+        [action.id]: approvalError instanceof Error
+          ? approvalError.message
+          : 'Meeting reminder approval could not be confirmed.',
+      }));
+      throw approvalError;
+    } finally {
+      setMeetingReminderDeliveryBusyId(null);
+    }
+  };
+
+  const handleReminderDeliverySend = async (action: LivePendingAction, retry: boolean) => {
+    if (meetingReminderDeliveryBusyId || !action.meetingProposalId) return;
+    let request = retry ? retainedReminderSend(action) : null;
+    if (retry && !request) {
+      setMeetingReminderDeliveryErrors((current) => ({
+        ...current,
+        [action.id]: 'The retained reminder request is unavailable. Refresh before taking another action.',
+      }));
+      return;
+    }
+    if (!request) {
+      request = {
+        operation: 'send',
+        workspaceId,
+        requestId: crypto.randomUUID(),
+        meetingProposalId: action.meetingProposalId,
+        sendConsent: true,
+      };
+      try {
+        rememberMeetingReminderSend(window.sessionStorage, currentUser.id, request);
+      } catch {
+        setMeetingReminderDeliveryErrors((current) => ({
+          ...current,
+          [action.id]: 'The reminder was not sent because its exact request could not be retained safely.',
+        }));
+        return;
+      }
+    }
+    setMeetingReminderDeliveryBusyId(action.id);
+    setMeetingReminderDeliveryErrors((current) => ({ ...current, [action.id]: '' }));
+    try {
+      const result = await submitMeetingReminderDelivery(request);
+      clearMeetingReminderSend(
+        window.sessionStorage,
+        workspaceId,
+        currentUser.id,
+        action.meetingProposalId,
+      );
+      setMeetingReminderDeliveryResults((current) => ({ ...current, [action.id]: result }));
+      await reload();
+    } catch (sendError) {
+      try {
+        const refreshed = await reload();
+        const durable = refreshed.find((item) => item.id === action.id)?.meetingReminderDelivery;
+        if (durable && durable.status !== 'approved_not_sent') {
+          clearMeetingReminderSend(
+            window.sessionStorage,
+            workspaceId,
+            currentUser.id,
+            action.meetingProposalId,
+          );
+        }
+      } catch {
+        // The exact request remains retained when durable state cannot be reconciled.
+      }
+      setMeetingReminderDeliveryErrors((current) => ({
+        ...current,
+        [action.id]: sendError instanceof Error
+          ? sendError.message
+          : 'Meeting reminder delivery outcome is unconfirmed.',
+      }));
+      throw sendError;
+    } finally {
+      setMeetingReminderDeliveryBusyId(null);
     }
   };
 
@@ -1340,6 +1460,9 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                   || meetingExecutionBusyId === action.id
                   || meetingReminderBusyId === action.id
                   || meetingReminderErrors[action.id]
+                  || meetingReminderDeliveryBusyId === action.id
+                  || meetingReminderDeliveryErrors[action.id]
+                  || meetingReminderDeliveryResults[action.id]
                   || meetingOutcomeBusyId === action.id
                   || meetingOutcomeErrors[action.id]
                   || meetingExecutionResults[action.id]
@@ -1359,6 +1482,10 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     decisionFeedback={meetingDecisionFeedback[action.id]}
                     reminderBusy={meetingReminderBusyId === action.id}
                     reminderError={meetingReminderErrors[action.id]}
+                    reminderDeliveryBusy={meetingReminderDeliveryBusyId === action.id}
+                    reminderDeliveryError={meetingReminderDeliveryErrors[action.id]}
+                    reminderDeliveryResult={meetingReminderDeliveryResults[action.id]}
+                    retainedReminderSend={retainedReminderSend(action)}
                     outcomeBusy={meetingOutcomeBusyId === action.id}
                     outcomeError={meetingOutcomeErrors[action.id]}
                     onClearDecisionFeedback={clearMeetingDecisionFeedback}
@@ -1366,6 +1493,8 @@ const LiveRevWorkspace: React.FC<REVInterfaceProps> = ({ workspaceId }) => {
                     onRequestLive={() => handleMeetingLiveExecution(action)}
                     onDecision={(decision) => handleMeetingDecision(action, decision)}
                     onSaveReminder={(input) => handleMeetingReminder(action, input)}
+                    onApproveReminderDelivery={() => handleReminderDeliveryApproval(action)}
+                    onSendReminderDelivery={(retry) => handleReminderDeliverySend(action, retry)}
                     onRecordOutcome={(input) => handleMeetingOutcome(action, input)}
                   />
                 )} />

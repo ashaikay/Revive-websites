@@ -91,3 +91,20 @@ test('keeps transport and unclassified failures unknown', async () => {
     assert.equal((await response.json()).outcome, 'unknown');
   }
 });
+
+test('programme production and exact preview preflights preserve auth and retained-request authority',async()=>{
+  const fail=async():Promise<never>=>{throw Error('Preflight must not invoke authority');};
+  const deps=dependencies({allowedOrigin:'https://rev11.netlify.app,https://deploy-preview-4--rev11.netlify.app',
+    getUserId:fail,canAccessProgramme:fail,save:fail});
+  for(const origin of ['https://rev11.netlify.app','https://deploy-preview-4--rev11.netlify.app',
+    'https://deploy-preview-5--rev11.netlify.app','https://deploy-preview-4--rev11.netlify.app.evil.test']){
+    const allowed=origin==='https://rev11.netlify.app'||origin==='https://deploy-preview-4--rev11.netlify.app';
+    const response=await handleEmployerEngagementSave(new Request('https://example.test',{method:'OPTIONS',headers:{Origin:origin}}),deps);
+    assert.equal(response.status,allowed?204:403);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'),allowed?origin:null);
+  }
+  const unauthenticated=await handleEmployerEngagementSave(new Request('https://example.test',{
+    method:'POST',headers:{Origin:'https://deploy-preview-4--rev11.netlify.app','Content-Type':'application/json'},body:JSON.stringify(body),
+  }),deps);
+  assert.equal(unauthenticated.status,401);
+});

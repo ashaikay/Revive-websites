@@ -40,14 +40,14 @@ describe('Phase 4D prepared follow-up UI', () => {
     const markup = renderToStaticMarkup(
       <PreparedFollowUpReview artifact={artifact()} canReview onEdit={vi.fn()} onApprove={vi.fn()} onReject={vi.fn()} />,
     );
-    expect(markup).toContain('View draft and actions');
+    expect(markup).toContain('View draft, approve or discard');
     expect(markup).toContain('Suggested channel: email');
     expect(markup).toContain('Draft — review required');
     expect(markup).toContain('EVIDENCE USED');
     expect(markup).toContain('MISSING INFORMATION');
     expect(markup).toMatch(/<button[^>]*>Edit<\/button>/);
     expect(markup).toMatch(/<button[^>]*>Approve<\/button>/);
-    expect(markup).toMatch(/<button[^>]*>Reject<\/button>/);
+    expect(markup).toMatch(/<button[^>]*>Discard draft — not sent<\/button>/);
     expect(markup).not.toMatch(/<button[^>]*>[^<]*Send/i);
     expect(markup).toContain('<details>');
     expect(markup).not.toContain('<details open');

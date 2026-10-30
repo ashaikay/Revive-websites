@@ -69,8 +69,33 @@ describe('identity-bound acceptance',()=>{
  it('offers account creation with a same-origin verification return link and keeps passwords out of storage',async()=>{
   mocks.signUp.mockResolvedValue({data:{session:null},error:null});render(<WorkspaceInvitationPanel invitationId={invite} onAccepted={vi.fn()}/>);
   fireEvent.click(await screen.findByRole('button',{name:'Create account'}));fireEvent.change(screen.getByLabelText('Your email'),{target:{value:'jane@example.test'}});fireEvent.change(screen.getByLabelText('Password'),{target:{value:'A-strong-private-password'}});fireEvent.click(screen.getByRole('button',{name:'Create my account'}));
-  expect(await screen.findByText(/Check your email and confirm/)).toBeVisible();expect(screen.getByLabelText('Password')).toHaveValue('');expect(window.sessionStorage.length).toBe(0);expect(mocks.rpc).not.toHaveBeenCalled();
+  expect(await screen.findByText(/The account request was received/)).toBeVisible();expect(screen.getByLabelText('Password')).toHaveValue('');expect(window.sessionStorage.length).toBe(0);expect(mocks.rpc).not.toHaveBeenCalled();
   const redirect=new URL(mocks.signUp.mock.calls[0][0].options.emailRedirectTo);expect(redirect.origin).toBe(window.location.origin);expect(redirect.searchParams.get('rev_team_invite')).toBe(invite);
+ });
+
+ it('does not claim confirmation was sent for an existing or indistinguishable account',async()=>{
+  mocks.signUp.mockResolvedValue({data:{session:null,user:{id:guest,email:'jane@example.test',identities:[]}},error:null});
+  render(<WorkspaceInvitationPanel invitationId={invite} onAccepted={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Create account'}));
+  fireEvent.change(screen.getByLabelText('Your email'),{target:{value:'jane@example.test'}});
+  fireEvent.change(screen.getByLabelText('Password'),{target:{value:'A-strong-private-password'}});
+  fireEvent.click(screen.getByRole('button',{name:'Create my account'}));
+  expect(await screen.findByText(/confirmation email is not guaranteed/)).toHaveTextContent('choose Sign in');
+  expect(screen.getByRole('button',{name:'Forgot or need a password?'})).toBeVisible();
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Sign in'}));
+  expect(screen.getByRole('button',{name:'Sign in to continue'})).toBeVisible();
+ });
+ it('offers acceptance when signup returns a session without automatically joining',async()=>{
+  mocks.signUp.mockResolvedValue({data:{session:{user:{id:guest}},user:{id:guest,email:'jane@example.test'}},error:null});
+  const done=vi.fn();render(<WorkspaceInvitationPanel invitationId={invite} onAccepted={done}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Create account'}));
+  fireEvent.change(screen.getByLabelText('Your email'),{target:{value:'jane@example.test'}});
+  fireEvent.change(screen.getByLabelText('Password'),{target:{value:'A-strong-private-password'}});
+  fireEvent.click(screen.getByRole('button',{name:'Create my account'}));
+  expect(await screen.findByRole('button',{name:'Accept invitation'})).toBeVisible();
+  expect(screen.getByText(/You are signed in. Accept the invitation/)).toBeVisible();
+  expect(done).not.toHaveBeenCalled();expect(mocks.rpc).not.toHaveBeenCalled();
  });
  it('rejects malformed links and hostile redirect origins',()=>{
   expect(invitationFromLocation('?rev_team_invite=bad')).toBe('invalid');expect(invitationFromLocation(`?rev_team_invite=${invite}&rev_team_invite=${invite}`)).toBe('invalid');expect(()=>invitationLink(invite,{origin:'http://example.test',pathname:'/'})).toThrow();

@@ -6,6 +6,10 @@ import {
   MEETING_OUTCOME_LABELS,
   type MeetingOutcomeType,
 } from '@/domain/meetingOutcome';
+import type {
+  MeetingReminderDeliveryRequest,
+  MeetingReminderDeliveryResponse,
+} from '@/domain/meetingReminderDelivery';
 
 export interface MeetingProposalReviewCardProps {
   action: LivePendingAction;
@@ -24,10 +28,16 @@ export interface MeetingProposalReviewCardProps {
   outcomeError?: string;
   reminderBusy?: boolean;
   reminderError?: string;
+  reminderDeliveryBusy?: boolean;
+  reminderDeliveryError?: string;
+  reminderDeliveryResult?: MeetingReminderDeliveryResponse;
+  retainedReminderSend?: MeetingReminderDeliveryRequest | null;
   onSaveReminder?: (input: {
     body: string;
     expectedVersion: number;
   }) => Promise<void>;
+  onApproveReminderDelivery?: () => Promise<void>;
+  onSendReminderDelivery?: (retry: boolean) => Promise<void>;
   onRecordOutcome?: (input: {
     outcomeType: MeetingOutcomeType;
     summary: string;
@@ -116,13 +126,21 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
   outcomeError,
   reminderBusy = false,
   reminderError,
+  reminderDeliveryBusy = false,
+  reminderDeliveryError,
+  reminderDeliveryResult,
+  retainedReminderSend,
   onSaveReminder,
+  onApproveReminderDelivery,
+  onSendReminderDelivery,
   onRecordOutcome,
 }) => {
   const [confirmation, setConfirmation] = useState<'approved' | 'rejected' | null>(null);
   const [confirmLiveBooking, setConfirmLiveBooking] = useState(false);
   const [showOutcomeForm, setShowOutcomeForm] = useState(false);
   const [showReminderForm, setShowReminderForm] = useState(false);
+  const [confirmReminderApproval, setConfirmReminderApproval] = useState(false);
+  const [confirmReminderSend, setConfirmReminderSend] = useState(false);
   const [reminderBody, setReminderBody] = useState(action.meetingReminderDraft?.body ?? '');
   const [outcomeType, setOutcomeType] = useState<MeetingOutcomeType>(
     action.meetingOutcome?.outcomeType ?? 'held',
@@ -143,6 +161,15 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
     && displayedExecution?.status === 'event_created'
     && Date.parse(proposal?.startAt ?? '') > Date.now()
     && !action.meetingOutcome;
+  const reminderDelivery = action.meetingReminderDelivery;
+  const reminderApprovalCurrent = Boolean(
+    action.meetingReminderDraft
+    && reminderDelivery
+    && reminderDelivery.approvedDraftVersion === action.meetingReminderDraft.version,
+  );
+  const reminderAttemptClaimed = reminderDelivery
+    ? reminderDelivery.status !== 'approved_not_sent'
+    : false;
 
   useEffect(() => {
     if (!decisionFeedback) return;
@@ -248,6 +275,88 @@ export const MeetingProposalReviewCard: React.FC<MeetingProposalReviewCardProps>
           </form>
         )}
         {reminderError && <p className="mt-3 text-sm text-red-700" role="alert">{reminderError}</p>}
+
+        <div className="mt-4 border-t border-neutral-200 pt-3" aria-label="Meeting reminder email delivery">
+          <p className="text-sm font-medium text-neutral-900">Email delivery</p>
+          {action.meetingReminderDeliveryUnavailable ? (
+            <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+              {action.meetingReminderDeliveryUnavailable}
+            </p>
+          ) : reminderDelivery?.status === 'accepted_by_provider' ? (
+            <p className="mt-2 rounded border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-900" role="status">
+              Accepted by provider — delivery not confirmed.
+            </p>
+          ) : reminderDelivery?.status === 'rejected_by_provider' ? (
+            <p className="mt-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="status">
+              Rejected by provider — not sent. This provider attempt cannot be resent.
+            </p>
+          ) : reminderDelivery?.status === 'provider_outcome_unknown'
+            || reminderDelivery?.status === 'provider_attempt_claimed' ? (
+            <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="alert">
+              Send outcome unresolved — do not retry. Check the sending mailbox and ask an administrator to reconcile the durable attempt.
+            </p>
+          ) : reminderApprovalCurrent ? (
+            <p className="mt-2 text-sm font-medium text-neutral-700">Approved — not sent.</p>
+          ) : reminderDelivery && action.meetingReminderDraft ? (
+            <p className="mt-2 text-sm text-amber-800">Approval expired — the reminder draft changed and must be approved again.</p>
+          ) : (
+            <p className="mt-2 text-sm text-neutral-600">The current reminder draft has not been approved for email delivery.</p>
+          )}
+
+          {!action.meetingReminderDeliveryUnavailable && action.meetingReminderDraft
+            && reminderEditingAvailable && !reminderAttemptClaimed && !reminderApprovalCurrent
+            && onApproveReminderDelivery && !confirmReminderApproval && (
+            <button type="button" className="btn-secondary mt-3 text-sm" disabled={reminderDeliveryBusy}
+              onClick={() => setConfirmReminderApproval(true)}>APPROVE REMINDER FOR EMAIL</button>
+          )}
+          {confirmReminderApproval && (
+            <div className="mt-3 rounded border border-neutral-300 bg-neutral-50 p-3" role="group" aria-label="Confirm reminder approval">
+              <p className="text-sm">Approve this exact reminder draft version for email delivery? Approval does not send anything and will expire if the draft is corrected.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="btn-primary text-sm" disabled={reminderDeliveryBusy}
+                  onClick={() => void onApproveReminderDelivery?.().then(() => setConfirmReminderApproval(false)).catch(() => undefined)}>
+                  {reminderDeliveryBusy ? 'APPROVING…' : 'CONFIRM APPROVAL — NOT SENT'}
+                </button>
+                <button type="button" className="btn-ghost text-sm" disabled={reminderDeliveryBusy}
+                  onClick={() => setConfirmReminderApproval(false)}>KEEP UNAPPROVED</button>
+              </div>
+            </div>
+          )}
+
+          {reminderApprovalCurrent && reminderDelivery?.status === 'approved_not_sent'
+            && onSendReminderDelivery && !confirmReminderSend && !retainedReminderSend && (
+            <button type="button" className="btn-primary mt-3 text-sm" disabled={reminderDeliveryBusy}
+              onClick={() => setConfirmReminderSend(true)}>SEND EMAIL REMINDER</button>
+          )}
+          {confirmReminderSend && (
+            <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3" role="group" aria-label="Confirm reminder sending consent">
+              <p className="text-sm text-amber-950">This separate consent sends the approved reminder immediately to {proposal.attendeeEmail}. Calendar consent does not authorize this email. At most one provider attempt is allowed.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="btn-primary text-sm" disabled={reminderDeliveryBusy}
+                  onClick={() => void onSendReminderDelivery?.(false).then(() => setConfirmReminderSend(false)).catch(() => undefined)}>
+                  {reminderDeliveryBusy ? 'SENDING…' : 'CONFIRM CONSENT AND SEND EMAIL'}
+                </button>
+                <button type="button" className="btn-ghost text-sm" disabled={reminderDeliveryBusy}
+                  onClick={() => setConfirmReminderSend(false)}>DO NOT SEND</button>
+              </div>
+            </div>
+          )}
+          {retainedReminderSend && reminderDelivery?.status === 'approved_not_sent' && onSendReminderDelivery && (
+            <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3" role="alert">
+              <p className="text-sm">The previous send request has an unconfirmed pre-claim outcome. Its exact request ID and payload are retained.</p>
+              <button type="button" className="btn-primary mt-3 text-sm" disabled={reminderDeliveryBusy}
+                onClick={() => void onSendReminderDelivery(true)}>
+                {reminderDeliveryBusy ? 'RETRYING…' : 'RETRY SAME REMINDER REQUEST'}
+              </button>
+            </div>
+          )}
+          {reminderDeliveryResult?.status === 'provider_disabled' && (
+            <p className="mt-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+              Email sending disabled — nothing sent.
+            </p>
+          )}
+          {reminderDeliveryError && <p className="mt-3 text-sm text-red-700" role="alert">{reminderDeliveryError}</p>}
+        </div>
       </section>
 
       <section className="mt-4 border-t border-neutral-200 pt-4" aria-label="Meeting outcome">
