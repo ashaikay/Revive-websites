@@ -58,3 +58,13 @@ it('cleans up scroll lock when the shell unmounts and supports skip-to-content w
  fireEvent.click(screen.getByText('Skip to content'));expect(screen.getByText('Content')).toHaveFocus();expect(window.location.hash).toBe('#programme');
  fireEvent.click(screen.getByRole('button',{name:'Open navigation'}));view.unmount();expect(document.body.style.overflow).toBe('');
 });
+
+it.each([
+  ['Overview',''],['REV','#rev'],['Customers','#customers'],['Outcomes','#programme'],
+  ['Scheduling','#scheduling'],['Growth','#growth'],['Business','#business'],
+])('routes %s to its existing destination', (label, hash) => {
+  render(<Navigation/>);
+  const nav = screen.getByRole('navigation',{name:'Primary'});
+  fireEvent.click(within(nav).getByRole('button',{name:label}));
+  expect(window.location.hash).toBe(hash);
+});

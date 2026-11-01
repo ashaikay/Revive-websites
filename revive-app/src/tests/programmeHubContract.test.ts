@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { workspaceNavigationItems } from '@/domain/workspaceNavigation';
 
 const migration = readFileSync(new URL('../../supabase/migrations/20261010100000_rev_programme_hub_employer_foundation.sql', import.meta.url), 'utf8');
 const notesMigration = readFileSync(new URL('../../supabase/migrations/20261010110000_rev_programme_hub_participant_notes.sql', import.meta.url), 'utf8');
 const engagementMigration = readFileSync(new URL('../../supabase/migrations/20261011010000_rev_programme_employer_discovery_engagement.sql', import.meta.url), 'utf8');
 const architecture = readFileSync(new URL('../../../REVIVE_AI_MASTER/01_ARCHITECTURE/OUTCOMES_PROGRAMME_HUB_EMPLOYER_ENGAGEMENT_IPS.md', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-const navigation = readFileSync(new URL('../components/Navigation.tsx', import.meta.url), 'utf8');
 const supabaseConfig = readFileSync(new URL('../../supabase/config.toml', import.meta.url), 'utf8');
 
 describe('Outcomes / Programme Hub contract', () => {
@@ -50,9 +50,11 @@ describe('Outcomes / Programme Hub contract', () => {
     expect(app).toContain("<REVInterface workspaceId={currentWorkspaceId} />");
     expect(app).toContain('<SchedulingModule key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} />');
     expect(app).toContain('<ProgrammeHubModule key={`${currentWorkspaceId}:${liveSession.userId}`} workspaceId={currentWorkspaceId} userId={liveSession.userId} />');
-    expect(navigation).toContain("{ label: 'REV', href: '#rev', id: 'rev' }");
-    expect(navigation).toContain("{ label: 'OUTCOMES', href: '#programme', id: 'programme' }");
-    expect(navigation).toContain("{ label: 'SCHEDULING', href: '#scheduling', id: 'scheduling' }");
+    expect(workspaceNavigationItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'rev', hash: '#rev' }),
+      expect.objectContaining({ id: 'programme', hash: '#programme' }),
+      expect.objectContaining({ id: 'scheduling', hash: '#scheduling' }),
+    ]));
     expect(supabaseConfig).toContain('[functions.rev-programme-hub-save]');
   });
 

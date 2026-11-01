@@ -4,15 +4,7 @@ import { useAppStore } from '@/hooks/useAppStore';
 import { WorkspaceService } from '@/services/workspaceService';
 import { dataProviderMode } from '@/data/provider';
 
-const navItems = [
-  { label: 'Overview', id: 'home', symbol: 'grid' },
-  { label: 'REV', id: 'rev', symbol: 'spark' },
-  { label: 'Customers', id: 'customers', symbol: 'people' },
-  { label: 'Outcomes', id: 'programme', symbol: 'target' },
-  { label: 'Scheduling', id: 'scheduling', symbol: 'calendar' },
-  { label: 'Growth', id: 'growth', symbol: 'growth' },
-  { label: 'Business', id: 'business', symbol: 'business' },
-];
+import { workspaceNavigationItems as navItems } from '@/domain/workspaceNavigation';
 
 function NavIcon({ name }: { name: string }) {
   const paths: Record<string, React.ReactNode> = {
@@ -68,7 +60,7 @@ export const Navigation: React.FC<{ onSignOut?: () => void; allowedPages?: strin
     }
   }, [mobileOpen]);
 
-  const navigate = (id: string) => { window.location.hash = id === 'home' ? '' : id; setMobileOpen(false); };
+  const navigate = (id: string) => { const item = navItems.find(item => item.id === id); if (item) window.location.hash = item.hash; setMobileOpen(false); };
   const contents = (mobile: boolean) => <>
     <div className="rev-shell-brand"><span className="rev-shell-mark" aria-hidden="true">R</span><div><strong>REV</strong><span>Business Hub</span></div>{mobile && <button ref={closeButton} type="button" className="rev-shell-icon-button" aria-label="Close navigation" onClick={() => setMobileOpen(false)}>×</button>}</div>
     <div className="rev-shell-workspace"><label htmlFor={mobile ? 'mobile-workspace-switcher' : 'workspace-switcher'}>Current workspace</label><select id={mobile ? 'mobile-workspace-switcher' : 'workspace-switcher'} value={currentWorkspaceId} onChange={event => { switchWorkspace(event.target.value); setMobileOpen(false); }}>{workspaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>

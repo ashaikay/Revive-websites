@@ -9,3 +9,11 @@ The native mobile dialog makes background controls inert, focuses Close, support
 Validation: 103 tests in six files pass (navigation, invitation/session application, module access, owner control centre, Programme Hub, scheduling month planner). Default and Supabase-mode builds pass; existing chunk-size warning remains. Chromium checked mock-mode desktop/mobile at 1440/390 widths, Escape/focus return and no horizontal page overflow at 320,390,768,1440; zero page errors. Screenshots are local review artifacts under `/workspace/artifacts/rev-shell/`, not production evidence. Hosted authenticated preview review and keyboard testing on the user's own browser remain pending. No RLS changes warrant new RLS migrations; existing module-access and Programme Hub tests passed.
 
 Review desktop/mobile shell first. Then adapt dashboard cards and module layouts in further small increments using actual working components. Keep production unchanged until review and checks pass. The user's Windows navigation files remain locally modified; do not merge over them without first preserving them, and never add their unrelated backups or archives.
+
+## CI correction — 1 November 2026
+
+The initial design PR failed the Programme Hub contract test: it compared exact uppercase navigation object literals with the old inline href shape. Reproduced locally: one failed, 882 passed. The actual stable destinations remained intact, but the first targeted check omitted this contract file.
+
+Navigation definitions now live in `domain/workspaceNavigation.ts`, retaining the existing IDs and hashes. The contract checks those stable route mappings rather than presentation-specific source text. Seven mounted navigation tests additionally click each destination and verify its actual hash. Existing filtering, gated active state and workspace/auth lifecycle tests remain.
+
+Validation after correction: full `npm run test:all` passed all 890 Vitest tests in 107 files plus 550 Node boundary tests. Both default and Supabase-mode production builds passed. No workflow skips, permission changes or assertion timeouts were introduced. Hosted checks must rerun on the corrected commit before merge.
