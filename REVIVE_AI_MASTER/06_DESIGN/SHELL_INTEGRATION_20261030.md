@@ -17,3 +17,11 @@ The initial design PR failed the Programme Hub contract test: it compared exact 
 Navigation definitions now live in `domain/workspaceNavigation.ts`, retaining the existing IDs and hashes. The contract checks those stable route mappings rather than presentation-specific source text. Seven mounted navigation tests additionally click each destination and verify its actual hash. Existing filtering, gated active state and workspace/auth lifecycle tests remain.
 
 Validation after correction: full `npm run test:all` passed all 890 Vitest tests in 107 files plus 550 Node boundary tests. Both default and Supabase-mode production builds passed. No workflow skips, permission changes or assertion timeouts were introduced. Hosted checks must rerun on the corrected commit before merge.
+
+## Dashboard increment - 1 November 2026
+
+Adapted the supplied v0 export's off-white canvas, white bordered surfaces, 12px corners, emerald approval action and compact summary cards in the existing HomeDashboard. All eight owner-control-centre sections, read models, routes and execution caveats remain. Four read-only summaries count existing work, approvals, dry-run-ready items and results, not prototype service users, shifts or activity. Live operational summaries explicitly say Unavailable rather than zero; mock mode is labelled Demo workspace data. No data contract, dependency, backend or permission changes.
+
+The Windows navigation import, stylesheet and existing encoding damage were inspected and left unchanged in the original worktree. Integration uses an isolated worktree on the design branch at verified PR head afe9ba7. The ZIP was located in Downloads and extracted only to session storage; no fixtures or Next.js scaffolding were imported into production.
+
+Validation: 36 tests across owner-control-centre model/UI, navigation and workspace invitation/session files passed. Default production build passed with the existing chunk-size advisory. Local mock-mode Chromium checks found no page overflow at 320, 390, 768 and 1440px; summary cards reflow from four to two to one columns. PR #5 at afe9ba7 had 24 successful checks, three neutral Netlify checks and a successful deploy-preview status. Authenticated hosted visual review remains pending. This increment is not merge or production-deployment approval.
