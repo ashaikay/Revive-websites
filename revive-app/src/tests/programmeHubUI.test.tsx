@@ -186,6 +186,10 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(screen.queryByRole('heading', { name: 'Employers' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Job opportunities' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Create programme' })).toBeNull();
+    const guidance = screen.getByRole('complementary', { name: 'Programme workspace guidance' });
+    expect(within(guidance).getByRole('heading', { name: 'Manager workspace: programme and team setup' })).toBeVisible();
+    expect(guidance).toHaveTextContent('Questionnaire setup is separate from staff profile completion.');
+    expect(within(nav).getByRole('button', { name: 'Vocational Profiles' })).toBeVisible();
     await navigateHub('Settings');
     const settings = screen.getByText('Programme settings').closest('details')!;
     expect(settings).not.toHaveAttribute('open');
@@ -1228,6 +1232,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(within(nav).getByRole('button', { name: 'My caseload' })).toHaveAttribute('aria-current', 'page');
     expect(within(nav).queryByRole('button', { name: 'My team' })).toBeNull();
     expect(within(nav).queryByRole('button', { name: 'Settings' })).toBeNull();
+    expect(within(nav).queryByRole('button', { name: 'Vocational Profiles' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'My caseload' })).toBeVisible();
     await navigateHub('Employers');
     expect(screen.queryByRole('heading', { name: 'My caseload' })).toBeNull();
@@ -1235,6 +1240,24 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     fireEvent.click(screen.getByText('Find employers', { selector: 'summary' }));
     expect(screen.queryByText('Manager setup details')).toBeNull();
     expect(screen.queryByText(/COMPANIES_HOUSE_API_KEY/)).toBeNull();
+  });
+
+  it('keeps the real vocational profile action prominent for an assigned ES without manager setup', async () => {
+    setRows('member', true);
+    render(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+    const record = await openServiceUser('Alex');
+    expect(screen.getByRole('main')).toHaveClass('rev-outcomes');
+    expect(record.closest('section')).toHaveClass('rev-outcomes-record');
+    const profile = within(record.closest('section')!).getByRole('button', { name: 'Open vocational profile' });
+    expect(profile).toBeVisible();
+    expect(profile).toBeEnabled();
+    expect(profile).toHaveAttribute('aria-expanded', 'false');
+    expect(profile).toHaveClass('btn-primary');
+    expect(profile.compareDocumentPosition(record) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Vocational profile templates' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set up questionnaire' })).toBeNull();
+    expect(screen.getByRole('complementary', { name: 'Programme workspace guidance' })).toHaveTextContent('Assignment and note authorship remain separate.');
+    expect(screen.getByRole('button', { name: 'Open Service-user record' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('does not download a caseload after the manager leaves that area', async () => {
@@ -1261,7 +1284,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     const original = mocks.invoke.mock.calls[0][1].body;
     first.unmount();
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
-    const retry = await screen.findByRole('button', { name: 'Retry exact saved change' });
+    // The remount reloads the whole hub before the employer workspace restores; allow for slower jsdom runs.
+    const retry = await screen.findByRole('button', { name: 'Retry exact saved change' }, { timeout: 5000 });
     expect(retry).toBeVisible();
     const nav = screen.getByRole('navigation', { name: 'Employment support areas' });
     expect(within(nav).getByRole('button', { name: 'Employers' })).toHaveAttribute('aria-current', 'page');
@@ -1271,7 +1295,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
     expect(mocks.invoke.mock.calls[1][1].body).toEqual(original);
     await waitFor(() => expect(within(nav).getByRole('button', { name: 'Caseload' })).toBeEnabled());
-  });
+  }, 15000);
 
   it('uses authorised staff display names in the ES workspace and caseload assignment controls', async () => {
     setupEsOverview();

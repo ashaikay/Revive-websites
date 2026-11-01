@@ -1,4 +1,5 @@
 import { Children, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import '@/styles/rev-business-hub.css';
 import { supabaseClient } from '@/data/supabaseClient';
 import type {
   ProgrammeHubData,
@@ -542,7 +543,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     } finally { setExporting(false); }
   };
   const summaryParticipants = filterCaseload(programmeParticipants, data, userId, { specialist: effectiveSpecialist, status: 'all', search: '' });
-  const caseloadTools = selectedProgramme && (isManager || isAdviser) ? <div className="mt-4 space-y-3" aria-label="Employment Specialist overview">
+  const caseloadTools = selectedProgramme && (isManager || isAdviser) ? <div className="rev-outcomes-caseload-tools mt-4 space-y-3" aria-label="Employment Specialist overview">
     <p className="font-medium">{isManager ? 'Active Service users' : 'My active caseload'}: {summaryParticipants.filter((participant) => participant.active).length}{isManager && specialistFilter === 'all' ? ` - Unassigned: ${programmeParticipants.filter((participant) => participant.active && currentCaseload(participant, data).length === 0).length}` : ''}</p>
     <div className="grid gap-3 sm:grid-cols-2">
       {isManager && <label className="text-sm font-medium">View ES caseload<select className={`${inputClass} mt-1`} value={specialistFilter} onChange={(event) => { setSpecialistFilter(event.target.value); setCaseloadPage(1); }}>
@@ -567,20 +568,23 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     : (feedbackTarget.startsWith('participant_note:') || feedbackTarget.startsWith('participant_contact:')) ? currentArea === 'caseload' && selectedParticipants.some((participant) => feedbackTarget === `participant_note:${participant.id}` || feedbackTarget === `participant_contact:${participant.id}`)
     : !!selectedProgramme && canMaintainEmployerRecords && currentArea === (feedbackTarget === 'vacancy' ? 'jobs' : 'employers');
 
-  if (!ready && !error) return <main className="p-8 text-neutral-600">Loading Outcomes / Programme Hub...</main>;
+  if (!ready && !error) return <main className="rev-outcomes" role="status">Loading Outcomes / Programme Hub...</main>;
 
   return (
-    <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-600">Outcomes / Programme Hub</p>
-        <h1 className="mt-1 text-3xl font-bold text-neutral-900">Employment support</h1>
+    <main className="rev-outcomes mx-auto flex max-w-7xl flex-col gap-6">
+      <header className="rev-hub-heading">
+        <div>
+          <p className="rev-hub-eyebrow">Outcomes / Programme Hub</p>
+          <h1 className="mt-1 text-3xl font-bold text-neutral-900">Employment support</h1>
+          <p className="mt-2">Manage programme records, caseloads and vocational profiles.</p>
+        </div>
       </header>
 
       {(!feedbackTarget || !localFeedbackAvailable) && <SaveFeedback busy={busy} error={error} message={message} pending={!!pending} retry={retryPending} />}
 
 
       {data.programmes.length > 0 && (
-        <section className="card border-primary-200 bg-primary-50 p-5" aria-label="Programme selection">
+        <section className="rev-outcomes-selection rev-hub-surface" aria-label="Programme selection">
           <Field label="Choose a programme">
           <select className={inputClass} value={selectedProgrammeId} disabled={recordNavigationLocked} onChange={(event) => selectProgramme(event.target.value)}>
             {data.programmes.map((programme) => <option key={programme.id} value={programme.id}>{programme.name}</option>)}
@@ -591,11 +595,21 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       )}
 
       {ready && (isManager || isAdviser) && <>
-        <nav className="flex flex-wrap gap-2" aria-label="Employment support areas">
+        <nav className="rev-outcomes-areas" aria-label="Employment support areas">
           {(isManager ? [['team', 'My team'], ['caseload', 'Caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities'], ['vocational', 'Vocational Profiles'], ['settings', 'Settings']] : [['caseload', 'My caseload'], ['employers', 'Employers'], ['jobs', 'Job opportunities']]).map(([key, label]) => <button key={key} type="button" aria-current={currentArea === key ? 'page' : undefined} className={currentArea === key ? 'btn-primary' : 'btn-secondary'} disabled={recordNavigationLocked && currentArea !== key} onClick={() => changeArea(key as ProgrammeArea)}>{label}</button>)}
         </nav>
         {recordNavigationLocked && <p className="text-sm" role="status">{busy || pending || employerLocked || teamLocked ? 'Finish or confirm the current request before changing areas.' : 'Save or cancel your edit before changing areas.'}</p>}
         <h2 ref={areaHeading} tabIndex={-1} className="sr-only">{currentArea === 'team' ? 'Team workspace' : currentArea === 'caseload' ? 'Caseload workspace' : currentArea === 'employers' ? 'Employer workspace' : currentArea === 'jobs' ? 'Job opportunities workspace' : currentArea === 'vocational' ? 'Vocational profile templates workspace' : 'Programme settings workspace'}</h2>
+        <aside className="rev-outcomes-guidance" aria-label="Programme workspace guidance">
+          <h2 className="font-semibold">{currentArea === 'vocational' ? 'Manager setup: programme questionnaire' : currentArea === 'settings' || currentArea === 'team' ? 'Manager workspace: programme and team setup' : 'Staff workspace: programme records'}</h2>
+          <p>{currentArea === 'vocational'
+            ? 'Review and make questions available here. Assigned Employment Specialists complete vocational profiles in their Service-user records.'
+            : currentArea === 'settings' || currentArea === 'team'
+              ? 'Manage programme settings, staff and caseload assignments here. Questionnaire setup is separate from staff profile completion.'
+              : currentArea === 'caseload'
+                ? 'Open a Service-user record to access the vocational profile and case notes. Assignment and note authorship remain separate.'
+                : 'Work with employers and Job opportunities for the selected programme. Saved records and prepared outreach keep their existing review steps.'}</p>
+        </aside>
       </>}
       {isManager && currentArea === 'vocational' && selectedProgramme && !recordNavigationLocked && (
   <section className="card p-5" aria-label="Vocational profile templates">
@@ -699,15 +713,16 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       </div>
 
       <div hidden={currentArea !== 'caseload'} className="space-y-6">
-      {selectedProgramme && (isManager || isAdviser) && <section className="card p-5">
+      <div className={`rev-outcomes-caseload-layout${selectedParticipants.length ? ' rev-outcomes-record-open' : ''}`}>
+      {selectedProgramme && (isManager || isAdviser) && <section className="rev-outcomes-caseload card p-5">
         <h2 className="text-xl font-semibold">{!isManager ? 'My caseload' : specialistFilter === 'all' ? 'All Service users' : specialistFilter === 'unassigned' ? 'Unassigned Service users' : `${adviserLabel(specialistFilter, data, userId)} - caseload`}</h2>
           {caseloadTools}
           <CompactCaseload workspaceId={workspaceId} programmeId={selectedProgramme.id} participants={visibleCaseload} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} />
       </section>}
-      {selectedProgramme && (isManager || isAdviser) && selectedParticipants.map((participant) => <section key={participant.id} className="card p-5" aria-label="Selected Service-user record">
-        <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">Service-user record</h2><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => setOpenRecordRequest(null)}>Close record</button></div>
-        <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onEditingChange={setContactEditing} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 1} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />
+      {selectedProgramme && (isManager || isAdviser) && selectedParticipants.map((participant) => <section key={participant.id} className="rev-outcomes-record card p-5" aria-label="Selected Service-user record">
+        <div className="rev-outcomes-record-heading mb-3 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Service-user record</h2><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => setOpenRecordRequest(null)}>Close record</button></div>
         <ParticipantVocationalAssessment workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} participantName={participant.preferredName} caseReference={participant.caseReference} onReviewQuestionnaire={isManager ? () => changeArea('vocational') : undefined} assignedSpecialists={currentCaseload(participant, data).map((assignment) => adviserLabel(assignment.adviserUserId, data, userId))} isManager={isManager} consentAdvisers={currentCaseload(participant, data).filter((assignment) => activeProgrammeAdvisers.some((adviser) => adviser.userId === assignment.adviserUserId)).map((assignment) => ({ userId: assignment.adviserUserId, label: adviserLabel(assignment.adviserUserId, data, userId) }))} />
+        <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onEditingChange={setContactEditing} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 1} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />
         {participantEdit && (isManager ? <form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p>
           <Field label="Service user ID"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
           <Field label="Known as"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field>
@@ -719,6 +734,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
           <FormActions saveLabel="Save profile" addLabel="Add Service user" editing={!!participantEdit} saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />
         {renderSaveFeedback('participant')}</form> : <form className="mt-4 grid gap-3 md:grid-cols-2" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p><Field label="Known as"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.preferredName} onChange={(event) => setParticipantDraft({ ...participantDraft, preferredName: event.target.value })} /></Field><Field label="Jobs of interest"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.desiredRoleKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, desiredRoleKeys: event.target.value })} /></Field><Field label="Work skills"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.skillKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, skillKeys: event.target.value })} /></Field><Field label="Preferred work locations"><input disabled={busy || !!pending} className={inputClass} value={participantDraft.vacancySearchGeographyKeys} onChange={(event) => setParticipantDraft({ ...participantDraft, vacancySearchGeographyKeys: event.target.value })} /></Field><FormActions saveLabel="Save profile" editing saving={busy && feedbackTarget === 'participant'} busy={busy || !!pending} cancel={resetParticipant} />{renderSaveFeedback('participant')}</form>)}
       </section>)}
+      </div>
 
       {selectedProgramme && isManager && !participantEdit && <details className="card p-5" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'participant' && (busy || pending)) event.currentTarget.open = true; }} open={feedbackTarget === 'participant' && (busy || !!pending || !!error || !!message)}>
         <summary className="cursor-pointer font-semibold">New Service user</summary>
@@ -836,13 +852,13 @@ function CompactCaseload({ workspaceId, programmeId, participants, visible, tota
   // Employment outcomes are not yet available in the Programme Hub data contract.
   // Do not infer verified work, job readiness or a percentage from unrelated fields.
   const [showHelp, setShowHelp] = useState(false);
-  return <section className="mt-5 border-t border-neutral-200 pt-5" aria-label="Caseload overview">
+  return <section className="rev-outcomes-summary mt-5 border-t border-neutral-200 pt-5" aria-label="Caseload overview">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="text-xl font-semibold">Caseload summary</h3><p className="mt-1 text-base text-neutral-600">Employment progress dashboard</p></div>
       <button type="button" className="btn-secondary" aria-expanded={showHelp} onClick={() => setShowHelp((value) => !value)}>Help</button>
     </div>
     {showHelp && <p className="mt-3 rounded-lg bg-neutral-50 p-3 text-base text-neutral-700">Employment journey progress will be calculated from verified milestones. Until job-start and readiness evidence is connected, REV will not guess percentages or mark anyone as in work. Vocational assessment progress remains visible separately.</p>}
-    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3" role="group" aria-label="Caseload totals">
+    <div className="rev-outcomes-metrics mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3" role="group" aria-label="Caseload totals">
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-3xl font-bold">{participants.length}</p><p className="mt-1 text-base">Service users</p></div>
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-xl font-semibold text-neutral-600">Not tracked</p><p className="mt-1 text-base">Job ready</p></div>
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p className="text-xl font-semibold text-neutral-600">Not tracked</p><p className="mt-1 text-base">In work</p></div>
@@ -851,9 +867,9 @@ function CompactCaseload({ workspaceId, programmeId, participants, visible, tota
     <p className="mt-1 text-base text-neutral-600">{participants.length} {participants.length === 1 ? 'Service user' : 'Service users'}{unassigned ? ` - ${unassigned} unassigned` : participants.length ? ' - All assigned' : ''}</p>
     <label className="mt-4 block text-base font-medium">Search caseload<input className={`${inputClass} mt-2`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Name, case reference or ES" /></label>
     {visible.length === 0 ? <p className="mt-4 text-base text-neutral-600">{search.trim() ? 'No Service users match this search.' : 'No Service users match the selected caseload filters.'}</p>
-      : <ul className="mt-4 space-y-3">{visible.map((participant) => {
+      : <ul className="rev-outcomes-caseload-list mt-4 space-y-3">{visible.map((participant) => {
         const assignments = currentCaseload(participant, data);
-        return <li key={participant.id} className="rounded-xl border border-neutral-200 p-4">
+        return <li key={participant.id} className={`rev-outcomes-caseload-row rounded-xl border border-neutral-200 p-4${selectedId === participant.id ? ' rev-outcomes-caseload-selected' : ''}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><p className="text-lg font-semibold">{participant.preferredName}: {participant.caseReference}{!participant.active ? " - Inactive record" : ""}</p></div>
             <button type="button" className="btn-secondary" aria-label="Open Service-user record" aria-pressed={selectedId === participant.id} disabled={locked} onClick={() => openRecord(participant)}>{selectedId === participant.id ? 'Viewing' : 'Open record'}</button>
@@ -901,13 +917,13 @@ function DetailFields({ fields }: { fields: Array<[string, DetailValue]> }) {
   })}</dl>;
 }
 function RecordRow({ title, detail, edit, fields }: { title: string; detail: string; edit: () => void; fields: Array<[string, DetailValue]> }) {
-  return <article className="rounded border border-neutral-200 p-4">
+  return <article className="rev-outcomes-record-row rounded border border-neutral-200 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium">{title}</h3><p className="text-sm text-neutral-600">{detail}</p></div><button type="button" className="btn-secondary focus-visible:ring-2 active:scale-[0.98]" onClick={edit}>Edit</button></div>
     <details className="mt-3"><summary className="cursor-pointer font-medium text-primary-700 focus-visible:ring-2">View details</summary><DetailFields fields={fields} /></details>
   </article>;
 }
 function FormActions({ editing, busy, saving, cancel, saveLabel = 'Save changes', addLabel = 'Add record' }: { editing: boolean; busy: boolean; saving: boolean; cancel: () => void; saveLabel?: string; addLabel?: string }) {
-  return <div className="flex items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy}>{saving ? 'Saving...' : editing ? saveLabel : addLabel}</button>{editing && <button type="button" disabled={busy} className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={cancel}>Cancel</button>}</div>;
+  return <div className="flex flex-wrap items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy}>{saving ? 'Saving...' : editing ? saveLabel : addLabel}</button>{editing && <button type="button" disabled={busy} className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={cancel}>Cancel</button>}</div>;
 }
 function saveTarget(attempt: ProgrammeHubSaveAttempt) {
   return attempt.operation === 'participant_note' || attempt.operation === 'participant_contact' ? `${attempt.operation}:${attempt.payload.participantId}` : attempt.operation;
@@ -982,10 +998,11 @@ function ParticipantRecord({
     if (profileRef.current) profileRef.current.open = true;
     setNotesOpen(true);
     recordRef.current?.focus({ preventScroll: true });
-    recordRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+    const scrollTarget = recordRef.current?.closest('.rev-outcomes-record') ?? recordRef.current;
+    scrollTarget?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   }, [openRequest]);
   const notesDisclosureOpen = notesOpen || !!noteDraft.trim() || keepNotesOpen;
-  return <article ref={recordRef} tabIndex={-1} aria-label={`${participant.preferredName} - ${programme.name} record`} className="rounded border border-neutral-200 p-4 focus:outline-none focus:ring-2 focus:ring-primary-500">
+  return <article ref={recordRef} tabIndex={-1} aria-label={`${participant.preferredName} - ${programme.name} record`} className="rev-outcomes-participant rounded border border-neutral-200 p-4 focus:outline-none focus:ring-2 focus:ring-primary-500">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h3 className="font-semibold">{participant.preferredName}</h3>
@@ -1012,7 +1029,7 @@ function ParticipantRecord({
       {notesError && <p className="mt-2 text-sm text-amber-800">{notesError}</p>}
       {!notesError && !notesReady && <p className="mt-2 text-sm text-neutral-600">Loading notes...</p>}
       {!notesError && notesReady && notes.length === 0 && <p className="mt-2 text-sm text-neutral-600">No notes have been added to this participant's {programme.name} record.</p>}
-      {!notesError && notes.length > 0 && <ol className="mt-3 space-y-2">{notes.map((note) => <li key={note.id} className="rounded bg-neutral-50 p-3 text-sm">
+      {!notesError && notes.length > 0 && <ol className="rev-outcomes-notes mt-3 space-y-2">{notes.map((note) => <li key={note.id} className="rounded bg-neutral-50 p-3 text-sm">
         <p className="whitespace-pre-wrap text-neutral-800">{note.body}</p>
         <p className="mt-1 text-xs text-neutral-500">{formatProgrammeDate(note.createdAt, programme.timezone)} - {adviserLabel(note.authorUserId, data, userId)}</p>
       </li>)}</ol>}

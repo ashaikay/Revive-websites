@@ -34,7 +34,7 @@ const props = { workspaceId: 'workspace', programmeId: 'programme', participantI
 const assessment = (participant: string, answers = { role: `Saved ${participant}` }) => ({ assessmentId: `assessment-${participant}`, version: 1, status: 'in_progress', answers });
 
 async function openProfile() {
-  fireEvent.click(screen.getByRole('button', { name: 'Open profile' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open vocational profile' }));
   await screen.findByRole('button', { name: 'Mark completed' });
   fireEvent.click(screen.getByRole('button', { name: /Employment goals/ }));
   return screen.getByLabelText('Preferred role');
@@ -168,7 +168,7 @@ it('lets staff copy a manager setup request without exposing optional support as
   mocks.supportOnly=true;const writeText=vi.fn().mockResolvedValue(undefined);
   vi.stubGlobal('navigator',{clipboard:{writeText}});
   render(<ParticipantVocationalAssessment {...props}/>);
-  fireEvent.click(screen.getByRole('button',{name:'Open profile'}));
+  fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
   fireEvent.click(await screen.findByRole('button',{name:'Copy setup request for manager'}));
   expect(await screen.findByText(/Setup request copied/)).toHaveTextContent('No notification has been sent automatically');
   expect(writeText).toHaveBeenCalledTimes(1);
@@ -180,7 +180,7 @@ it('lets staff copy a manager setup request without exposing optional support as
 it('gives managers a direct review action when a published questionnaire has no core questions',async()=>{
   mocks.supportOnly=true;const review=vi.fn();
   render(<ParticipantVocationalAssessment {...props} isManager onReviewQuestionnaire={review}/>);
-  fireEvent.click(screen.getByRole('button',{name:'Open profile'}));
+  fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
   fireEvent.click(await screen.findByRole('button',{name:'Review programme questionnaire'}));
   expect(review).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('button',{name:'Copy setup request for manager'})).toBeNull();

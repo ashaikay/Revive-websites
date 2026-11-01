@@ -1,0 +1,47 @@
+/* REV shell only: module forms, calendars and workflow styles remain independent. */
+.rev-app-shell { --rev-shell-canvas:#f7f8f5; --rev-shell-surface:#fff; --rev-shell-ink:#202c27; --rev-shell-muted:#5d6b63; --rev-shell-line:#e2e8e2; --rev-shell-accent:#185d46; --rev-shell-sidebar:248px; min-height:100vh; background:var(--rev-shell-canvas); }
+.rev-shell-sidebar,.rev-shell-drawer { font-family:Inter,system-ui,sans-serif; color:var(--rev-shell-ink); background:var(--rev-shell-surface); }
+.rev-shell-sidebar { position:fixed; inset:0 auto 0 0; z-index:30; width:var(--rev-shell-sidebar); display:flex; flex-direction:column; border-right:1px solid var(--rev-shell-line); overflow-y:auto; }
+.rev-shell-brand { display:flex; align-items:center; gap:12px; padding:30px 24px 25px; }
+.rev-shell-mark { width:38px; height:42px; border-radius:12px; background:var(--rev-shell-accent); color:white; display:grid; place-items:center; font-size:23px; font-weight:750; }
+.rev-shell-brand strong { font-size:21px; letter-spacing:.04em; }
+.rev-shell-brand div>span { display:block; color:var(--rev-shell-muted); font-size:12px; }
+.rev-shell-workspace { margin:0 16px 24px; padding:12px; border:1px solid var(--rev-shell-line); border-radius:12px; background:#fafbf9; }
+.rev-shell-workspace label { display:block; font-size:11px; color:var(--rev-shell-muted); margin-bottom:6px; font-weight:600; }
+.rev-shell-workspace select { width:100%; min-height:36px; font-size:13px; font-weight:600; color:var(--rev-shell-ink); background:transparent; border:0; border-radius:8px; padding:4px 0; }
+.rev-shell-nav { padding:0 14px 24px; }
+.rev-shell-section-label { color:var(--rev-shell-muted); font-size:11px; font-weight:650; letter-spacing:.08em; text-transform:uppercase; margin:0 12px 12px; }
+.rev-shell-nav button { display:flex; align-items:center; width:100%; min-height:46px; text-align:left; gap:12px; padding:11px 14px; border-radius:9px; margin:4px 0; font-size:14px; font-weight:550; color:#526258; transition:background-color 160ms ease,color 160ms ease,box-shadow 160ms ease; }
+.rev-shell-nav button svg { width:19px; height:19px; flex-shrink:0; }
+.rev-shell-nav button:hover { background:#f3f6f2; color:var(--rev-shell-ink); }
+.rev-shell-nav button[aria-current=page] { background:#eaf3ec; color:#174b37; box-shadow:inset 3px 0 #236b4e; font-weight:650; }
+.rev-shell-count { margin-left:auto; border-radius:6px; background:#f9edce; color:#6b4810; padding:1px 6px; font-size:11px; }
+.rev-shell-account { margin:auto 16px 0; border-top:1px solid var(--rev-shell-line); padding:20px 0; display:grid; grid-template-columns:34px minmax(0,1fr); gap:10px; align-items:center; }
+.rev-shell-avatar { display:grid; place-items:center; background:#edf0e2; color:#4a5432; width:34px; height:34px; border-radius:50%; font-size:11px; font-weight:700; }
+.rev-shell-account strong { display:block; font-size:13px; overflow-wrap:anywhere; }
+.rev-shell-account div>span { display:block; font-size:11px; color:var(--rev-shell-muted); overflow-wrap:anywhere; }
+.rev-shell-account button { grid-column:1/-1; min-height:44px; text-align:left; font-size:12px; color:var(--rev-shell-muted); padding:8px; border-radius:8px; }
+.rev-shell-account button:hover { background:#f3f6f2; }
+.rev-shell-demo { grid-column:2; font-size:11px; color:var(--rev-shell-muted); }
+.rev-shell-topbar { margin-left:var(--rev-shell-sidebar); display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:76px; padding:16px 30px; border-bottom:1px solid var(--rev-shell-line); background:var(--rev-shell-surface); color:var(--rev-shell-ink); }
+.rev-shell-location { display:flex; align-items:center; min-width:0; gap:14px; font-size:13px; }
+.rev-shell-location strong { font-weight:600; }
+.rev-shell-product { color:var(--rev-shell-muted); }
+.rev-shell-divider { color:#bbc5bd; }
+.rev-shell-context { max-width:35%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--rev-shell-muted); }
+.rev-app-body { margin-left:var(--rev-shell-sidebar); min-width:0; }
+.rev-app-content { min-width:0; min-height:calc(100vh - 230px); }
+.rev-shell-menu-button { display:none; }
+.rev-shell-icon-button { margin-left:auto; font-size:28px; }
+.rev-shell-icon-button,.rev-shell-menu-button { min-width:44px; min-height:44px; border-radius:8px; }
+.rev-shell-menu-button svg { width:23px; height:23px; margin:auto; }
+.rev-shell-drawer { width:min(300px,calc(100vw - 32px)); height:100dvh; max-height:100dvh; max-width:none; padding:0; border:0; margin:0; --rev-shell-ink:#202c27; --rev-shell-muted:#5d6b63; --rev-shell-line:#e2e8e2; --rev-shell-accent:#185d46; }
+.rev-shell-drawer::backdrop { background:rgba(20,35,28,.4); }
+.rev-shell-drawer-content { min-height:100%; display:flex; flex-direction:column; }
+.rev-shell-drawer:not([open]) { display:none; }
+.rev-shell-skip { position:fixed; z-index:100; left:12px; top:-100px; padding:12px 18px; background:#185d46; color:white; border-radius:8px; }
+.rev-shell-skip:focus { top:12px; }
+.rev-shell-nav button:focus-visible,.rev-shell-workspace select:focus-visible,.rev-shell-account button:focus-visible,.rev-shell-icon-button:focus-visible,.rev-shell-menu-button:focus-visible { outline:2px solid #185d46; outline-offset:3px; }
+@media(max-width:959px) { .rev-shell-sidebar { display:none; } .rev-shell-topbar,.rev-app-body { margin-left:0; } .rev-shell-topbar { min-height:68px; padding:10px 16px; } .rev-shell-menu-button { display:block; flex-shrink:0; } .rev-shell-location { gap:8px; } .rev-shell-context { max-width:30%; } }
+@media(max-width:480px) { .rev-shell-product,.rev-shell-divider { display:none; } .rev-shell-topbar { gap:8px; } .rev-shell-context { max-width:45%; } }
+@media(prefers-reduced-motion:reduce) { .rev-shell-nav button { transition:none; } }

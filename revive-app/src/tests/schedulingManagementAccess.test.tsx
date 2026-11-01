@@ -46,9 +46,12 @@ it('does not accept response identity mismatches or invented retained actors',as
 it('opens operational Scheduling for an explicitly authorised member but keeps administration absent',async()=>{
  mocks.rpc.mockResolvedValue({data:row(staff,true,1),error:null});render(<SchedulingModule workspaceId={ws} userId={staff}/>);
  expect(await screen.findByRole('button',{name:'ADD WORKER'})).toBeEnabled();expect(screen.getByText('Scheduling job tools')).toBeVisible();expect(screen.queryByRole('button',{name:'ANNUAL LEAVE'})).toBeNull();
+ expect(screen.getByRole('button',{name:'WEEKLY PLANNER'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('region',{name:'Worker management'})).toBeVisible();
 });
 it('keeps the owner annual leave and document controls',async()=>{
  mocks.rpc.mockResolvedValue({data:row(actor,false,0,true),error:null});render(<SchedulingModule workspaceId={ws} userId={actor}/>);await screen.findByRole('button',{name:'ADD WORKER'});expect(screen.getByRole('button',{name:'ANNUAL LEAVE'})).toBeVisible();expect(screen.getByText('Owner job tools')).toBeVisible();
+ expect(screen.getByRole('button',{name:'ANNUAL LEAVE'})).toHaveAttribute('aria-pressed','false');
 });
 it('does not open Scheduling merely because section access was granted',async()=>{
  render(<SchedulingModule workspaceId={ws} userId={staff}/>);await screen.findByText(/Ask your organisation owner to enable Scheduling manager/);expect(screen.queryByRole('button',{name:'ADD WORKER'})).toBeNull();

@@ -703,7 +703,7 @@ export function AnnualLeaveView({
     });
 
   return (
-    <section aria-labelledby="annual-leave-title" className="mt-4">
+    <section aria-labelledby="annual-leave-title" className="rev-hub-surface mt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="annual-leave-title" className="text-xl font-semibold">

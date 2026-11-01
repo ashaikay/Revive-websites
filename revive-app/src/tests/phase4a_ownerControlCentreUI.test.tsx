@@ -34,6 +34,7 @@ describe('Phase 4A Owner Control Centre UI', () => {
     expect(markup).toContain('Potential recovery evidence, not money won.');
     expect(markup).toContain('Approval means approved, not executed.');
     expect(markup).not.toMatch(/<button[^>]*>[^<]*Execute/i);
+    expect(markup).toContain('Demo workspace data');
   });
 
   it('renders truthful live unavailable states without mock customer data', () => {
@@ -44,5 +45,27 @@ describe('Phase 4A Owner Control Centre UI', () => {
     expect(markup).toContain('Real execution is disabled. No action can run from this screen.');
     expect(markup).not.toMatch(/Sarah Chen|Webb Logistics/);
     expect(markup).not.toMatch(/<button[^>]*>[^<]*Execute/i);
+    expect(markup).toContain('Live operational data unavailable');
+    expect(markup.match(/class="rev-dashboard-metric-value">Unavailable<\/p>/g)).toHaveLength(4);
+    expect(markup).not.toContain('Demo workspace data');
+  });
+
+  it('derives summary cards from the existing read model, including truthful zero counts', () => {
+    const model = {
+      ...buildUnavailableOwnerControlCentre('workspace'),
+      mode: 'mock' as const,
+      working: [{ id: 'work', title: 'Proposed work', detail: 'Awaiting review' }],
+      approvals: [],
+      readiness: [
+        { id: 'ready', title: 'Internal plan', detail: 'Dry run only', state: 'ready_for_dry_run' as const, executionEnabled: false as const },
+        { id: 'blocked', title: 'Blocked plan', detail: 'Provider unavailable', state: 'blocked' as const, executionEnabled: false as const },
+      ],
+      results: [],
+    };
+    const markup = renderToStaticMarkup(<OwnerControlCentre model={model} />);
+    expect(markup.match(/class="rev-dashboard-metric-value">1<\/p>/g)).toHaveLength(2);
+    expect(markup.match(/class="rev-dashboard-metric-value">0<\/p>/g)).toHaveLength(2);
+    expect(markup).toContain('Internal dry run only');
+    expect(markup).toContain('A decision, not execution');
   });
 });

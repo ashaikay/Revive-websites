@@ -174,8 +174,8 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="text-lg font-semibold text-neutral-900">Vocational profile</h3>
         <p className="text-base text-neutral-700">{participantName || 'Service user'}{caseReference ? ` · ${caseReference}` : ''}</p></div>
-      <button type="button" className="btn-secondary" disabled={saving || completing} aria-expanded={open} onClick={() => { if (open && dirty && !window.confirm('Discard unsaved answers?')) return; if (open) { setSelected(''); setSnapshots([]); setAssessment(null); setAnswers({}); setDirty(false); setExpandedSection(null); setShowMissing(false); } setOpen(!open); }}>
-        {open ? 'Close profile' : 'Open profile'}
+      <button type="button" className={`rev-outcomes-profile-action ${open ? 'btn-secondary' : 'btn-primary'}`} disabled={saving || completing} aria-expanded={open} onClick={() => { if (open && dirty && !window.confirm('Discard unsaved answers?')) return; if (open) { setSelected(''); setSnapshots([]); setAssessment(null); setAnswers({}); setDirty(false); setExpandedSection(null); setShowMissing(false); } setOpen(!open); }}>
+        {open ? 'Close profile' : 'Open vocational profile'}
       </button>
     </div>
     {open && <div className="mt-4 space-y-4">

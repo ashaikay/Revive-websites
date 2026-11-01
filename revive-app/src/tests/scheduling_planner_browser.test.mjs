@@ -31,4 +31,14 @@ test('saved leave and inconsistent overlapping work produce review flags',async(
 test('saved sickness loads distinctly and preserves both assignment conflict directions in planner advice',async()=>{const r=rows();r.scheduling_worker_unavailability=[{id:leave,workspace_id:ws,worker_id:worker,start_at:start,end_at:end,category:'sickness',status:'active',version:1}];const d=await load(r);assert.equal(d.leave[0].category,'sickness');assert.equal(assignmentConflict(d,d.assignments[0]),true);d.assignments=[];assert.equal(workerSuitability(d,d.jobs[0],d.workers[0]).reason,'worker_unavailable');});
 test('planner renders only active unavailable periods in week and month views',()=>{const source=readFileSync(new URL('../components/SchedulingWeeklyPlanner.tsx',import.meta.url),'utf8');assert.ok(source.includes("period.status==='active'&&spansPlannerDay"));assert.ok(source.includes("candidate.status==='active'&&visibleWorkerIds.has"));});
 test('failed read never produces partial schedule',async()=>{await assert.rejects(loadPlannerData(ws,async t=>{if(t==='scheduling_worker_unavailability')throw Error('Unavailable');return rows()[t];}));});
-test('planner has full-width Week/Month controls, accessible overflow, labelled colours, refresh and stale feedback',()=>{const planner=readFileSync(new URL('../components/SchedulingWeeklyPlanner.tsx',import.meta.url),'utf8'),module=readFileSync(new URL('../components/SchedulingModule.tsx',import.meta.url),'utf8');for(const value of ['30000','rev-scheduling-changed','visibilitychange','Last successful update','SET WORKING HOURS','scope="row"','Unfilled','Leave','Sickness','Review needed','REFRESH PLANNER','Previous month','Next month','Today','More entries (','overflow-x-auto'])assert.ok(planner.includes(value));assert.ok(module.includes('max-w-none'));assert.ok(module.includes('overflow-x-hidden'));assert.ok(!module.includes('max-w-6xl'));});
+test('planner has full-width Week/Month controls, accessible overflow, labelled colours, refresh and stale feedback',()=>{
+ const planner=readFileSync(new URL('../components/SchedulingWeeklyPlanner.tsx',import.meta.url),'utf8'),module=readFileSync(new URL('../components/SchedulingModule.tsx',import.meta.url),'utf8');
+ for(const value of ['30000','rev-scheduling-changed','visibilitychange','Last successful update','SET WORKING HOURS','scope="row"','Unfilled','Leave','Sickness','Review needed','REFRESH PLANNER','Previous month','Next month','Today','More entries (','overflow-x-auto'])assert.ok(planner.includes(value));
+ assert.ok(module.includes('max-w-none'));
+ assert.ok(module.includes('min-w-0'));
+ assert.ok(!module.includes('overflow-x-hidden'));
+ assert.ok(!module.includes('max-w-6xl'));
+ assert.equal((planner.match(/className="rev-planner-scroll[^"]*"[^>]*tabIndex=\{0\}/g)??[]).length,2);
+ assert.ok(planner.includes('aria-label="Weekly calendar"'));
+ assert.ok(planner.includes('month planner`}'));
+});
