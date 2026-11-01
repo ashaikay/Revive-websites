@@ -234,7 +234,7 @@ export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{
  };
 
  const jobCard=(job:PlannerJob,label:string,conflict=false)=>(
-  <button type="button" onClick={()=>openJob(job.id)} disabled={stale} className={`block w-full text-left rounded-lg border p-2 mb-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${conflict?'bg-red-50 border-red-300 text-red-900':label==='Assigned'?'bg-blue-50 border-blue-200 text-blue-950':'bg-amber-50 border-amber-300 text-amber-950'}`}>
+  <button type="button" onClick={()=>openJob(job.id)} disabled={stale} className={`rev-planner-event ${conflict?'rev-planner-event-conflict':label==='Assigned'?'rev-planner-event-assigned':'rev-planner-event-unfilled'} block w-full text-left rounded-lg border p-2 mb-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${conflict?'bg-red-50 border-red-300 text-red-900':label==='Assigned'?'bg-blue-50 border-blue-200 text-blue-950':'bg-amber-50 border-amber-300 text-amber-950'}`}>
    <span className="block font-semibold">{conflict?'Review needed':label}</span>
    <span className="block font-medium">{job.title}</span>
    <span className="block">{time(job.startAt)}-{time(job.endAt)}</span>
@@ -245,7 +245,7 @@ export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{
  );
 
  const compactJob=(key:string,job:PlannerJob,label:string,conflict=false)=>(
-  <button key={key} type="button" onClick={()=>openJob(job.id)} disabled={stale} className={`block w-full rounded border px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${conflict?'bg-red-50 border-red-300 text-red-900':label.startsWith('Assigned')?'bg-blue-50 border-blue-200 text-blue-950':'bg-amber-50 border-amber-300 text-amber-950'}`}>
+  <button key={key} type="button" onClick={()=>openJob(job.id)} disabled={stale} className={`rev-planner-event ${conflict?'rev-planner-event-conflict':label.startsWith('Assigned')?'rev-planner-event-assigned':'rev-planner-event-unfilled'} block w-full rounded border px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${conflict?'bg-red-50 border-red-300 text-red-900':label.startsWith('Assigned')?'bg-blue-50 border-blue-200 text-blue-950':'bg-amber-50 border-amber-300 text-amber-950'}`}>
    <span className="block font-semibold">{conflict?'Review needed':label}</span>
    <span className="block truncate">{job.title}</span>
    <span className="block">{time(job.startAt)}-{time(job.endAt)}</span>
@@ -282,8 +282,8 @@ export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{
  };
  const goToday=()=>setSelectedDate(localPlannerDate(new Date().toISOString(),timezone));
 
- return <section className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm my-6" aria-label="Scheduling planner">
-  <div className="p-4 sm:p-6 border-b border-slate-200">
+ return <section className="rev-scheduling-planner min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm my-6" aria-label="Scheduling planner">
+  <div className="rev-planner-toolbar p-4 sm:p-6 border-b border-slate-200">
    <div className="flex flex-wrap items-start justify-between gap-3">
     <div><h2 className="text-xl font-semibold text-slate-900">{viewMode==='week'?'Weekly planner':plannerMonthHeading(month)}</h2><p className="text-sm text-slate-600 mt-1">Saved work, assignments, leave, sickness and unavailable periods. Select a job card to manage it below.</p></div>
     <div className="inline-flex rounded-lg border border-slate-300 p-1" role="group" aria-label="Planner view">
@@ -314,7 +314,7 @@ export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{
    <p className="text-xs text-slate-500 mt-1">Refreshes every 30 seconds while this page is visible and after saved changes. Cancelled records are kept in history below.</p>
    {data&&<SchedulingReportingPanel data={data} startDate={rangeStart} endDate={rangeEnd} timezone={timezone} workerId={workerFilter} location={locationFilter} periodLabel={viewMode==='week'?'WEEK':'MONTH'} stale={stale}/>}
    <div className="flex flex-wrap gap-2 mt-3 text-xs">
-    <span className="rounded px-2 py-1 bg-blue-50 text-blue-950 border border-blue-200">Assigned</span>
+    <span className="rev-planner-legend-assigned rounded px-2 py-1 bg-blue-50 text-blue-950 border border-blue-200">Assigned</span>
     <span className="rounded px-2 py-1 bg-amber-50 text-amber-950 border border-amber-300">Unfilled</span>
     <span className="rounded px-2 py-1 bg-purple-50 text-purple-950 border border-purple-200">Leave</span>
     <span className="rounded px-2 py-1 bg-rose-50 text-rose-950 border border-rose-300">Sickness</span>
@@ -337,7 +337,8 @@ export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{
    {bookOffMessage&&!bookOffPending&&<p className="text-sm mt-3" role="status">{bookOffMessage}</p>}
   </div>
 
-  {data&&viewMode==='week'&&<div className="max-w-full overflow-x-auto">
+  {data&&<p className="rev-planner-scroll-hint">Scroll the calendar horizontally to see every day on smaller screens.</p>}
+  {data&&viewMode==='week'&&<div className="rev-planner-scroll max-w-full overflow-x-auto" role="region" aria-label="Weekly calendar" tabIndex={0}>
    <table className="w-full border-collapse text-sm" style={{minWidth:1100}}>
     <caption className="sr-only">Weekly schedule in {timezone}, week beginning {formatSchedulingDate(week)}</caption>
     <thead><tr className="bg-slate-50"><th scope="col" className="text-left p-3 border-b w-44">Worker / work</th>{days.map(day=><th key={day} scope="col" className="text-left p-3 border-b"><span className="block">{formatSchedulingDate(day)}</span><button type="button" className="mt-2 text-xs font-semibold underline text-blue-800" disabled={stale||bookOffBusy||Boolean(bookOffPending)||!workspaceTimezone||activeWorkers.length===0} onClick={()=>openBookOff(day)} aria-label={`Book worker off ${formatSchedulingDate(day)}`}>BOOK WORKER OFF</button></th>)}</tr></thead>
@@ -350,7 +351,7 @@ export function SchedulingWeeklyPlanner({workspaceId,userId,workspaceTimezone}:{
    {visibleJobs.length===0&&<p className="p-4 text-sm text-slate-600">No open jobs in this week and location.</p>}
   </div>}
 
-  {data&&viewMode==='month'&&<div className="max-w-full overflow-x-auto" aria-label={`${plannerMonthHeading(month)} month planner`}>
+  {data&&viewMode==='month'&&<div className="rev-planner-scroll max-w-full overflow-x-auto" role="region" tabIndex={0} aria-label={`${plannerMonthHeading(month)} month planner`}>
    <div className="grid min-w-[70rem] grid-cols-7 bg-slate-100 gap-px">
     {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(day=><div key={day} className="bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">{day}</div>)}
     {days.map(day=>{const entries=monthEntries(day),outside=day.slice(0,7)!==month.slice(0,7);return <article key={day} aria-label={formatSchedulingDate(day)} className={`min-h-44 p-2 ${outside?'bg-slate-50 text-slate-500':'bg-white text-slate-900'}`}>

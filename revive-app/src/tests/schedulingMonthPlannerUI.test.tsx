@@ -47,6 +47,7 @@ describe('Full-width scheduling month planner',()=>{
   render(<SchedulingWeeklyPlanner workspaceId={workspaceId} userId={userId} workspaceTimezone="Europe/London"/>);
   await screen.findByText('Weekly planner');
   expect(screen.getByRole('button',{name:'WEEK'})).toHaveAttribute('aria-pressed','true');
+  expect(screen.getByRole('region',{name:'Weekly calendar'})).toHaveAttribute('tabindex','0');
   fireEvent.change(screen.getByLabelText('Week beginning'),{target:{value:'2026-10-05'}});
   fireEvent.change(screen.getByLabelText('Display timezone'),{target:{value:'UTC'}});
   fireEvent.change(screen.getByLabelText('Worker'),{target:{value:workerId}});
@@ -61,6 +62,7 @@ describe('Full-width scheduling month planner',()=>{
   expect(screen.getByRole('button',{name:'Next month'})).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Today'})).toBeInTheDocument();
   const planner=screen.getByLabelText('October 2026 month planner');
+  expect(planner).toHaveAttribute('tabindex','0');
   const headings=within(planner).getAllByText(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/);
   expect(headings[0]).toHaveTextContent('Monday');
   expect(within(planner).getAllByText('Sickness').length).toBeGreaterThan(0);
