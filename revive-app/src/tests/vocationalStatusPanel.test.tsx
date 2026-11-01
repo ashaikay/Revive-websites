@@ -30,7 +30,7 @@ it('reads status after the selected assessment opens, instead of retaining an ol
     return{data:opened?status('assessment-3'):status('old-assessment',0),error:null};
   });
   render(<ParticipantVocationalAssessment {...props}/>);
-  fireEvent.click(screen.getByRole('button',{name:'Open profile'}));
+  fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
   expect(await screen.findByText('0 of 1 questions answered (0%)')).toBeVisible();
   expect(screen.queryByText('Core questionnaire not available. Programme setup needs review.')).toBeNull();
   expect(screen.getByText(/Current questionnaire:/)).toHaveTextContent('1 core question across 1 section');
@@ -72,7 +72,7 @@ it('opens the current questionnaire automatically while keeping earlier saved an
     return{data:{...status(`assessment-${selected}`),answered:1},error:null};
   });
   render(<ParticipantVocationalAssessment {...props}/>);
-  fireEvent.click(screen.getByRole('button',{name:'Open profile'}));
+  fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
   await screen.findByText('1 of 1 questions answered (100%)');
   expect(selected).toBe('version-3');
   const history=screen.getByText('Earlier questionnaires and saved answers',{selector:'summary'});
@@ -83,7 +83,7 @@ it('opens the current questionnaire automatically while keeping earlier saved an
   fireEvent.click(screen.getByRole('button',{name:/Employment goals/}));
   expect(screen.getByLabelText('What work interests you?')).toHaveValue('Earlier saved answer');
   fireEvent.click(screen.getByRole('button',{name:'Close profile'}));
-  fireEvent.click(screen.getByRole('button',{name:'Open profile'}));
+  fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
   await screen.findByText(/Current questionnaire: 1 core question/);
   fireEvent.click(screen.getByRole('button',{name:/Employment goals/}));
   expect(screen.getByLabelText('What work interests you?')).toHaveValue('Current saved answer');

@@ -1,6 +1,7 @@
-/* Scoped to the reviewed dashboard and Scheduling, not other module bodies. */
+/* Scoped to the reviewed dashboard, Scheduling and Outcomes module bodies. */
 .rev-dashboard,
-.rev-scheduling {
+.rev-scheduling,
+.rev-outcomes {
   --rev-hub-canvas: #f7f8f5;
   --rev-hub-surface: #fff;
   --rev-hub-ink: #202c27;
@@ -87,8 +88,62 @@
 .rev-scheduling .rev-planner-scroll :is(td, time) { font-variant-numeric: tabular-nums; }
 .rev-planner-scroll-hint { display: none; }
 
+.rev-outcomes { font-size: 14px; padding: 32px 24px; }
+.rev-outcomes .rev-hub-heading { margin-bottom: 0; }
+.rev-outcomes-selection { display: grid; grid-template-columns: minmax(210px, .65fr) minmax(0, 1fr); align-items: center; gap: 24px; }
+.rev-outcomes-selection > p { margin-top: 0; }
+.rev-outcomes-areas { display: flex; flex-wrap: wrap; gap: 8px; }
+.rev-outcomes-guidance { padding: 16px 20px; border: 1px solid #d8e9de; border-radius: 12px; background: #edf3ee; color: #385746; }
+.rev-outcomes-guidance p { margin-top: 4px; font-size: 13px; }
+.rev-outcomes .card { min-width: 0; border-color: var(--rev-hub-line); border-radius: 12px; box-shadow: none; }
+.rev-outcomes .card:hover { box-shadow: none; }
+.rev-outcomes :is(.btn-primary, button.bg-slate-900) { background: var(--rev-hub-accent); border: 1px solid var(--rev-hub-accent); color: #fff; }
+.rev-outcomes :is(.btn-primary, button.bg-slate-900):hover:not(:disabled) { background: #124832; }
+.rev-outcomes .btn-secondary { background: var(--rev-hub-surface); border: 1px solid #c8d3ca; }
+.rev-outcomes .btn-secondary:hover:not(:disabled) { background: #edf3ee; }
+.rev-outcomes button { min-height: 44px; max-width: 100%; white-space: normal; }
+.rev-outcomes button:disabled { cursor: not-allowed; opacity: .6; }
+.rev-outcomes :is(button, input, select, textarea, summary, a, [tabindex]):focus-visible { outline: 2px solid var(--rev-hub-accent); outline-offset: 3px; }
+.rev-outcomes :is(form, fieldset, section, article, .grid, .flex, .grid > *, .flex > *) { min-width: 0; }
+.rev-outcomes :is(input:not([type=checkbox], [type=radio]), select, textarea) { min-height: 44px; min-width: 0; max-width: 100%; border-color: #c8d3ca; border-radius: 8px; background: var(--rev-hub-surface); }
+.rev-outcomes :is(input[type=checkbox], input[type=radio]) { accent-color: var(--rev-hub-accent); }
+.rev-outcomes label { max-width: 100%; }
+.rev-outcomes label:has(input:is([type=checkbox], [type=radio])) { min-height: 44px; }
+.rev-outcomes summary { min-height: 44px; padding: 10px 0; }
+.rev-outcomes .text-neutral-500 { color: var(--rev-hub-muted); }
+.rev-outcomes .text-primary-700 { color: var(--rev-hub-accent); }
+.rev-outcomes .text-slate-600 { color: var(--rev-hub-muted); }
+.rev-outcomes .border-slate-200 { border-color: var(--rev-hub-line); }
+.rev-outcomes-caseload-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
+.rev-outcomes-caseload-tools > p { padding: 12px 16px; border-radius: 8px; background: #edf3ee; color: #385746; }
+.rev-outcomes .rev-outcomes-metrics > div { background: var(--rev-hub-surface); border-color: var(--rev-hub-line); border-top: 3px solid #387c5a; }
+.rev-outcomes .rev-outcomes-metrics > div:nth-child(2) { border-top-color: #a67b2e; }
+.rev-outcomes .rev-outcomes-metrics > div:nth-child(3) { border-top-color: #4f7c98; }
+.rev-outcomes-metrics p:first-child { font-size: 24px; font-variant-numeric: tabular-nums; }
+.rev-outcomes-metrics p:last-child { font-size: 12px; color: var(--rev-hub-muted); }
+.rev-outcomes-summary .text-base { font-size: 14px; }
+.rev-outcomes-caseload-row { background: var(--rev-hub-surface); border-color: var(--rev-hub-line); }
+.rev-outcomes-caseload-row:hover { border-color: #b8d5c0; }
+.rev-outcomes .rev-outcomes-caseload-selected { background: #f1f8f3; border-color: #98bea6; }
+.rev-outcomes-caseload-row > .flex:first-child > div { flex: 1 1 180px; }
+.rev-outcomes-caseload-row .text-lg { font-size: 16px; }
+.rev-outcomes :is(.rev-outcomes-record-row, .rev-outcomes-participant) { border-radius: 12px; border-color: var(--rev-hub-line); }
+.rev-outcomes-participant h3 { font-size: 22px; letter-spacing: -.03em; }
+.rev-outcomes-record > .rev-outcomes-participant { margin-top: 16px; }
+.rev-outcomes-participant dd { line-height: 1.6; }
+.rev-outcomes-notes > li { background: var(--rev-hub-surface); border: 1px solid var(--rev-hub-line); border-radius: 8px; padding: 16px; }
+.rev-outcomes-notes > li > p:last-child { margin-top: 8px; font-variant-numeric: tabular-nums; }
+.rev-outcomes [aria-label="Vocational assessment"] > .flex:first-child { align-items: start; }
+.rev-outcomes .rev-outcomes-profile-action { flex: 1 1 100%; justify-content: center; }
+.rev-outcomes [aria-label="Vocational assessment"] [role=progressbar] > div { background: var(--rev-hub-accent); }
+
 @media (min-width: 1280px) {
   .rev-scheduling-workers-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rev-outcomes-record-open { grid-template-columns: minmax(0, .9fr) minmax(0, 1.3fr); }
+  .rev-outcomes-record-open .rev-outcomes-metrics { grid-template-columns: minmax(0, 1fr); }
+  .rev-outcomes-record-open .rev-outcomes-caseload-tools > .grid { grid-template-columns: minmax(0, 1fr); }
+  .rev-outcomes-record-open .rev-outcomes-record form.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rev-outcomes-record-open .rev-outcomes-participant dl { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 1199px) {
@@ -96,12 +151,19 @@
 }
 
 @media (max-width: 767px) {
-  .rev-dashboard, .rev-scheduling { padding: 24px 16px; }
+  .rev-dashboard, .rev-scheduling, .rev-outcomes { padding: 24px 16px; }
   .rev-hub-heading { flex-direction: column; gap: 12px; }
   .rev-hub-data-state { max-width: 100%; }
   .rev-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
   .rev-hub-surface { padding: 20px; }
   .rev-scheduling .rev-hub-surface { padding: 16px; }
+  .rev-outcomes-selection { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
+  .rev-outcomes .card { padding: 16px; }
+  .rev-outcomes-guidance { padding: 16px; }
+  .rev-outcomes-areas > button { flex: 1 1 auto; }
+  .rev-outcomes .rev-outcomes-record form.grid { grid-template-columns: minmax(0, 1fr); }
+  .rev-outcomes [data-save-target=programme] > .flex { flex-wrap: wrap; }
+  .rev-outcomes [data-save-target=programme] + ul > li { flex-wrap: wrap; gap: 12px; }
   .rev-scheduling .rev-planner-toolbar > .flex > label { flex: 1 1 100%; }
   .rev-scheduling .rev-planner-toolbar > .flex > label :is(input, select) { width: 100%; }
   .rev-scheduling .rev-planner-toolbar > .flex > button { flex: 1 1 auto; }
