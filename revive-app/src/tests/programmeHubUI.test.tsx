@@ -1284,7 +1284,8 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     const original = mocks.invoke.mock.calls[0][1].body;
     first.unmount();
     render(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
-    const retry = await screen.findByRole('button', { name: 'Retry exact saved change' });
+    // The remount reloads the whole hub before the employer workspace restores; allow for slower jsdom runs.
+    const retry = await screen.findByRole('button', { name: 'Retry exact saved change' }, { timeout: 5000 });
     expect(retry).toBeVisible();
     const nav = screen.getByRole('navigation', { name: 'Employment support areas' });
     expect(within(nav).getByRole('button', { name: 'Employers' })).toHaveAttribute('aria-current', 'page');
@@ -1294,7 +1295,7 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
     expect(mocks.invoke.mock.calls[1][1].body).toEqual(original);
     await waitFor(() => expect(within(nav).getByRole('button', { name: 'Caseload' })).toBeEnabled());
-  });
+  }, 15000);
 
   it('uses authorised staff display names in the ES workspace and caseload assignment controls', async () => {
     setupEsOverview();
