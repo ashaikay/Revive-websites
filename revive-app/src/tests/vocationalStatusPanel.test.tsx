@@ -18,7 +18,7 @@ vi.mock('@/data/supabaseClient',()=>({supabaseClient:{
 import { VocationalStatusPanel } from '@/components/VocationalStatusPanel';
 import { ParticipantVocationalAssessment } from '@/components/ParticipantVocationalAssessment';
 const props={workspaceId:'workspace',programmeId:'programme',participantId:'participant'};
-const status=(assessmentId:string,total=1)=>({status:'in_progress',assessmentId,answered:0,total,updatedAt:null,completedAt:null,updatedByUserId:null});
+const status=(assessmentId:string,total=1,templateVersionId='version-3')=>({status:'in_progress',assessmentId,templateVersionId,answered:0,total,updatedAt:null,completedAt:null,updatedByUserId:null});
 beforeEach(()=>{mocks.rpc.mockReset();mocks.multiVersion=false;});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('reads status after the selected assessment opens, instead of retaining an older zero-question result',async()=>{
@@ -33,7 +33,7 @@ it('reads status after the selected assessment opens, instead of retaining an ol
   fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
   expect(await screen.findByText('0 of 1 questions answered (0%)')).toBeVisible();
   expect(screen.queryByText('Core questionnaire not available. Programme setup needs review.')).toBeNull();
-  expect(screen.getByText(/Current questionnaire:/)).toHaveTextContent('1 core question across 1 section');
+  expect(screen.getByText(/Current questionnaire: 1 core question/)).toHaveTextContent('1 core question across 1 section');
   expect(screen.queryByText(/newer draft questionnaire/)).toBeNull();
   expect(mocks.rpc.mock.calls.map(([name])=>name)).toEqual(['rev_voc_assessment_draft','rev_voc_assessment_selected_status']);
 });
@@ -69,7 +69,7 @@ it('opens the current questionnaire automatically while keeping earlier saved an
       selected=args.target_template_version_id!;
       return{data:{assessmentId:`assessment-${selected}`,version:1,status:'draft',answers:{goal:selected==='version-3'?'Current saved answer':'Earlier saved answer'}},error:null};
     }
-    return{data:{...status(`assessment-${selected}`),answered:1},error:null};
+    return{data:{...status(`assessment-${selected}`,1,selected),answered:1},error:null};
   });
   render(<ParticipantVocationalAssessment {...props}/>);
   fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
@@ -91,4 +91,25 @@ it('opens the current questionnaire automatically while keeping earlier saved an
   const opens=mocks.rpc.mock.calls.filter(([name])=>name==='rev_voc_assessment_draft');
   expect(opens.every(([,args])=>args.target_action==='open')).toBe(true);
   expect(opens.map(([,args])=>args.target_template_version_id)).toEqual(['version-3','version-1','version-3']);
+});
+
+it('does not label a legacy overview completion as the current questionnaire',async()=>{
+  mocks.rpc.mockResolvedValue({data:{...status('old-assessment'),status:'completed'},error:null});
+  render(<VocationalStatusPanel {...props} compact/>);
+  expect(await screen.findByText('Current questionnaire status could not be verified.')).toBeVisible();
+  expect(screen.queryByText('Current questionnaire: Completed')).toBeNull();
+});
+
+it('identifies an unopened current questionnaire separately from an earlier completed assessment',async()=>{
+  mocks.rpc.mockResolvedValue({data:{
+    ...status('unused'),assessmentId:null,status:'not_started',
+    questionnaire:{templateVersionId:'version-3',title:'Employment questionnaire',version:3},
+    earlierCompletedAssessment:{assessmentId:'assessment-1',templateVersionId:'version-1',questionnaireTitle:'Earlier questionnaire',questionnaireVersion:1,completedAt:'2026-10-02T09:00:00Z'},
+  },error:null});
+  render(<VocationalStatusPanel {...props} compact/>);
+  expect(await screen.findByText('Current questionnaire: Not started')).toBeVisible();
+  expect(screen.getByText('Employment questionnaire - version 3')).toBeVisible();
+  expect(screen.getByText(/Earlier completed assessment: Earlier questionnaire - version 1/)).toHaveTextContent('This does not complete the current questionnaire.');
+  expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  expect(mocks.rpc).toHaveBeenCalledWith('rev_voc_assessment_status',expect.objectContaining({target_participant_id:'participant'}));
 });

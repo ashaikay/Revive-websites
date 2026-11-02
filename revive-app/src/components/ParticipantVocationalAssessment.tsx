@@ -16,7 +16,7 @@ const ordinarySections = coreVocationalSections;
 const hasOptionalSupportSection = (sections: Section[]) => sections.some((section) => optionalSupportSection.test(section.title));
 const answered = (value: unknown) => value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
 
-export function ParticipantVocationalAssessment({ workspaceId, programmeId, participantId, participantName, caseReference, assignedSpecialists = [], isManager = false, consentAdvisers = [], onReviewQuestionnaire }: { workspaceId: string; programmeId: string; participantId: string; participantName?: string; caseReference?: string; assignedSpecialists?: string[]; isManager?: boolean; consentAdvisers?: { userId: string; label: string }[]; onReviewQuestionnaire?: () => void }) {
+export function ParticipantVocationalAssessment({ workspaceId, programmeId, participantId, participantName, caseReference, assignedSpecialists = [], isManager = false, consentAdvisers = [], onReviewQuestionnaire, onStatusChange }: { workspaceId: string; programmeId: string; participantId: string; participantName?: string; caseReference?: string; assignedSpecialists?: string[]; isManager?: boolean; consentAdvisers?: { userId: string; label: string }[]; onReviewQuestionnaire?: () => void; onStatusChange?: (participantId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [selected, setSelected] = useState('');
@@ -63,7 +63,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         if (!ids.length) { if (active) setSnapshots([]); return; }
         const { data, error: ve } = await supabaseClient.from('programme_hub_vocational_template_versions')
           .select('id,template_id,version,title,sections,published_at').eq('workspace_id', workspaceId)
-          .in('template_id', ids).order('published_at', { ascending: false }).limit(100);
+          .in('template_id', ids).order('published_at', { ascending: false }).order('id', { ascending: false }).limit(100);
         if (ve) throw ve;
         if (!active) return;
         const values = (data ?? []).filter((v) => Array.isArray(v.sections)) as Snapshot[];
@@ -89,13 +89,13 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         });
         if (rpcError) throw rpcError;
         const result = data as Assessment;
-        if (active) { setAssessment(result); setAnswers(result.answers ?? {}); }
+        if (active) { setAssessment(result); setAnswers(result.answers ?? {}); onStatusChange?.(participantId); }
       } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : 'Unable to open assessment.'); }
       finally { if (active) setLoading(false); }
     }
     void loadAssessment();
     return () => { active = false; };
-  }, [open, selected, workspaceId, programmeId, participantId]);
+  }, [open, selected, workspaceId, programmeId, participantId, onStatusChange]);
   const snapshot = snapshots.find((v) => v.id === selected);
   const sections = snapshot ? ordinarySections(snapshot.sections) : [];
   const optionalSupportAvailable = snapshot ? hasOptionalSupportSection(snapshot.sections) : false;
@@ -127,7 +127,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       if (!current()) return;
       if (rpcError) throw rpcError;
       const result = data as Assessment;
-      setAssessment(result); setAnswers(result.answers ?? {}); setDirty(false); setRefreshStatus(v=>v+1); setNotice('Draft saved. You can return to this assessment later.');
+      setAssessment(result); setAnswers(result.answers ?? {}); setDirty(false); setRefreshStatus(v=>v+1); onStatusChange?.(participantId); setNotice('Draft saved. You can return to this assessment later.');
     } catch (cause) { if (current()) setError(cause instanceof Error ? cause.message : 'Save failed. Your unsaved answers remain on this screen.'); }
     finally { if (current()) { write.current = null; setSaving(false); } }
   };
@@ -149,7 +149,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       if(rpcError)throw rpcError;
       const result=data as {version:number;status:string};
       setAssessment(prev=>prev?{...prev,version:result.version,status:result.status}:prev);
-      setRefreshStatus(v=>v+1);setNotice('Vocational assessment marked completed.');
+      setRefreshStatus(v=>v+1);onStatusChange?.(participantId);setNotice('Vocational assessment marked completed.');
     }catch(cause){if(current())setError(cause instanceof Error?cause.message:'Completion failed.');}
     finally{if(current()){write.current=null;setCompleting(false);}}
   };
@@ -184,7 +184,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         <button type="button" className="btn-secondary" aria-expanded={showHelp} onClick={() => setShowHelp(v => !v)} aria-label="How vocational profiles work">Help</button>
       </div>
       {showHelp && <p className="rounded-lg bg-neutral-50 p-3 text-base text-neutral-800">This profile is linked to the service user shown above. Save answers as you go. Assigned Employment Specialists complete the profile; managers oversee progress. Access is controlled by the programme permissions.</p>}
-      {assessment && !loading && <VocationalStatusPanel key={`${selected}:${assessment.assessmentId}`} workspaceId={workspaceId} programmeId={programmeId} participantId={participantId} assessmentId={assessment.assessmentId} refresh={refreshStatus} />}
+      {assessment && snapshot && !loading && <VocationalStatusPanel key={`${selected}:${assessment.assessmentId}`} workspaceId={workspaceId} programmeId={programmeId} participantId={participantId} assessmentId={assessment.assessmentId} refresh={refreshStatus} questionnaire={{templateVersionId:snapshot.id,title:snapshot.title,version:snapshot.version,isCurrent:snapshot.id===snapshots[0]?.id}} />}
       {error && <p role="alert" className="text-base text-red-700">{error}</p>}
       {notice && <p role="status" className="text-base text-green-700">{notice}</p>}
       {loading && <p role="status" className="text-base">Loading profile...</p>}
@@ -192,8 +192,8 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       {snapshots.length > 1 && <details className="rounded-lg border border-neutral-200 p-3">
         <summary className="cursor-pointer text-base font-medium">Earlier questionnaires and saved answers</summary>
         <p className="mt-2 text-sm">The current questionnaire opens automatically. Earlier answers stay with the questionnaire used to record them; they are not copied into new questions.</p>
-        <select aria-label="Published questionnaire version" className="mt-2 w-full rounded border border-neutral-300 p-2 text-base" value={selected} disabled={loading || saving || completing} onChange={(e) => { if (dirty && !window.confirm('Discard unsaved answers and switch questionnaire?')) return; setSelected(e.target.value); setExpandedSection(null); }}>
-          {snapshots.map((v) => <option key={v.id} value={v.id}>{v.title} · version {v.version}</option>)}
+        <select aria-label="Published questionnaire version" className="mt-2 w-full rounded border border-neutral-300 p-2 text-base" value={selected} disabled={loading || saving || completing} onChange={(e) => { if (dirty && !window.confirm('Discard unsaved answers and switch questionnaire?')) return; setAssessment(null); setSelected(e.target.value); setExpandedSection(null); }}>
+          {snapshots.map((v, index) => <option key={v.id} value={v.id}>{v.title} · version {v.version} ({index === 0 ? 'current' : 'earlier'})</option>)}
         </select>
       </details>}
       {assessment && !loading && isManager && <VocationalConsentManager key={assessment.assessmentId} assessmentId={assessment.assessmentId} advisers={consentAdvisers} />}
