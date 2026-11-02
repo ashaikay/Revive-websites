@@ -77,14 +77,16 @@ SELECT id,'sector','["Construction"]'::jsonb FROM rev_voc_match_ids WHERE key='p
 -- A later programme-agnostic template is never the programme's current questionnaire
 -- in rev_voc_assessment_status or the form, so it must not make matching ready.
 INSERT INTO public.programme_hub_vocational_templates(id,workspace_id,programme_id,title,status,version,sections,created_by_user_id,updated_by_user_id,published_at)
-SELECT t.id,w.id,NULL,'Workspace-wide questionnaire','published',1,
+SELECT t.id,w.id,NULL,'Workspace-wide questionnaire','draft',1,
   '[{"id":"goals","title":"Employment goals","questions":[{"id":"sector","sectionId":"goals","label":"Preferred sector","type":"multi_select","standardField":"preferred_sector","options":["Retail","Logistics","Construction"],"required":true,"sensitive":false}]}]'::jsonb,
-  o.id,o.id,'2026-11-05T09:00:00Z'
+  o.id,o.id,NULL
 FROM rev_voc_match_ids t,rev_voc_match_ids w,rev_voc_match_ids o
 WHERE t.key='global_template' AND w.key='workspace' AND o.key='owner';
 INSERT INTO public.programme_hub_vocational_template_versions(id,workspace_id,template_id,version,title,sections,published_by_user_id,published_at)
 SELECT (SELECT id FROM rev_voc_match_ids WHERE key='global_snapshot'),workspace_id,id,version,title,sections,updated_by_user_id,'2026-11-05T09:00:00Z'
 FROM public.programme_hub_vocational_templates WHERE id=(SELECT id FROM rev_voc_match_ids WHERE key='global_template');
+UPDATE public.programme_hub_vocational_templates SET status='published',published_at='2026-11-05T09:00:00Z'
+WHERE id=(SELECT id FROM rev_voc_match_ids WHERE key='global_template');
 INSERT INTO public.programme_hub_vocational_assessments(id,workspace_id,programme_id,participant_id,template_version_id,status,completed_at,created_by_user_id,updated_by_user_id)
 SELECT a.id,w.id,p.id,s.id,v.id,'completed','2026-11-05T10:00:00Z'::timestamptz,o.id,o.id
 FROM rev_voc_match_ids a,rev_voc_match_ids w,rev_voc_match_ids p,rev_voc_match_ids s,rev_voc_match_ids v,rev_voc_match_ids o
