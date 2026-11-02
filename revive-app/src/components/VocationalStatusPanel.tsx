@@ -26,7 +26,7 @@ export function VocationalStatusPanel({workspaceId, programmeId, participantId, 
     <p className="font-medium">{label}: {!assessmentId && !value.questionnaire ? 'Not available' : statusText(value.status)}</p>
     {displayedQuestionnaire && <p>{displayedQuestionnaire.title} - version {displayedQuestionnaire.version}</p>}
     {earlierCompletion && <p>Earlier completed assessment: {earlierCompletion.questionnaireTitle} - version {earlierCompletion.questionnaireVersion}. Completed: {new Date(earlierCompletion.completedAt).toLocaleString('en-GB')}. This does not complete the current questionnaire.</p>}
-    {!compact && value.total === 0 && <p>Core questionnaire not available. Programme setup needs review.</p>}
+    {!compact && value.total === 0 && questionnaire?.isCurrent !== false && <p>Core questionnaire not available. Programme setup needs review.</p>}
     {!compact && value.total > 0 && <><p>{value.answered} of {value.total} questions answered ({progress}%)</p><div className="mt-2 h-2 overflow-hidden rounded bg-neutral-200"><div className="h-full bg-emerald-600" style={{width:`${progress}%`}} /></div>
       <p className="mt-2">Last updated: {value.updatedAt?new Date(value.updatedAt).toLocaleString('en-GB'):'Not started'}</p>
       <p>Completed: {value.completedAt?new Date(value.completedAt).toLocaleString('en-GB'):'Not completed'}</p></>}

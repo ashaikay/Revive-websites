@@ -32,3 +32,47 @@ Validation:
 - Follow-up: added an explicit component regression (`vocationalStatusPanel.test.tsx`) rendering the caseload panel and both selected panels together for an older completed assessment plus a newer incomplete questionnaire. It asserts the caseload shows **Current questionnaire: In progress** with the earlier completion listed separately, never **Current questionnaire: Completed**; the current selection shows **Current questionnaire: In progress**/Not completed; and the earlier selection shows **Earlier questionnaire: Completed** with no completion or draft writes. The mounted hub regression was renamed to make the scenario explicit. Rerun: 122 tests in the 6 Programme Hub/vocational Vitest files passed; both builds passed again.
 
 Release state: **not deployed**. This fix requires review/application of the new migration before releasing its frontend; the earlier selected-status migration remains a prerequisite. No hosted database changes, production deployment, merge or CI polling was performed. Authenticated hosted verification remains pending.
+
+## Historical empty-questionnaire warning - 2 November 2026
+
+Earlier questionnaires with no core questions now say: "This earlier questionnaire contains no core employment questions. Select the current questionnaire to continue." Neither the staff manager-setup request nor the manager review action appears in this historical context. The selected-status panel also suppresses its programme-setup warning for an explicitly earlier questionnaire. Current-questionnaire setup warnings and actions remain unchanged. No database, answer, completion, save or permission logic changed.
+
+Trace at production base `4726fee`: `CompactCaseload` rendered `VocationalStatusPanel` without an assessment ID. That called `rev_voc_assessment_status` and displayed `Completed` only when its selected row had `status = 'completed'`. The old RPC selected among existing draft/completed assessments, ordered by template publication state/time, questionnaire version, completed-before-draft, assessment update time and creation time. It did not select the current questionnaire first. This proves the source of the badge, but does not identify Robert's historical row or prove that questionnaire v3 was completed.
+
+Hosted evidence is needed to identify the assessment. The following single read-only query returns metadata only for one participant and reproduces the checked-in old selector's ranking. Replace the three UUID placeholders locally. Rank 1 identifies today's candidate(s) under the old ordering; ties are deliberately retained because the old selector had no final unique tie-breaker. If records or template publication metadata have changed since the original badge, these results cannot by themselves prove the original point-in-time selection.
+
+```sql
+WITH scope(workspace_id, programme_id, participant_id) AS (
+  VALUES ('WORKSPACE_UUID'::uuid, 'PROGRAMME_UUID'::uuid, 'PARTICIPANT_UUID'::uuid)
+), ranked AS (
+  SELECT aa.id AS assessment_id, aa.template_version_id,
+    tv.title AS questionnaire_title, tv.version AS questionnaire_version,
+    aa.status AS assessment_status, aa.completed_at,
+    aa.updated_at, aa.created_at,
+    t.status AS template_status, t.published_at AS template_published_at,
+    tv.published_at AS questionnaire_published_at,
+    rank() OVER (ORDER BY
+      CASE WHEN t.status = 'published' THEN 0 ELSE 1 END,
+      t.published_at DESC NULLS LAST, tv.version DESC,
+      CASE WHEN aa.status = 'completed' THEN 0 ELSE 1 END,
+      aa.updated_at DESC, aa.created_at DESC
+    ) AS legacy_choice_rank
+  FROM public.programme_hub_vocational_assessments aa
+  JOIN scope s ON aa.workspace_id = s.workspace_id
+    AND aa.programme_id = s.programme_id AND aa.participant_id = s.participant_id
+  JOIN public.programme_hub_vocational_template_versions tv
+    ON tv.id = aa.template_version_id AND tv.workspace_id = aa.workspace_id
+  JOIN public.programme_hub_vocational_templates t
+    ON t.id = tv.template_id AND t.workspace_id = tv.workspace_id
+  WHERE aa.status IN ('draft', 'completed')
+    AND (t.programme_id = s.programme_id OR t.programme_id IS NULL)
+)
+SELECT legacy_choice_rank, assessment_id, template_version_id,
+  questionnaire_title, questionnaire_version, assessment_status, completed_at,
+  updated_at, created_at, template_status, template_published_at,
+  questionnaire_published_at
+FROM ranked
+ORDER BY legacy_choice_rank, assessment_id;
+```
+
+Validation: 20 tests passed in the targeted vocational-status and assessment-write suites, including earlier empty-questionnaire navigation, unchanged current saved answers, no save/completion writes on history navigation, and preserved current-questionnaire staff/manager setup actions. One TypeScript/Vite build passed with the existing chunk-size advisory. No hosted query, migration, deployment, merge or CI polling was performed.

@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const mocks=vi.hoisted(()=>({rpc:vi.fn(), multiVersion:false}));
+const mocks=vi.hoisted(()=>({rpc:vi.fn(), multiVersion:false, earlierEmpty:false}));
 vi.mock('@/data/supabaseClient',()=>({supabaseClient:{
   rpc:(...args:unknown[])=>mocks.rpc(...args),
   from:(table:string)=>{
@@ -11,7 +11,7 @@ vi.mock('@/data/supabaseClient',()=>({supabaseClient:{
         id:'version-3',template_id:'template',version:3,title:'Employment questionnaire',published_at:'2026-10-28T12:00:00Z',
         sections:[{id:'goals',title:'Employment goals',questions:[{id:'goal',label:'What work interests you?',type:'long_text',required:false,sensitive:false}]}],
       }, ...(mocks.multiVersion ? [{id:'version-1',template_id:'template',version:1,title:'Earlier questionnaire',published_at:'2026-10-01T12:00:00Z',
-        sections:[{id:'goals',title:'Employment goals',questions:[{id:'goal',label:'What work interests you?',type:'long_text',required:false,sensitive:false}]}]}] : [])],error:null}).then(resolve)};
+        sections:mocks.earlierEmpty?[]:[{id:'goals',title:'Employment goals',questions:[{id:'goal',label:'What work interests you?',type:'long_text',required:false,sensitive:false}]}]}] : [])],error:null}).then(resolve)};
     return query;
   },
 }}));
@@ -19,7 +19,7 @@ import { VocationalStatusPanel } from '@/components/VocationalStatusPanel';
 import { ParticipantVocationalAssessment } from '@/components/ParticipantVocationalAssessment';
 const props={workspaceId:'workspace',programmeId:'programme',participantId:'participant'};
 const status=(assessmentId:string,total=1,templateVersionId='version-3')=>({status:'in_progress',assessmentId,templateVersionId,answered:0,total,updatedAt:null,completedAt:null,updatedByUserId:null});
-beforeEach(()=>{mocks.rpc.mockReset();mocks.multiVersion=false;});
+beforeEach(()=>{mocks.rpc.mockReset();mocks.multiVersion=false;mocks.earlierEmpty=false;});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('reads status after the selected assessment opens, instead of retaining an older zero-question result',async()=>{
   let opened=false;
@@ -98,6 +98,40 @@ it('does not label a legacy overview completion as the current questionnaire',as
   render(<VocationalStatusPanel {...props} compact/>);
   expect(await screen.findByText('Current questionnaire status could not be verified.')).toBeVisible();
   expect(screen.queryByText('Current questionnaire: Completed')).toBeNull();
+});
+
+it('guides staff back to the current questionnaire when earlier history has no core questions, without requesting setup or changing answers',async()=>{
+  mocks.multiVersion=true;mocks.earlierEmpty=true;let selected='';
+  mocks.rpc.mockImplementation(async(name:string,args:{target_template_version_id?:string})=>{
+    if(name==='rev_voc_assessment_draft'){
+      selected=args.target_template_version_id!;
+      return{data:{assessmentId:`assessment-${selected}`,version:1,status:'draft',answers:selected==='version-3'?{goal:'Current saved answer'}:{}},error:null};
+    }
+    return{data:status(`assessment-${selected}`,selected==='version-3'?1:0,selected),error:null};
+  });
+  render(<ParticipantVocationalAssessment {...props}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Open vocational profile'}));
+  await screen.findByText('Current questionnaire: In progress');
+  fireEvent.click(screen.getByText('Earlier questionnaires and saved answers',{selector:'summary'}));
+  fireEvent.change(screen.getByLabelText('Published questionnaire version'),{target:{value:'version-1'}});
+  expect(await screen.findByText('This earlier questionnaire contains no core employment questions. Select the current questionnaire to continue.')).toBeVisible();
+  expect(await screen.findByText('Earlier questionnaire: In progress')).toBeVisible();
+  expect(screen.queryByText(/Programme setup needs review|Ask your manager/)).toBeNull();
+  expect(screen.queryByRole('button',{name:'Copy setup request for manager'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Review programme questionnaire'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Mark completed'})).toBeNull();
+  fireEvent.change(screen.getByLabelText('Published questionnaire version'),{target:{value:'version-3'}});
+  await screen.findByText('Current questionnaire: In progress');
+  fireEvent.click(screen.getByRole('button',{name:/Employment goals/}));
+  expect(screen.getByLabelText('What work interests you?')).toHaveValue('Current saved answer');
+  expect(mocks.rpc.mock.calls.filter(([name])=>name==='rev_voc_assessment_draft').every(([,args])=>args.target_action==='open')).toBe(true);
+  expect(mocks.rpc.mock.calls.some(([name])=>name==='rev_voc_assessment_complete')).toBe(false);
+});
+
+it('retains the setup warning for the current questionnaire with no core questions',async()=>{
+  mocks.rpc.mockResolvedValue({data:status('assessment-3',0),error:null});
+  render(<VocationalStatusPanel {...props} assessmentId="assessment-3" questionnaire={{templateVersionId:'version-3',title:'Employment questionnaire',version:3,isCurrent:true}}/>);
+  expect(await screen.findByText('Core questionnaire not available. Programme setup needs review.')).toBeVisible();
 });
 
 it('identifies an unopened current questionnaire separately from an earlier completed assessment',async()=>{

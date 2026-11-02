@@ -97,6 +97,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
     return () => { active = false; };
   }, [open, selected, workspaceId, programmeId, participantId, onStatusChange]);
   const snapshot = snapshots.find((v) => v.id === selected);
+  const isEarlierQuestionnaire = !!snapshot && snapshot.id !== snapshots[0]?.id;
   const sections = snapshot ? ordinarySections(snapshot.sections) : [];
   const optionalSupportAvailable = snapshot ? hasOptionalSupportSection(snapshot.sections) : false;
   const allQuestions = sections.flatMap(s => s.questions);
@@ -212,11 +213,13 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
           <p className="mt-1 text-base text-neutral-700">This programme has a separate criminal justice or resettlement support section. It is excluded from core profile progress and ordinary matching. Participants do not need to disclose convictions or other sensitive information to complete their core vocational profile. Sensitive support must use a separately authorised, consented workflow; it is not collected on this screen.</p>
         </div>}
         {sections.length === 0 && <div role="status" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-base text-amber-900">
+          {isEarlierQuestionnaire ? <p>This earlier questionnaire contains no core employment questions. Select the current questionnaire to continue.</p> : <>
           <p>This published questionnaire has no core employment questions. Its optional support questions do not form a complete vocational profile. Ask your manager to edit the programme questionnaire and choose Save and make available.</p>
           {isManager && onReviewQuestionnaire ? <button type="button" className="btn-secondary" onClick={onReviewQuestionnaire}>Review programme questionnaire</button> : <button type="button" className="btn-secondary" onClick={async () => {
             try { await navigator.clipboard.writeText('Please review the vocational questionnaire for my programme. The published version has no core employment questions. Choose Edit questionnaire, review the employment questions, then Save and make available.'); setNotice('Setup request copied. Send it to your programme manager. No notification has been sent automatically.'); }
             catch { setNotice('Copy unavailable. Tell your programme manager that the published questionnaire needs core employment questions.'); }
           }}>Copy setup request for manager</button>}
+          </>}
         </div>}
         {sections.length > 0 && <p className="text-base text-neutral-700">{snapshot?.id === snapshots[0]?.id ? 'Current questionnaire' : 'Earlier questionnaire'}: {allQuestions.length} core {allQuestions.length === 1 ? 'question' : 'questions'} across {sections.length} {sections.length === 1 ? 'section' : 'sections'}. Draft changes are not included.</p>}
         {dirty && <p className="text-base font-medium text-amber-800">Unsaved changes</p>}
