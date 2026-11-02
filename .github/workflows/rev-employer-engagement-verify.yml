@@ -30,7 +30,7 @@ jobs:
             supabase/functions/rev-programme-employer-engagement-save/*.test.ts \
             supabase/functions/rev-programme-employer-outreach-draft/*.test.ts
       - name: Test Programme Hub mounted UI
-        run: npm test -- src/tests/programmeHubContract.test.ts src/tests/programmeHubUI.test.tsx src/tests/programmeEmployerEngagementUI.test.tsx src/tests/programmeCaseloadReporting.test.ts src/tests/programmeEmployerSaveErrors.test.ts src/tests/workspaceTeamUI.test.tsx src/tests/workspaceInvitationApp.test.tsx src/tests/workspaceModuleAccess.test.tsx src/tests/workspaceModuleSchema.test.ts src/tests/passwordRecovery.test.tsx
+        run: npm test -- src/tests/programmeHubContract.test.ts src/tests/programmeHubUI.test.tsx src/tests/participantActionPlanUI.test.tsx src/tests/programmeEmployerEngagementUI.test.tsx src/tests/programmeCaseloadReporting.test.ts src/tests/programmeEmployerSaveErrors.test.ts src/tests/workspaceTeamUI.test.tsx src/tests/workspaceInvitationApp.test.tsx src/tests/workspaceModuleAccess.test.tsx src/tests/workspaceModuleSchema.test.ts src/tests/passwordRecovery.test.tsx
       - name: Check Programme Hub Edge Function
         uses: denoland/setup-deno@v2
         with:
@@ -66,6 +66,11 @@ jobs:
           docker exec -i supabase_db_revive-app \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/tests/20261102002000_rev_voc_matching_summary_current_questionnaire_test.sql
+      - name: Test versioned employment action plan authority and history
+        run: |
+          docker exec -i supabase_db_revive-app \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/tests/20261102003000_rev_action_plan_foundation_test.sql
       - name: Test Programme Hub tenant and caseload authorization
         shell: bash
         run: |
