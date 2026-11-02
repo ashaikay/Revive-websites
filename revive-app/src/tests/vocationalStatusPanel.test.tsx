@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks=vi.hoisted(()=>({rpc:vi.fn(), multiVersion:false}));
 vi.mock('@/data/supabaseClient',()=>({supabaseClient:{
@@ -112,4 +112,35 @@ it('identifies an unopened current questionnaire separately from an earlier comp
   expect(screen.getByText(/Earlier completed assessment: Earlier questionnaire - version 1/)).toHaveTextContent('This does not complete the current questionnaire.');
   expect(mocks.rpc).toHaveBeenCalledTimes(1);
   expect(mocks.rpc).toHaveBeenCalledWith('rev_voc_assessment_status',expect.objectContaining({target_participant_id:'participant'}));
+});
+
+it('regression: older completed assessment plus newer incomplete questionnaire is labelled consistently in caseload and selected status',async()=>{
+  const completedAt='2026-10-02T09:00:00Z';
+  const earlier={status:'completed',assessmentId:'assessment-1',templateVersionId:'version-1',answered:1,total:1,updatedAt:completedAt,completedAt,updatedByUserId:null};
+  const current={status:'in_progress',assessmentId:'assessment-3',templateVersionId:'version-3',answered:1,total:2,updatedAt:'2026-11-02T09:00:00Z',completedAt:null,updatedByUserId:null};
+  mocks.rpc.mockImplementation(async(name:string,args:{target_assessment_id?:string})=>{
+    if(name==='rev_voc_assessment_status')return{data:{...current,
+      questionnaire:{templateVersionId:'version-3',title:'Employment questionnaire',version:3},
+      earlierCompletedAssessment:{assessmentId:'assessment-1',templateVersionId:'version-1',questionnaireTitle:'Earlier questionnaire',questionnaireVersion:1,completedAt}},error:null};
+    return{data:args.target_assessment_id==='assessment-1'?earlier:current,error:null};
+  });
+  render(<>
+    <div data-testid="caseload"><VocationalStatusPanel {...props} compact/></div>
+    <div data-testid="selected-current"><VocationalStatusPanel {...props} assessmentId="assessment-3" questionnaire={{templateVersionId:'version-3',title:'Employment questionnaire',version:3,isCurrent:true}}/></div>
+    <div data-testid="selected-earlier"><VocationalStatusPanel {...props} assessmentId="assessment-1" questionnaire={{templateVersionId:'version-1',title:'Earlier questionnaire',version:1,isCurrent:false}}/></div>
+  </>);
+  const caseload=within(screen.getByTestId('caseload'));
+  expect(await caseload.findByText('Current questionnaire: In progress')).toBeVisible();
+  expect(caseload.getByText('Employment questionnaire - version 3')).toBeVisible();
+  expect(caseload.getByText(/Earlier completed assessment: Earlier questionnaire - version 1/)).toHaveTextContent('This does not complete the current questionnaire.');
+  expect(caseload.queryByText(/Current questionnaire: Completed/)).toBeNull();
+  const selectedCurrent=within(screen.getByTestId('selected-current'));
+  expect(await selectedCurrent.findByText('Current questionnaire: In progress')).toBeVisible();
+  expect(selectedCurrent.getByText('1 of 2 questions answered (50%)')).toBeVisible();
+  expect(selectedCurrent.getByText('Completed: Not completed')).toBeVisible();
+  const selectedEarlier=within(screen.getByTestId('selected-earlier'));
+  expect(await selectedEarlier.findByText('Earlier questionnaire: Completed')).toBeVisible();
+  expect(selectedEarlier.getByText('Earlier questionnaire - version 1')).toBeVisible();
+  expect(selectedEarlier.queryByText(/Current questionnaire/)).toBeNull();
+  expect(mocks.rpc.mock.calls.some(([name])=>name==='rev_voc_assessment_complete'||name==='rev_voc_assessment_draft')).toBe(false);
 });

@@ -72,7 +72,7 @@ vi.mock('@/services/programmeCaseloadReporting', async (importOriginal) => {
 
 import { ProgrammeHubModule } from '@/components/ProgrammeHubModule';
 
-it('keeps current caseload status separate from earlier completion and preserves assigned ES answers across questionnaires', async () => {
+it('regression: older completed assessment plus newer incomplete questionnaire keeps caseload and selected status labelled and preserves assigned ES answers', async () => {
   setRows('member', true);
   const questions = [{ id: 'goal', label: 'Preferred work', type: 'short_text', required: true, sensitive: false }];
   const versions = [
@@ -102,6 +102,7 @@ it('keeps current caseload status separate from earlier completion and preserves
   await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
   const overview = within(screen.getByLabelText('Caseload overview'));
   expect(await overview.findByText('Current questionnaire: In progress')).toBeVisible();
+  expect(overview.queryByText(/Current questionnaire: Completed/)).toBeNull();
   expect(overview.getByText(/Earlier completed assessment: Earlier employment questionnaire - version 1/)).toBeVisible();
   const overviewReads = () => mocks.rpc.mock.calls.filter(([name]) => name === 'rev_voc_assessment_status').length;
   const initialReads = overviewReads();
