@@ -140,7 +140,8 @@ BEGIN
       RAISE EXCEPTION 'Invalid action plan actions' USING ERRCODE = '22023';
     END IF;
     item_keys := ARRAY(SELECT pg_catalog.jsonb_object_keys(item));
-    IF NOT (item_keys @> allowed_keys AND item_keys <@ allowed_keys)
+    -- IS NOT FALSE rejects any check that evaluates to NULL (for example JSON null fields).
+    IF (NOT (item_keys @> allowed_keys AND item_keys <@ allowed_keys)
       OR pg_catalog.jsonb_typeof(item->'id') <> 'string'
       OR (item->>'id') !~ uuid_pattern
       OR (item->>'id') = ANY (seen)
@@ -149,6 +150,8 @@ BEGIN
       OR (item->>'description') <> btrim(item->>'description')
       OR pg_catalog.jsonb_typeof(item->'status') <> 'string'
       OR (item->>'status') NOT IN ('not_started', 'in_progress', 'completed')
+      OR pg_catalog.jsonb_typeof(item->'ownerType') <> 'string'
+      OR (item->>'ownerType') NOT IN ('service_user', 'employment_specialist')
       OR NOT (
         ((item->>'ownerType') = 'service_user' AND pg_catalog.jsonb_typeof(item->'ownerUserId') = 'null')
         OR ((item->>'ownerType') = 'employment_specialist'
@@ -159,7 +162,7 @@ BEGIN
         pg_catalog.jsonb_typeof(item->'targetDate') = 'null'
         OR (pg_catalog.jsonb_typeof(item->'targetDate') = 'string'
           AND (item->>'targetDate') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-      ) THEN
+      )) IS NOT FALSE THEN
       RAISE EXCEPTION 'Invalid action plan actions' USING ERRCODE = '22023';
     END IF;
     IF pg_catalog.jsonb_typeof(item->'targetDate') = 'string' THEN

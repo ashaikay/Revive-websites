@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabaseClient } from '@/data/supabaseClient';
+import { clearActionPlanAttempt, rememberActionPlanAttempt, restoreActionPlanAttempt, type ActionPlanAttempt, type ActionPlanSavePayload } from '@/services/actionPlanRetainedRequest';
 
 export type ActionStatus = 'not_started' | 'in_progress' | 'completed';
 export type PlanAction = {
@@ -34,13 +35,16 @@ const saveFailure = (cause: unknown) => {
   if (code === '40001') return 'This plan was changed by someone else or the request was already used. Your edits remain on screen; close and reopen the plan to see the latest revision.';
   if (code === '42501') return 'You no longer have access to this Service user\'s action plan. Nothing was saved.';
   if (code === '22023') return 'The plan could not be saved. Check each action has a description and an owner who is currently assigned. Nothing was saved.';
-  return 'Save not confirmed. Your edits remain on screen. Select Save revision again to retry the same request.';
+  return 'Save not confirmed. Editing is paused so the plan cannot be replaced. Select Retry save to resend the exact same request; it will not create a duplicate revision.';
 };
+const retainedUnreadable = 'A retained action plan save could not be read. Nothing new can be saved here; contact support before making another change.';
+const definitiveCodes = new Set(['40001', '42501', '22023']);
 
-export function ParticipantActionPlan({ workspaceId, programmeId, participantId, assignableSpecialists = [], staffLabel = () => 'Staff member' }: {
-  workspaceId: string; programmeId: string; participantId: string;
+export function ParticipantActionPlan({ workspaceId, userId, programmeId, participantId, assignableSpecialists = [], staffLabel = () => 'Staff member', onNavigationLockChange }: {
+  workspaceId: string; userId: string; programmeId: string; participantId: string;
   assignableSpecialists?: { userId: string; label: string }[];
   staffLabel?: (userId: string) => string;
+  onNavigationLockChange?: (locked: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ActionPlanRead | null>(null);
@@ -53,24 +57,38 @@ export function ParticipantActionPlan({ workspaceId, programmeId, participantId,
   const [notice, setNotice] = useState('');
   const [viewing, setViewing] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
-  const scopeKey = JSON.stringify([workspaceId, programmeId, participantId]);
+  // An unconfirmed save is retained (in sessionStorage too) until an exact replay resolves it.
+  const [retained, setRetained] = useState<ActionPlanAttempt | null>(null);
+  const [retainedInvalid, setRetainedInvalid] = useState(false);
+  const scopeKey = JSON.stringify([workspaceId, userId, programmeId, participantId]);
   const scope = useRef({ key: scopeKey, token: Symbol() });
-  // An unconfirmed save keeps its request ID so an unchanged retry is an exact replay.
-  const pendingRequest = useRef<{ body: string; requestId: string } | null>(null);
-  if (scope.current.key !== scopeKey) {
-    scope.current = { key: scopeKey, token: Symbol() };
-    pendingRequest.current = null;
-  }
+  if (scope.current.key !== scopeKey) scope.current = { key: scopeKey, token: Symbol() };
   useEffect(() => {
     setOpen(false); setData(null); setDraft({ goal: '', actions: [] }); setDirty(false); setLinkCurrent(false);
     setLoading(false); setSaving(false); setError(''); setNotice(''); setViewing(null);
+    setRetained(null); setRetainedInvalid(false);
+    try {
+      const attempt = restoreActionPlanAttempt(window.sessionStorage, workspaceId, userId, programmeId);
+      if (attempt?.participantId === participantId) {
+        setRetained(attempt); setOpen(true);
+        setError(saveFailure(null));
+      }
+    } catch {
+      setRetainedInvalid(true); setOpen(true); setError(retainedUnreadable);
+    }
   }, [scopeKey]);
   useEffect(() => () => { scope.current.token = Symbol(); }, []);
+  const locked = saving || !!retained || retainedInvalid;
+  useEffect(() => { onNavigationLockChange?.(locked); }, [locked, onNavigationLockChange]);
+  useEffect(() => () => onNavigationLockChange?.(false), [onNavigationLockChange]);
+  const retainedRef = useRef(retained);
+  retainedRef.current = retained;
 
   useEffect(() => {
     if (!open) return;
     const token = scope.current.token;
-    setLoading(true); setError('');
+    setLoading(true);
+    if (!retainedRef.current && !retainedInvalid) setError('');
     void (async () => {
       try {
         if (!supabaseClient) throw new Error('Database connection unavailable.');
@@ -83,10 +101,19 @@ export function ParticipantActionPlan({ workspaceId, programmeId, participantId,
         if (!value || !Array.isArray(value.revisions) || !Array.isArray(value.assignedSpecialistIds)) throw new Error('Action plan could not be verified.');
         setData(value);
         const latest = value.revisions[0];
-        setDraft(latest ? { goal: latest.employmentGoal, actions: stripFlags(latest.actions) } : { goal: '', actions: [] });
-        setDirty(false); setLinkCurrent(false); setViewing(null);
+        const pendingSave = retainedRef.current;
+        if (pendingSave) {
+          // Show exactly what the retained request will resend; editing stays paused.
+          setDraft({ goal: pendingSave.payload.target_goal, actions: pendingSave.payload.target_actions as PlanAction[] });
+          setDirty(true);
+          setLinkCurrent(!!latest && pendingSave.payload.target_template_version_id !== latest.templateVersionId);
+        } else {
+          setDraft(latest ? { goal: latest.employmentGoal, actions: stripFlags(latest.actions) } : { goal: '', actions: [] });
+          setDirty(false); setLinkCurrent(false);
+        }
+        setViewing(null);
       } catch (cause) {
-        if (scope.current.token === token) setError(cause instanceof Error && cause.message === 'Action plan could not be verified.' ? cause.message : 'Action plan unavailable. Nothing has been changed.');
+        if (scope.current.token === token && !retainedRef.current) setError(cause instanceof Error && cause.message === 'Action plan could not be verified.' ? cause.message : 'Action plan unavailable. Nothing has been changed.');
       } finally {
         if (scope.current.token === token) setLoading(false);
       }
@@ -99,41 +126,56 @@ export function ParticipantActionPlan({ workspaceId, programmeId, participantId,
   const linkedVersion = !latest ? data?.currentQuestionnaire?.templateVersionId ?? null
     : data?.reviewNeeded && linkCurrent ? data.currentQuestionnaire?.templateVersionId ?? null
       : latest.templateVersionId;
-  const editable = !loading && !saving;
+  const editable = !loading && !saving && !retained && !retainedInvalid;
   const invalid = !draft.goal.trim() || draft.actions.some((action) => !action.description.trim() || (action.ownerType === 'employment_specialist' && !action.ownerUserId));
   const ownerNeedsReview = (action: PlanAction) => action.ownerType === 'employment_specialist' && !!action.ownerUserId && !assignedIds.has(action.ownerUserId);
 
-  const edit = (next: Draft) => { setDraft(next); setDirty(true); setNotice(''); };
+  const edit = (next: Draft) => { if (!editable) return; setDraft(next); setDirty(true); setNotice(''); };
   const updateAction = (id: string, patch: Partial<PlanAction>) => edit({ ...draft, actions: draft.actions.map((action) => action.id === id ? { ...action, ...patch } : action) });
 
   const save = async () => {
-    if (!data || !linkedVersion || !supabaseClient || saving || !dirty || invalid) return;
+    if (!supabaseClient || saving || retainedInvalid) return;
+    let attempt = retained;
+    if (!attempt) {
+      if (!data || !linkedVersion || !dirty || invalid) return;
+      const payload: ActionPlanSavePayload = {
+        target_workspace_id: workspaceId, target_programme_id: programmeId, target_participant_id: participantId,
+        expected_revision: data.plan?.currentRevision ?? 0, target_template_version_id: linkedVersion,
+        target_goal: draft.goal.trim(),
+        target_actions: draft.actions.map((action) => ({ ...action, description: action.description.trim() })),
+      };
+      attempt = { userId, workspaceId, programmeId, participantId, requestId: newId(), payload };
+      try {
+        // Retain before sending so a refresh during an unknown outcome still replays this exact request.
+        rememberActionPlanAttempt(window.sessionStorage, attempt);
+      } catch {
+        setError('This save could not be prepared safely in this browser. Nothing was sent.');
+        return;
+      }
+      setRetained(attempt);
+    }
+    const { payload, requestId } = attempt;
     const token = scope.current.token;
-    const payload = {
-      target_workspace_id: workspaceId, target_programme_id: programmeId, target_participant_id: participantId,
-      expected_revision: data.plan?.currentRevision ?? 0, target_template_version_id: linkedVersion,
-      target_goal: draft.goal.trim(),
-      target_actions: draft.actions.map((action) => ({ ...action, description: action.description.trim() })),
-    };
-    const body = JSON.stringify(payload);
-    const requestId = pendingRequest.current?.body === body ? pendingRequest.current.requestId : newId();
-    pendingRequest.current = { body, requestId };
     setSaving(true); setError(''); setNotice('');
+    const resolve = () => {
+      try { clearActionPlanAttempt(window.sessionStorage, workspaceId, userId, programmeId); } catch { /* cleared in memory below */ }
+      setRetained(null);
+    };
     try {
       const { data: result, error: rpcError } = await supabaseClient.rpc('rev_action_plan_save', { ...payload, target_request_id: requestId });
       if (scope.current.token !== token) return;
       if (rpcError) throw rpcError;
       const saved = result as { revision: number; templateVersionId: string };
-      if (saved?.revision !== payload.expected_revision + 1 || saved.templateVersionId !== linkedVersion) throw new Error('unverified');
-      pendingRequest.current = null;
+      if (saved?.revision !== payload.expected_revision + 1 || saved.templateVersionId !== payload.target_template_version_id) throw new Error('unverified');
+      resolve();
       setDirty(false);
       setNotice(`Revision ${saved.revision} saved. Earlier revisions are kept unchanged.`);
       setReload((value) => value + 1);
     } catch (cause) {
       if (scope.current.token !== token) return;
       const code = typeof cause === 'object' && cause && 'code' in cause ? String((cause as { code: unknown }).code) : '';
-      // Definitive rejections will not succeed on an exact replay; a later save starts a new request.
-      if (code === '40001' || code === '42501' || code === '22023') pendingRequest.current = null;
+      // Definitive rejections will not succeed on an exact replay; anything else stays retained.
+      if (definitiveCodes.has(code)) resolve();
       setError(saveFailure(cause));
     } finally {
       if (scope.current.token === token) setSaving(false);
@@ -148,8 +190,8 @@ export function ParticipantActionPlan({ workspaceId, programmeId, participantId,
         <h3 className="text-lg font-semibold text-neutral-900">Employment action plan</h3>
         <p className="text-base text-neutral-700">{latest ? `Revision ${latest.revision}` : 'No plan saved yet'}</p>
       </div>
-      <button type="button" className={`rev-outcomes-profile-action ${open ? 'btn-secondary' : 'btn-primary'}`} disabled={saving} aria-expanded={open}
-        onClick={() => { if (open && dirty && !window.confirm('Discard unsaved action plan changes?')) return; if (open) { pendingRequest.current = null; setData(null); setDirty(false); setError(''); setNotice(''); } setOpen(!open); }}>
+      <button type="button" className={`rev-outcomes-profile-action ${open ? 'btn-secondary' : 'btn-primary'}`} disabled={locked} aria-expanded={open}
+        onClick={() => { if (locked) return; if (open && dirty && !window.confirm('Discard unsaved action plan changes?')) return; if (open) { setData(null); setDirty(false); setError(''); setNotice(''); } setOpen(!open); }}>
         {open ? 'Close action plan' : 'Open action plan'}
       </button>
     </div>
@@ -158,13 +200,14 @@ export function ParticipantActionPlan({ workspaceId, programmeId, participantId,
       {loading && <p role="status" className="text-base">Loading action plan...</p>}
       {error && <p role="alert" className="text-base text-red-700">{error}</p>}
       {notice && <p role="status" className="text-base text-green-700">{notice}</p>}
+      {retained && !data && !loading && <button type="button" className="btn-primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Retry save'}</button>}
       {data && !loading && !latest && !data.currentQuestionnaire && <p className="text-base">A published vocational questionnaire is needed for this programme before an action plan can be started.</p>}
       {data && !loading && (latest || data.currentQuestionnaire) && <>
         <p className="text-base text-neutral-700">Linked questionnaire: {latest ? `${latest.questionnaireTitle} - version ${latest.questionnaireVersion}` : `${data.currentQuestionnaire!.title} - version ${data.currentQuestionnaire!.version}`}</p>
         {data.reviewNeeded && data.currentQuestionnaire && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-base text-amber-900">
           <p className="font-medium">Review needed</p>
           <p>A newer questionnaire ({data.currentQuestionnaire.title} - version {data.currentQuestionnaire.version}) has been published since this plan was saved. The plan and its history are unchanged.</p>
-          <label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={linkCurrent} disabled={!editable} onChange={(event) => { setLinkCurrent(event.target.checked); setDirty(true); setNotice(''); }} />Link the next revision to the current questionnaire after reviewing this plan</label>
+          <label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={linkCurrent} disabled={!editable} onChange={(event) => { if (!editable) return; setLinkCurrent(event.target.checked); setDirty(true); setNotice(''); }} />Link the next revision to the current questionnaire after reviewing this plan</label>
         </div>}
         <label className="block text-base font-medium">Employment goal
           <textarea className="mt-1 w-full rounded border border-neutral-300 p-2 font-normal" rows={2} maxLength={500} disabled={!editable} value={draft.goal} onChange={(event) => edit({ ...draft, goal: event.target.value })} />
@@ -204,8 +247,8 @@ export function ParticipantActionPlan({ workspaceId, programmeId, participantId,
             onClick={() => edit({ ...draft, actions: [...draft.actions, { id: newId(), description: '', ownerType: 'service_user', ownerUserId: null, status: 'not_started', targetDate: null }] })}>Add action</button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" className="btn-primary" disabled={!dirty || invalid || saving || loading || !linkedVersion} onClick={() => void save()}>{saving ? 'Saving...' : 'Save revision'}</button>
-          {dirty && !saving && <span className="text-sm text-neutral-600">Unsaved changes</span>}
+          <button type="button" className="btn-primary" disabled={retained ? saving : (!dirty || invalid || saving || loading || !linkedVersion || retainedInvalid)} onClick={() => void save()}>{saving ? 'Saving...' : retained ? 'Retry save' : 'Save revision'}</button>
+          {dirty && !saving && !retained && <span className="text-sm text-neutral-600">Unsaved changes</span>}
         </div>
         {data.revisions.length > 0 && <details className="rounded-lg border border-neutral-200 p-3">
           <summary className="cursor-pointer text-base font-medium">Revision history ({data.revisions.length})</summary>

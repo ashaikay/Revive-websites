@@ -123,6 +123,32 @@ BEGIN
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
   RAISE NOTICE 'PASS unassigned owner, unrelated questionnaire, invalid date and extra fields rejected';
 
+  DECLARE
+    su jsonb := (SELECT su_action FROM rev_ap_actions);
+    es jsonb := (SELECT es_action FROM rev_ap_actions);
+    bad jsonb;
+  BEGIN
+    FOREACH bad IN ARRAY ARRAY[
+      jsonb_set(su,'{ownerType}','null'),
+      jsonb_set(es,'{ownerType}','null'),
+      jsonb_set(su,'{ownerType}','1'),
+      jsonb_set(su,'{ownerType}','["service_user"]'),
+      jsonb_set(su,'{ownerType}','"participant"'),
+      jsonb_set(su,'{ownerUserId}',es->'ownerUserId'),
+      jsonb_set(es,'{ownerUserId}','null'),
+      jsonb_set(es,'{ownerUserId}','"not-a-uuid"'),
+      jsonb_set(su,'{status}','null'),
+      jsonb_set(su,'{description}','null'),
+      jsonb_set(su,'{id}','null')
+    ] LOOP
+      BEGIN
+        PERFORM public.rev_action_plan_save(ws,prog,p1,gen_random_uuid(),1,v1,'Goal',jsonb_build_array(bad));
+        RAISE EXCEPTION 'FAIL malformed action accepted: %',bad;
+      EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+    END LOOP;
+  END;
+  RAISE NOTICE 'PASS null or malformed ownerType, ownerUserId and other action fields rejected';
+
   BEGIN
     PERFORM 1 FROM public.programme_hub_action_plan_revisions;
     RAISE EXCEPTION 'FAIL browser role read revisions directly';

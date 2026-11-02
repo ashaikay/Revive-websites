@@ -42,3 +42,23 @@ Status: implemented in a PR. **Not applied to hosted Supabase. Not released.**
 - UI: `revive-app/src/tests/participantActionPlanUI.test.tsx`.
 - Targeted Vitest: 3 files, 88 tests passed. Also covers `vocationalAssessmentWriteState` and `programmeHubUI`.
 - `npm run build` passed.
+
+## Review blocker fixes
+
+### Unconfirmed saves
+
+- An unconfirmed save is kept in sessionStorage (`actionPlanRetainedRequest.ts`). It is scoped to the user, workspace, programme and Service user.
+- While it is retained, editing, replacement saves, closing the plan and record navigation are blocked.
+- After a refresh, the plan reopens and offers Retry save.
+- Retry save resends the original payload with the original request ID.
+- The retained request is cleared only after a verified save or a definitive database rejection.
+- UI tests: `participantActionPlanUI` and `programmeHubUI` passed (81 tests).
+- `npm run build` passed.
+
+### Action owner validation
+
+- `rev_action_plan_validate_actions` now rejects `ownerType` values that are null, not a string, or not one of the allowed values.
+- It also rejects an invalid `ownerUserId` and null required fields.
+- Before the fix, null comparisons made the rejection check evaluate to NULL instead of failing, so these actions were accepted.
+- The migration was edited in place. It has not been applied to the hosted database.
+- The DB regression runs in CI.
