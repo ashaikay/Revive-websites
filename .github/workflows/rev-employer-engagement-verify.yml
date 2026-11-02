@@ -61,6 +61,11 @@ jobs:
           docker exec -i supabase_db_revive-app \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/tests/20261102001000_rev_voc_current_questionnaire_status_test.sql
+      - name: Test REV Brain matching summary uses the current questionnaire
+        run: |
+          docker exec -i supabase_db_revive-app \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/tests/20261102002000_rev_voc_matching_summary_current_questionnaire_test.sql
       - name: Test Programme Hub tenant and caseload authorization
         shell: bash
         run: |

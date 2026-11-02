@@ -76,3 +76,27 @@ ORDER BY legacy_choice_rank, assessment_id;
 ```
 
 Validation: 20 tests passed in the targeted vocational-status and assessment-write suites, including earlier empty-questionnaire navigation, unchanged current saved answers, no save/completion writes on history navigation, and preserved current-questionnaire staff/manager setup actions. One TypeScript/Vite build passed with the existing chunk-size advisory. No hosted query, migration, deployment, merge or CI polling was performed.
+
+## REV Brain matching summary alignment - 2 November 2026
+
+Migration `20261102002000_rev_voc_matching_summary_current_questionnaire.sql` redefines
+`rev_voc_matching_summary` (read-only, not yet applied to hosted) so it selects exactly what
+`rev_voc_assessment_status` selects:
+
+- Current questionnaire: latest published snapshot of a template whose `programme_id` is the
+  selected programme, ordered by snapshot `published_at`, then id. Workspace-wide templates
+  (`programme_id IS NULL`) are no longer treated as current.
+- Current assessment: draft first, then latest completed, on that snapshot only.
+- Readiness: `no_published_questionnaire`, `reassessment_required` (nothing on the current
+  questionnaire), `assessment_in_progress` (a current draft exists, including a same-version
+  reassessment draft), or `ready` (completed current assessment). Only `ready` returns answers.
+  Older-version answers are never used. Responses now also include `templateVersionId` and
+  `assessmentId` for traceability.
+- Unchanged: authorisation (`rev_voc_assessment_authorised`), ordinary/matching-safe question
+  guard, controlled vocabulary allowlists and grants (authenticated only). No consumers in `src/`.
+
+Regression `supabase/tests/20261102002000_rev_voc_matching_summary_current_questionnaire_test.sql`
+(rolled back; wired into CI) covers older completed plus newer unopened/incomplete questionnaires,
+a later workspace-wide template, same-version draft and completed, owner/ES agreement with status,
+unassigned, foreign workspace/programme, unauthenticated, anon and revoked ES denial, and
+unchanged answers, statuses and completion events.
