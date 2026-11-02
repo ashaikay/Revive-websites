@@ -30,17 +30,21 @@ vi.mock('@/data/supabaseClient', () => ({
   supabaseClient: {
     from: (table: string) => {
       const filters: Array<[string, unknown]> = [];
+      const inFilters: Array<[string, unknown[]]> = [];
       let range: [number, number] | null = null;
-      const filtered = () => (mocks.rows[table] ?? []).filter((row) => filters.every(([column, value]) => (row as Record<string, unknown>)[column] === value));
+      let limit: number | null = null;
+      const filtered = () => (mocks.rows[table] ?? []).filter((row) => filters.every(([column, value]) => (row as Record<string, unknown>)[column] === value) && inFilters.every(([column, values]) => values.includes((row as Record<string, unknown>)[column])));
       const result = () => ({
-        data: range ? filtered().slice(range[0], range[1] + 1) : filtered(),
+        data: range ? filtered().slice(range[0], range[1] + 1) : limit === null ? filtered() : filtered().slice(0, limit),
         count: filtered().length,
         error: (mocks.caseloadReadFails && table === 'programme_hub_participants') || (mocks.notesReadFails && table === 'programme_hub_participant_notes') || (mocks.contactReadFails && table === 'programme_hub_participant_contacts') ? new Error('read unavailable') : null,
       });
       const query = {
         select: (columns: string) => { mocks.selections[table] = columns; return query; },
         eq: (column: string, value: unknown) => { filters.push([column, value]); return query; },
+        in: (column: string, values: unknown[]) => { inFilters.push([column, values]); return query; },
         order: () => query,
+        limit: (value: number) => { limit = value; return query; },
         range: (from: number, to: number) => { range = [from, to]; return query; },
         then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(mocks.readGate).then(() => result()).then(resolve, reject),
       };
@@ -67,6 +71,73 @@ vi.mock('@/services/programmeCaseloadReporting', async (importOriginal) => {
 });
 
 import { ProgrammeHubModule } from '@/components/ProgrammeHubModule';
+
+it('regression: older completed assessment plus newer incomplete questionnaire keeps caseload and selected status labelled and preserves assigned ES answers', async () => {
+  setRows('member', true);
+  const questions = [{ id: 'goal', label: 'Preferred work', type: 'short_text', required: true, sensitive: false }];
+  const versions = [
+    { id: 'current-snapshot', workspace_id: workspaceId, template_id: 'template', version: 3, title: 'Current employment questionnaire', published_at: '2026-11-02T09:00:00Z', sections: [{ id: 'goals', title: 'Employment goals', questions: [...questions, { id: 'next', label: 'Next step', type: 'short_text', required: true, sensitive: false }] }] },
+    { id: 'earlier-snapshot', workspace_id: workspaceId, template_id: 'template', version: 1, title: 'Earlier employment questionnaire', published_at: '2026-10-01T09:00:00Z', sections: [{ id: 'goals', title: 'Employment goals', questions }] },
+  ];
+  mocks.rows.programme_hub_vocational_templates = [{ id: 'template', workspace_id: workspaceId, programme_id: programmeId, status: 'published' }];
+  mocks.rows.programme_hub_vocational_template_versions = versions;
+  let currentAnswers = { goal: 'Current saved answer' };
+  const completedAt = '2026-10-02T09:00:00Z';
+  const currentStatus = () => ({ status: 'in_progress', assessmentId: 'current-assessment', templateVersionId: 'current-snapshot', answered: 1, total: 2, updatedAt: null, completedAt: null, updatedByUserId: adviserId });
+  mocks.rpc.mockImplementation(async (name: string, input: Record<string, unknown>) => {
+    if (name === 'list_rev_workspace_staff_names') return { data: [], error: null };
+    if (name === 'rev_voc_assessment_status') return { data: { ...currentStatus(), questionnaire: { templateVersionId: 'current-snapshot', title: versions[0].title, version: 3 }, earlierCompletedAssessment: { assessmentId: 'earlier-assessment', templateVersionId: 'earlier-snapshot', questionnaireTitle: versions[1].title, questionnaireVersion: 1, completedAt } }, error: null };
+    if (name === 'rev_voc_assessment_selected_status') return { data: input.target_assessment_id === 'current-assessment' ? currentStatus() : { ...currentStatus(), status: 'completed', assessmentId: 'earlier-assessment', templateVersionId: 'earlier-snapshot', total: 1, completedAt }, error: null };
+    if (name === 'rev_voc_assessment_draft') {
+      const current = input.target_template_version_id === 'current-snapshot';
+      if (input.target_action === 'save') {
+        expect(current).toBe(true);
+        expect(input.target_assessment_id).toBe('current-assessment');
+        currentAnswers = input.target_answers as typeof currentAnswers;
+      }
+      return { data: { assessmentId: current ? 'current-assessment' : 'earlier-assessment', version: 1, status: current ? 'draft' : 'completed', answers: current ? currentAnswers : { goal: 'Earlier saved answer' } }, error: null };
+    }
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+  const overview = within(screen.getByLabelText('Caseload overview'));
+  expect(await overview.findByText('Current questionnaire: In progress')).toBeVisible();
+  expect(overview.queryByText(/Current questionnaire: Completed/)).toBeNull();
+  expect(overview.getByText(/Earlier completed assessment: Earlier employment questionnaire - version 1/)).toBeVisible();
+  const overviewReads = () => mocks.rpc.mock.calls.filter(([name]) => name === 'rev_voc_assessment_status').length;
+  const initialReads = overviewReads();
+  fireEvent.click(screen.getByRole('button', { name: 'Open Service-user record' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open vocational profile' }));
+  const record = within(screen.getByLabelText('Selected Service-user record'));
+  expect(await record.findByText('Current questionnaire: In progress')).toBeVisible();
+  expect(record.getByText('Current employment questionnaire - version 3')).toBeVisible();
+  expect(record.getByText('1 of 2 questions answered (50%)')).toBeVisible();
+  await waitFor(() => expect(overviewReads()).toBeGreaterThan(initialReads));
+  fireEvent.click(record.getByRole('button', { name: /Employment goals/ }));
+  expect(record.getByLabelText('Preferred work (required)')).toHaveValue('Current saved answer');
+  expect(record.getByLabelText('Next step (required)')).toHaveValue('');
+  fireEvent.change(record.getByLabelText('Preferred work (required)'), { target: { value: 'Updated current answer' } });
+  const beforeSaveReads = overviewReads();
+  fireEvent.click(record.getByRole('button', { name: 'Save progress' }));
+  await record.findByText('Draft saved. You can return to this assessment later.');
+  await waitFor(() => expect(overviewReads()).toBeGreaterThan(beforeSaveReads));
+  fireEvent.click(record.getByText('Earlier questionnaires and saved answers', { selector: 'summary' }));
+  fireEvent.change(record.getByLabelText('Published questionnaire version'), { target: { value: 'earlier-snapshot' } });
+  expect(await record.findByText('Earlier questionnaire: Completed')).toBeVisible();
+  expect(record.getByText('Earlier employment questionnaire - version 1')).toBeVisible();
+  fireEvent.click(record.getByRole('button', { name: /Employment goals/ }));
+  expect(record.getByLabelText('Preferred work (required)')).toHaveValue('Earlier saved answer');
+  expect(record.getByLabelText('Preferred work (required)')).toBeDisabled();
+  expect(record.queryByRole('button', { name: 'Mark completed' })).toBeNull();
+  expect(overview.getByText('Current questionnaire: In progress')).toBeVisible();
+  fireEvent.change(record.getByLabelText('Published questionnaire version'), { target: { value: 'current-snapshot' } });
+  await record.findByText('Current questionnaire: In progress');
+  fireEvent.click(record.getByRole('button', { name: /Employment goals/ }));
+  expect(record.getByLabelText('Preferred work (required)')).toHaveValue('Updated current answer');
+  expect(record.getByLabelText('Next step (required)')).toHaveValue('');
+  expect(screen.queryByRole('button', { name: 'Review programme questionnaire' })).toBeNull();
+  expect(mocks.rpc.mock.calls.some(([name]) => name === 'rev_voc_assessment_complete' || name === 'rev_voc_support_access_status')).toBe(false);
+}, 15000);
 
 const programmeRow = {
   id: programmeId,

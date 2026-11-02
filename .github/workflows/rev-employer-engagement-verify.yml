@@ -56,6 +56,11 @@ jobs:
       - run: npm ci
       - name: Start isolated local Supabase and apply migrations
         run: npx --yes supabase@2.117.0 start --exclude studio
+      - name: Test current questionnaire status and assessment history
+        run: |
+          docker exec -i supabase_db_revive-app \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/tests/20261102001000_rev_voc_current_questionnaire_status_test.sql
       - name: Test Programme Hub tenant and caseload authorization
         shell: bash
         run: |

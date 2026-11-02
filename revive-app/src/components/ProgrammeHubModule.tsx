@@ -1,4 +1,4 @@
-import { Children, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Children, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '@/styles/rev-business-hub.css';
 import { supabaseClient } from '@/data/supabaseClient';
 import type {
@@ -114,6 +114,10 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const [notesReady, setNotesReady] = useState(false);
   const [notesError, setNotesError] = useState('');
   const [contactRefreshKeys, setContactRefreshKeys] = useState<Record<string, number>>({});
+  const [vocationalRefreshKeys, setVocationalRefreshKeys] = useState<Record<string, number>>({});
+  const refreshVocationalStatus = useCallback((participantId: string) => {
+    setVocationalRefreshKeys((current) => ({ ...current, [participantId]: (current[participantId] ?? 0) + 1 }));
+  }, []);
 
   const readGateway = useMemo(() => ({
     read: async (table: string, columns: string, ws: string) => {
@@ -717,11 +721,11 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       {selectedProgramme && (isManager || isAdviser) && <section className="rev-outcomes-caseload card p-5">
         <h2 className="text-xl font-semibold">{!isManager ? 'My caseload' : specialistFilter === 'all' ? 'All Service users' : specialistFilter === 'unassigned' ? 'Unassigned Service users' : `${adviserLabel(specialistFilter, data, userId)} - caseload`}</h2>
           {caseloadTools}
-          <CompactCaseload workspaceId={workspaceId} programmeId={selectedProgramme.id} participants={visibleCaseload} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} />
+          <CompactCaseload workspaceId={workspaceId} programmeId={selectedProgramme.id} participants={visibleCaseload} visible={pageParticipants} totalMatches={visibleCaseload.length} data={data} userId={userId} search={caseloadSearch} onSearch={(value) => { setCaseloadSearch(value); setCaseloadPage(1); }} page={currentPage} pages={pageCount} setPage={setCaseloadPage} selectedId={selectedParticipantId} locked={recordNavigationLocked} openRecord={openParticipantRecord} vocationalRefreshKeys={vocationalRefreshKeys} />
       </section>}
       {selectedProgramme && (isManager || isAdviser) && selectedParticipants.map((participant) => <section key={participant.id} className="rev-outcomes-record card p-5" aria-label="Selected Service-user record">
         <div className="rev-outcomes-record-heading mb-3 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Service-user record</h2><button type="button" className="btn-secondary" disabled={recordNavigationLocked} onClick={() => setOpenRecordRequest(null)}>Close record</button></div>
-        <ParticipantVocationalAssessment workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} participantName={participant.preferredName} caseReference={participant.caseReference} onReviewQuestionnaire={isManager ? () => changeArea('vocational') : undefined} assignedSpecialists={currentCaseload(participant, data).map((assignment) => adviserLabel(assignment.adviserUserId, data, userId))} isManager={isManager} consentAdvisers={currentCaseload(participant, data).filter((assignment) => activeProgrammeAdvisers.some((adviser) => adviser.userId === assignment.adviserUserId)).map((assignment) => ({ userId: assignment.adviserUserId, label: adviserLabel(assignment.adviserUserId, data, userId) }))} />
+        <ParticipantVocationalAssessment workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} participantName={participant.preferredName} caseReference={participant.caseReference} onReviewQuestionnaire={isManager ? () => changeArea('vocational') : undefined} onStatusChange={refreshVocationalStatus} assignedSpecialists={currentCaseload(participant, data).map((assignment) => adviserLabel(assignment.adviserUserId, data, userId))} isManager={isManager} consentAdvisers={currentCaseload(participant, data).filter((assignment) => activeProgrammeAdvisers.some((adviser) => adviser.userId === assignment.adviserUserId)).map((assignment) => ({ userId: assignment.adviserUserId, label: adviserLabel(assignment.adviserUserId, data, userId) }))} />
         <ParticipantRecord key={participant.id} participant={participant} contactDetails={(openRequest) => <ParticipantContactDetails workspaceId={workspaceId} programmeId={selectedProgramme.id} participantId={participant.id} openRequest={openRequest} refreshKey={contactRefreshKeys[participant.id] ?? 0} busy={busy || !!pending} pending={pending} feedback={renderSaveFeedback(`participant_contact:${participant.id}`)} onEditingChange={setContactEditing} onSave={(record, draft) => saveParticipantContact(participant, record, draft)} />} openRequest={openRecordRequest?.programmeId === selectedProgramme.id && openRecordRequest.participantId === participant.id ? openRecordRequest.sequence : 1} notes={programmeNotes.filter((note) => note.participantId === participant.id)} programme={selectedProgramme} data={data} userId={userId} noteDraft={noteDrafts[participant.id] ?? ''} notesReady={notesReady} notesError={notesError} busy={busy || !!pending} saving={busy && feedbackTarget === `participant_note:${participant.id}`} feedback={renderSaveFeedback(`participant_note:${participant.id}`)} keepNotesOpen={feedbackTarget === `participant_note:${participant.id}` && (!!pending || !!error || busy)} edit={() => editParticipant(participant)} setNote={(body) => setNoteDrafts((current) => ({ ...current, [participant.id]: body }))} saveNote={() => saveParticipantNote(participant)} />
         {participantEdit && (isManager ? <form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p>
           <Field label="Service user ID"><input disabled={busy || !!pending} required className={inputClass} value={participantDraft.participantKey} onChange={(event) => setParticipantDraft({ ...participantDraft, participantKey: event.target.value })} /></Field>
@@ -841,12 +845,13 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   );
 }
 
-function CompactCaseload({ workspaceId, programmeId, participants, visible, totalMatches, data, userId, search, onSearch, page, pages, setPage, selectedId, locked, openRecord }: {
+function CompactCaseload({ workspaceId, programmeId, participants, visible, totalMatches, data, userId, search, onSearch, page, pages, setPage, selectedId, locked, openRecord, vocationalRefreshKeys }: {
   workspaceId: string; programmeId: string;
   participants: ProgrammeHubParticipant[]; visible: ProgrammeHubParticipant[]; totalMatches: number;
   data: ProgrammeHubData; userId: string; search: string; onSearch: (value: string) => void;
   page: number; pages: number; setPage: (page: number) => void; selectedId: string | null; locked: boolean;
   openRecord: (participant: ProgrammeHubParticipant) => void;
+  vocationalRefreshKeys: Record<string, number>;
 }) {
   const unassigned = participants.filter((participant) => currentCaseload(participant, data).length === 0).length;
   // Employment outcomes are not yet available in the Programme Hub data contract.
@@ -877,7 +882,7 @@ function CompactCaseload({ workspaceId, programmeId, participants, visible, tota
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-base font-medium">Employment journey</p><span className="text-base text-neutral-600">Not yet tracked</span></div>
           <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-neutral-200" role="progressbar" aria-label={`Employment journey for ${participant.preferredName}: no verified progress data available`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={0}><div className="h-full w-0 bg-blue-600" /></div>
           <p className="mt-2 text-base text-neutral-600">Outcome not yet recorded</p>
-          <div className="mt-3 border-t border-neutral-100 pt-3"><VocationalStatusPanel workspaceId={workspaceId} programmeId={programmeId} participantId={participant.id} compact /></div>
+          <div className="mt-3 border-t border-neutral-100 pt-3"><VocationalStatusPanel workspaceId={workspaceId} programmeId={programmeId} participantId={participant.id} compact refresh={vocationalRefreshKeys[participant.id] ?? 0} /></div>
           <p className="mt-2 text-base text-neutral-600">{assignments.length ? `Assigned to ${assignments.map((assignment) => adviserLabel(assignment.adviserUserId, data, userId)).join(', ')}` : 'No active Employment Specialist assigned.'}</p>
         </li>;
       })}</ul>}
