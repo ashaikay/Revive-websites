@@ -62,3 +62,11 @@ Status: implemented in a PR. **Not applied to hosted Supabase. Not released.**
 - Before the fix, null comparisons made the rejection check evaluate to NULL instead of failing, so these actions were accepted.
 - The migration was edited in place. It has not been applied to the hosted database.
 - The DB regression runs in CI.
+
+## Closed-plan summary fix - 3 November 2026
+
+- Closing the editor preserves the confirmed revision summary, including when a confirmed save is followed by a failed reload.
+- Changing user, workspace, programme or Service user resets the summary. Not loaded, load failure and confirmed no plan have distinct labels.
+- Revision history and retained-request recovery/navigation locks are unchanged.
+- Targeted `participantActionPlanUI` and `programmeHubUI`: 87 tests passed.
+- One `npm run build` passed with the existing chunk-size warning. No migration changes.

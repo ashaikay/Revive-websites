@@ -25,6 +25,7 @@ export type ActionPlanRead = {
   assignedSpecialistIds: string[];
 };
 type Draft = { goal: string; actions: PlanAction[] };
+type PlanSummary = { status: 'not_loaded' | 'unavailable' } | { status: 'loaded'; revision: number | null };
 
 const statusLabels: Record<ActionStatus, string> = { not_started: 'Not started', in_progress: 'In progress', completed: 'Completed' };
 const newId = () => globalThis.crypto.randomUUID();
@@ -48,6 +49,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
 }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ActionPlanRead | null>(null);
+  const [summary, setSummary] = useState<PlanSummary>({ status: 'not_loaded' });
   const [draft, setDraft] = useState<Draft>({ goal: '', actions: [] });
   const [dirty, setDirty] = useState(false);
   const [linkCurrent, setLinkCurrent] = useState(false);
@@ -65,6 +67,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
   if (scope.current.key !== scopeKey) scope.current = { key: scopeKey, token: Symbol() };
   useEffect(() => {
     setOpen(false); setData(null); setDraft({ goal: '', actions: [] }); setDirty(false); setLinkCurrent(false);
+    setSummary({ status: 'not_loaded' });
     setLoading(false); setSaving(false); setError(''); setNotice(''); setViewing(null);
     setRetained(null); setRetainedInvalid(false);
     try {
@@ -100,6 +103,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
         const value = result as ActionPlanRead;
         if (!value || !Array.isArray(value.revisions) || !Array.isArray(value.assignedSpecialistIds)) throw new Error('Action plan could not be verified.');
         setData(value);
+        setSummary({ status: 'loaded', revision: value.plan?.currentRevision ?? null });
         const latest = value.revisions[0];
         const pendingSave = retainedRef.current;
         if (pendingSave) {
@@ -113,12 +117,15 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
         }
         setViewing(null);
       } catch (cause) {
-        if (scope.current.token === token && !retainedRef.current) setError(cause instanceof Error && cause.message === 'Action plan could not be verified.' ? cause.message : 'Action plan unavailable. Nothing has been changed.');
+        if (scope.current.token === token) {
+          setSummary((previous) => previous.status === 'loaded' && previous.revision !== null ? previous : { status: 'unavailable' });
+          if (!retainedRef.current) setError(cause instanceof Error && cause.message === 'Action plan could not be verified.' ? cause.message : 'Action plan unavailable. Nothing has been changed.');
+        }
       } finally {
         if (scope.current.token === token) setLoading(false);
       }
     })();
-  }, [open, reload, workspaceId, programmeId, participantId]);
+  }, [open, reload, workspaceId, userId, programmeId, participantId]);
 
   const latest = data?.revisions[0] ?? null;
   const assignedIds = new Set(data?.assignedSpecialistIds ?? []);
@@ -168,6 +175,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
       const saved = result as { revision: number; templateVersionId: string };
       if (saved?.revision !== payload.expected_revision + 1 || saved.templateVersionId !== payload.target_template_version_id) throw new Error('unverified');
       resolve();
+      setSummary({ status: 'loaded', revision: saved.revision });
       setDirty(false);
       setNotice(`Revision ${saved.revision} saved. Earlier revisions are kept unchanged.`);
       setReload((value) => value + 1);
@@ -188,7 +196,10 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h3 className="text-lg font-semibold text-neutral-900">Employment action plan</h3>
-        <p className="text-base text-neutral-700">{latest ? `Revision ${latest.revision}` : 'No plan saved yet'}</p>
+        <p className="text-base text-neutral-700">{summary.status === 'loaded'
+          ? summary.revision === null ? 'No plan saved yet' : `Revision ${summary.revision}`
+          : summary.status === 'unavailable' ? 'Action plan unavailable'
+            : loading ? 'Loading action plan...' : 'Action plan not loaded'}</p>
       </div>
       <button type="button" className={`rev-outcomes-profile-action ${open ? 'btn-secondary' : 'btn-primary'}`} disabled={locked} aria-expanded={open}
         onClick={() => { if (locked) return; if (open && dirty && !window.confirm('Discard unsaved action plan changes?')) return; if (open) { setData(null); setDirty(false); setError(''); setNotice(''); } setOpen(!open); }}>
