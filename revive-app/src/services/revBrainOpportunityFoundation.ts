@@ -125,14 +125,14 @@ export function reviewProgrammeVacancy(profile: OrdinaryVocationalSummary, vacan
   if (!required.length) uncertainty.push('No required skills are listed for this job, so it cannot be checked against them.');
   if (!vacancy.employerSector) uncertainty.push('The employer sector is not recorded.');
   else if (overlap(profile.preferredSectors, [vacancy.employerSector]).length) supportedMatches.push({ requirement: vacancy.employerSector, requirementType: 'Sector', profileField: 'preferredSectors' });
-  else if (!profile.preferredSectors.length) uncertainty.push('No preferred sector is recorded in the current questionnaire.');
+  else if (!profile.preferredSectors.length) uncertainty.push('Preferred-sector evidence is unavailable to matching.');
   else uncertainty.push(`The employer sector (${vacancy.employerSector}) is not one of the recorded preferred sectors; check the Service user's interest.`);
   if (!vacancy.workArea) uncertainty.push('The work area is not recorded for this job.');
   else if (overlap(profile.preferredLocations, [vacancy.workArea]).length) supportedMatches.push({ requirement: vacancy.workArea, requirementType: 'Work area', profileField: 'preferredLocations' });
   else uncertainty.push(`Travel to ${vacancy.workArea} has not been assessed.`);
   const missingRequired = missingEvidence.filter(gap => gap.requirementType === 'Required skill').map(gap => gap.requirement);
   const proposedNextSteps = ['Discuss this job with the Service user and confirm whether they want to pursue it.'];
-  if (missingRequired.length) proposedNextSteps.push(`Check evidence for ${missingRequired.join(', ')}. It may exist but is not recorded in the current questionnaire.`);
+  if (missingRequired.length) proposedNextSteps.push(`Check evidence for ${missingRequired.join(', ')}. It may exist but is unavailable to matching.`);
   if (vacancy.workArea && !supportedMatches.some(match => match.requirementType === 'Work area')) proposedNextSteps.push(`Check travel to ${vacancy.workArea}.`);
   proposedNextSteps.push('If the Service user chooses to pursue it, record the agreed steps in the employment action plan.');
   return { vacancyId: vacancy.source.vacancyId, supportedMatches, missingEvidence, uncertainty, proposedNextSteps, requiredEvidenced, requiredTotal: required.length };

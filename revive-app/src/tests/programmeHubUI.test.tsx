@@ -119,7 +119,7 @@ it('regression: older completed assessment plus newer incomplete questionnaire k
   fireEvent.change(record.getByLabelText('Preferred work (required)'), { target: { value: 'Updated current answer' } });
   const beforeSaveReads = overviewReads();
   fireEvent.click(record.getByRole('button', { name: 'Save progress' }));
-  await record.findByText('Draft saved. You can return to this assessment later.');
+  await record.findByText('All changes saved');
   await waitFor(() => expect(overviewReads()).toBeGreaterThan(beforeSaveReads));
   fireEvent.click(record.getByText('Earlier questionnaires and saved answers', { selector: 'summary' }));
   fireEvent.change(record.getByLabelText('Published questionnaire version'), { target: { value: 'earlier-snapshot' } });

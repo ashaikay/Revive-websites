@@ -39,7 +39,7 @@ describe('programme vacancy reasoning', () => {
     expect(review.uncertainty).toEqual(['Travel to Leeds has not been assessed.']);
     expect(review.proposedNextSteps).toEqual([
       'Discuss this job with the Service user and confirm whether they want to pursue it.',
-      'Check evidence for Stock control. It may exist but is not recorded in the current questionnaire.',
+      'Check evidence for Stock control. It may exist but is unavailable to matching.',
       'Check travel to Leeds.',
       'If the Service user chooses to pursue it, record the agreed steps in the employment action plan.',
     ]);
@@ -81,17 +81,33 @@ describe('Review opportunities', () => {
     const job = within(await screen.findByRole('list', { name: 'Programme jobs' })).getAllByRole('listitem')[0];
     expect(mocks.rpc).toHaveBeenCalledWith('rev_brain_programme_opportunity_review', { target_workspace_id: 'workspace', target_programme_id: 'programme', target_participant_id: 'alice' });
     expect(job).toHaveTextContent('Warehouse operative');
-    expect(job).toHaveTextContent('Source: programme job record, updated 01/11/2026');
-    expect(job).toHaveTextContent('1 of 2 required skills have questionnaire evidence.');
+    expect(job).toHaveTextContent('Evidence for 1 of 2 required skills');
+    expect(job).toHaveTextContent('Supported: forklift');
+    expect(job).toHaveTextContent('Not yet evidenced: Stock control');
+    const jobDetails = job.querySelector('details');
+    expect(jobDetails).not.toHaveAttribute('open');
+    expect(screen.getByLabelText('Profile evidence').closest('details')).not.toHaveAttribute('open');
+    expect(job).toHaveTextContent('Source: Programme job record, updated 01/11/2026');
     expect(job).toHaveTextContent('Required skill: forklift (Skills answer)');
     expect(job).toHaveTextContent('Required skill: Stock control');
+    expect(job).toHaveTextContent('not that the skill is absent');
     expect(job).toHaveTextContent('Travel to Leeds has not been assessed.');
+    expect(screen.getByText('1 job to review.')).toBeInTheDocument();
     expect(screen.getByLabelText('Profile evidence')).toHaveTextContent('Skills: Forklift, Teamwork');
     expect(screen.getByLabelText('Opportunity sources')).toHaveTextContent('External vacancy search is not available yet.');
     expect(screen.getByText(/not a likelihood of employment/)).toBeInTheDocument();
     expect(screen.queryByText(/%|score|likely to get/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /apply|send|add to action plan|place/i })).not.toBeInTheDocument();
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not treat unavailable matching evidence as a lack of skills', async () => {
+    mocks.rpc.mockResolvedValue({ data: response({ profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: 'v2', assessmentId: 'a2', mappedQuestionCount: 0, summary: emptySummary } }), error: null });
+    render(<ParticipantOpportunityReview {...props} />);
+    open();
+    expect(await screen.findByText(/Matching evidence is unavailable from the current questionnaire/)).toHaveTextContent('This does not mean the Service user lacks these skills.');
+    expect(screen.getByLabelText('Profile evidence')).toHaveTextContent('Not available to matching');
+    expect(screen.queryByText(/not recorded|lacks the skill/i)).not.toBeInTheDocument();
   });
 
   it.each([

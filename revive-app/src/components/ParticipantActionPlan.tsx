@@ -210,6 +210,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
       <p className="rounded-lg bg-neutral-50 p-3 text-sm text-neutral-800">Recorded by staff for employment support. Saving does not record the Service user's agreement, send messages, make applications or complete anything automatically. Do not record health, offence, safeguarding or other sensitive details here.</p>
       {loading && <p role="status" className="text-base">Loading action plan...</p>}
       {error && <p role="alert" className="text-base text-red-700">{error}</p>}
+      {saving && <p role="status" className="text-base">Saving action plan...</p>}
       {notice && <p role="status" className="text-base text-green-700">{notice}</p>}
       {retained && !data && !loading && <button type="button" className="btn-primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Retry save'}</button>}
       {data && !loading && !latest && !data.currentQuestionnaire && <p className="text-base">A published vocational questionnaire is needed for this programme before an action plan can be started.</p>}

@@ -70,11 +70,78 @@ describe('vocational assessment writes', () => {
     fireEvent.change(input, { target: { value: 'Warehouse' } });
     mocks.rpc.mockReturnValueOnce(pending.promise);
     fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
-    await act(async () => pending.resolve({ data: null, error: new Error('Save refused') }));
+    await act(async () => pending.resolve({ data: null, error: Object.assign(new Error('Save refused'), { code: 'P0001' }) }));
     expect(input).toBeEnabled();
     expect(input).toHaveValue('Warehouse');
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Save refused');
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument();
+  });
+
+  it('reports an unconfirmed save as unknown, keeps answers and retries with the same expected version', async () => {
+    render(<ParticipantVocationalAssessment {...props} />);
+    const input = await openProfile();
+    fireEvent.change(input, { target: { value: 'Warehouse' } });
+    mocks.rpc.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save not confirmed. Your answers are still on this screen.');
+    expect(screen.getByLabelText('Save status')).toHaveTextContent('Unsaved changes - save not confirmed');
+    expect(input).toHaveValue('Warehouse');
+    fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
+    expect(await screen.findByLabelText('Save status')).toHaveTextContent('All changes saved');
+    const saves = mocks.rpc.mock.calls.filter(([, args]) => args.target_action === 'save');
+    expect(saves).toHaveLength(2);
+    expect(saves[1][1]).toMatchObject({ expected_version: 1, target_answers: { role: 'Warehouse' } });
+  });
+
+  it('shows Saving and only announces All changes saved after server confirmation', async () => {
+    const pending = deferred();
+    render(<ParticipantVocationalAssessment {...props} />);
+    const input = await openProfile();
+    fireEvent.change(input, { target: { value: 'Warehouse' } });
+    mocks.rpc.mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
+    expect(screen.getByLabelText('Save status')).toHaveTextContent('Saving...');
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument();
+    await act(async () => pending.resolve({ data: assessment('alice', { role: 'Warehouse' }), error: null }));
+    expect(screen.getByLabelText('Save status')).toHaveTextContent('All changes saved');
+    fireEvent.change(input, { target: { value: 'Warehouse lead' } });
+    expect(screen.getByLabelText('Save status')).toHaveTextContent('Unsaved changes');
+  });
+
+  it('scrolls an opened section into view and focuses its heading, respecting reduced motion', async () => {
+    const scroll = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: (query: string) => ({ matches: query.includes('reduce'), media: query }) });
+    render(<ParticipantVocationalAssessment {...props} />);
+    await openProfile();
+    const heading = screen.getByRole('button', { name: /Employment goals/ });
+    expect(scroll).toHaveBeenCalledWith({ block: 'start', behavior: 'auto' });
+    expect(heading).toHaveFocus();
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('keeps answers across section toggles and does not steal focus while typing', async () => {
+    const scroll = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+    render(<ParticipantVocationalAssessment {...props} />);
+    const input = await openProfile();
+    fireEvent.change(input, { target: { value: 'Warehouse' } });
+    const heading = screen.getByRole('button', { name: /Employment goals/ });
+    fireEvent.click(heading);
+    fireEvent.click(heading);
+    expect(scroll).toHaveBeenLastCalledWith({ block: 'start', behavior: 'smooth' });
+    const reopened = screen.getByLabelText('Preferred role');
+    expect(reopened).toHaveValue('Warehouse');
+    fireEvent.click(heading);
+    const typing = document.body.appendChild(document.createElement('textarea'));
+    typing.focus();
+    fireEvent.click(heading);
+    expect(typing).toHaveFocus();
+    expect(screen.getByLabelText('Preferred role')).toHaveValue('Warehouse');
+    typing.remove();
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   });
 
   it('does not apply a previous participant save to the newly opened participant', async () => {
@@ -89,7 +156,7 @@ describe('vocational assessment writes', () => {
     expect(bobInput).toHaveValue('Saved bob');
     await act(async () => pending.resolve({ data: assessment('alice', { role: 'Alice private draft' }), error: null }));
     expect(bobInput).toHaveValue('Saved bob');
-    expect(screen.queryByText('Draft saved. You can return to this assessment later.')).not.toBeInTheDocument();
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument();
   });
 
   it('locks answers during completion and keeps the confirmed assessment read-only', async () => {
@@ -159,7 +226,7 @@ describe('vocational assessment writes', () => {
     expect(currentInput).toHaveValue('Saved alice');
     await act(async () => pending.resolve({ data: assessment('alice', { role: 'Outdated Alice draft' }), error: null }));
     expect(currentInput).toHaveValue('Saved alice');
-    expect(screen.queryByText('Draft saved. You can return to this assessment later.')).not.toBeInTheDocument();
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument();
   });
 });
 

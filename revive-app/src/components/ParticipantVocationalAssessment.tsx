@@ -32,6 +32,22 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   const [expandedSection,setExpandedSection]=useState<string | null>(null);
   const [showHelp,setShowHelp]=useState(false);
   const [showMissing,setShowMissing]=useState(false);
+  const [saveOutcome,setSaveOutcome]=useState<'none' | 'saved' | 'unknown'>('none');
+  const sectionRefs = useRef(new Map<string, HTMLElement>());
+  const pendingSectionFocus = useRef<string | null>(null);
+  const openSection = (id: string | null) => { pendingSectionFocus.current = id; setExpandedSection(id); };
+  useEffect(() => {
+    const id = pendingSectionFocus.current;
+    pendingSectionFocus.current = null;
+    if (!id || id !== expandedSection) return;
+    const element = sectionRefs.current.get(id);
+    if (!element) return;
+    const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (typeof element.scrollIntoView === 'function') element.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+    const active = document.activeElement;
+    const typing = active instanceof HTMLElement && (active.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName));
+    if (!typing) element.querySelector<HTMLElement>('[data-section-heading]')?.focus({ preventScroll: true });
+  }, [expandedSection]);
   const scopeKey = JSON.stringify([workspaceId, programmeId, participantId, selected]);
   // A fresh token also distinguishes leaving a profile and returning to it.
   // Late replies must not change another profile's answers, feedback, or busy state.
@@ -47,7 +63,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   useEffect(() => {
     setOpen(false); setSnapshots([]); setSelected(''); setAssessment(null); setAnswers({});
     setDirty(false); setError(''); setNotice(''); setLoading(false);
-    setRefreshStatus(0); setExpandedSection(null); setShowMissing(false); setShowHelp(false);
+    setRefreshStatus(0); setExpandedSection(null); setShowMissing(false); setShowHelp(false); setSaveOutcome('none');
   }, [workspaceId, programmeId, participantId]);
   useEffect(() => {
     if (!open) return;
@@ -107,14 +123,14 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   // The percentage is an answer-progress indicator, not a substitute for server completion.
   const coreAnswered = allQuestions.length - unanswered.length;
   const coreProgressPercent = allQuestions.length ? Math.round((coreAnswered / allQuestions.length) * 100) : 0;
-  const setAnswer = (id: string, value: unknown) => { setAnswers((previous) => ({ ...previous, [id]: value })); setDirty(true); setNotice(''); };
+  const setAnswer = (id: string, value: unknown) => { setAnswers((previous) => ({ ...previous, [id]: value })); setDirty(true); setNotice(''); if (saveOutcome === 'saved') setSaveOutcome('none'); };
   const save = async () => {
     if (!assessment || !snapshot || !supabaseClient || saving || completing || write.current || !dirty) return;
     const scopeToken = scope.current.token;
     const writeToken = Symbol();
     write.current = writeToken;
     const current = () => scope.current.token === scopeToken && write.current === writeToken;
-    setSaving(true); setError(''); setNotice('');
+    setSaving(true); setError(''); setNotice(''); setSaveOutcome('none');
     try {
       const payload: Record<string, unknown> = {};
       for (const section of sections) for (const q of section.questions) {
@@ -128,13 +144,20 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       if (!current()) return;
       if (rpcError) throw rpcError;
       const result = data as Assessment;
-      setAssessment(result); setAnswers(result.answers ?? {}); setDirty(false); setRefreshStatus(v=>v+1); onStatusChange?.(participantId); setNotice('Draft saved. You can return to this assessment later.');
-    } catch (cause) { if (current()) setError(cause instanceof Error ? cause.message : 'Save failed. Your unsaved answers remain on this screen.'); }
+      setAssessment(result); setAnswers(result.answers ?? {}); setDirty(false); setRefreshStatus(v=>v+1); onStatusChange?.(participantId); setSaveOutcome('saved');
+    } catch (cause) {
+      if (!current()) return;
+      // Only a server error code is a definitive refusal; anything else (e.g. network failure) has an unknown outcome.
+      // Retrying is safe: the expected version stops an earlier save from being overwritten.
+      const code = typeof cause === 'object' && cause !== null && 'code' in cause ? (cause as { code: unknown }).code : undefined;
+      if (typeof code !== 'string' || code === '') { setSaveOutcome('unknown'); setError('Save not confirmed. Your answers are still on this screen. Select Save progress to try again; a newer saved version will not be overwritten.'); }
+      else setError(`${(cause as { message?: string }).message || 'Save failed.'} Your unsaved answers remain on this screen.`);
+    }
     finally { if (current()) { write.current = null; setSaving(false); } }
   };
   const complete = async () => {
     if(!assessment || !supabaseClient || saving || completing || write.current || dirty || assessment.status==='completed' || sections.length===0)return;
-    if(requiredMissing.length) { setShowMissing(true); setExpandedSection(sections.find(s => s.questions.some(q => requiredMissing.some(m => m.id === q.id)))?.id ?? null); setError(`${requiredMissing.length} required question(s) remain unanswered. Open the highlighted section and save before completing.`); return; }
+    if(requiredMissing.length) { setShowMissing(true); openSection(sections.find(s => s.questions.some(q => requiredMissing.some(m => m.id === q.id)))?.id ?? null); setError(`${requiredMissing.length} required question(s) remain unanswered. Open the highlighted section and save before completing.`); return; }
     if(!window.confirm('Mark this vocational assessment as completed? This will lock the assessment.'))return;
     const scopeToken = scope.current.token;
     const writeToken = Symbol();
@@ -206,7 +229,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
               <div className="h-full bg-blue-600" style={{ width: `${coreProgressPercent}%` }} />
             </div>
           </div>
-          <button type="button" className="btn-secondary" onClick={() => { setShowMissing(v => !v); if (!showMissing && unanswered.length) setExpandedSection(sections.find(s => s.questions.some(q => !answered(answers[q.id])))?.id ?? null); }}>{showMissing ? 'Show all questions' : 'Show unanswered questions'}</button>
+          <button type="button" className="btn-secondary" onClick={() => { setShowMissing(v => !v); if (!showMissing && unanswered.length) openSection(sections.find(s => s.questions.some(q => !answered(answers[q.id])))?.id ?? null); }}>{showMissing ? 'Show all questions' : 'Show unanswered questions'}</button>
         </div>}
         {optionalSupportAvailable && <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3" role="note">
           <p className="text-base font-medium text-neutral-900">Optional inclusive employment support</p>
@@ -222,11 +245,10 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
           </>}
         </div>}
         {sections.length > 0 && <p className="text-base text-neutral-700">{snapshot?.id === snapshots[0]?.id ? 'Current questionnaire' : 'Earlier questionnaire'}: {allQuestions.length} core {allQuestions.length === 1 ? 'question' : 'questions'} across {sections.length} {sections.length === 1 ? 'section' : 'sections'}. Draft changes are not included.</p>}
-        {dirty && <p className="text-base font-medium text-amber-800">Unsaved changes</p>}
         <div className="space-y-2">{sections.map((section) => {
           const expanded = expandedSection === section.id;
-          return <section key={section.id} className="overflow-hidden rounded-lg border border-neutral-200">
-            <button type="button" className="flex w-full items-center justify-between gap-3 bg-neutral-50 px-4 py-3 text-left text-base font-semibold" aria-expanded={expanded} onClick={() => setExpandedSection(expanded ? null : section.id)}>
+          return <section key={section.id} ref={(element) => { if (element) sectionRefs.current.set(section.id, element); else sectionRefs.current.delete(section.id); }} className="scroll-mt-24 overflow-hidden rounded-lg border border-neutral-200">
+            <button type="button" data-section-heading className="flex w-full items-center justify-between gap-3 bg-neutral-50 px-4 py-3 text-left text-base font-semibold" aria-expanded={expanded} onClick={() => openSection(expanded ? null : section.id)}>
               <span>{section.title} · {section.questions.filter(q => answered(answers[q.id])).length} of {section.questions.length} answered{section.questions.some(q => q.required && !answered(answers[q.id])) ? ' · Required answers missing' : ''}</span><span aria-hidden="true">{expanded ? '−' : '+'}</span>
             </button>
             {expanded && <div className="space-y-5 p-4">{section.questions.filter(q => !showMissing || !answered(answers[q.id])).map((q) => <div key={q.id} className={`text-base ${q.required && !answered(answers[q.id]) ? 'rounded-lg border-l-4 border-amber-500 bg-amber-50 p-3' : ''}`}>
@@ -239,6 +261,9 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
           <button type="button" className="btn-primary" disabled={!dirty || saving || completing} onClick={() => void save()}>{saving ? 'Saving...' : 'Save progress'}</button>
           <button type="button" className="btn-secondary" disabled={dirty || saving || completing} onClick={() => void complete()}>{completing ? 'Completing...' : 'Mark completed'}</button>
         </div>}
+        {assessment.status !== 'completed' && sections.length > 0 && <p role="status" aria-label="Save status" className="text-base font-medium text-neutral-800">
+          {saving ? 'Saving...' : dirty ? (saveOutcome === 'unknown' ? 'Unsaved changes - save not confirmed' : 'Unsaved changes') : saveOutcome === 'saved' ? 'All changes saved' : ''}
+        </p>}
         {assessment.status === 'completed' && <p className="text-base font-medium text-green-700">Assessment completed · Read-only</p>}
         {dirty && <p className="text-base text-neutral-700">Save progress before marking completed.</p>}
       </>}
