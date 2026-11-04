@@ -1,0 +1,254 @@
+// @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ParticipantActionPlan, type ActionPlanRead } from '@/components/ParticipantActionPlan';
+
+const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
+vi.mock('@/data/supabaseClient', () => ({ supabaseClient: { rpc: (...args: unknown[]) => mocks.rpc(...args) } }));
+
+const v1 = { templateVersionId: 'v1', title: 'Employment questionnaire', version: 1 };
+const v2 = { templateVersionId: 'v2', title: 'Employment questionnaire 2026', version: 2 };
+const empty: ActionPlanRead = { plan: null, revisions: [], currentQuestionnaire: v1, reviewNeeded: false, assignedSpecialistIds: ['es-1'] };
+const action = (overrides = {}) => ({ id: '11111111-1111-4111-8111-111111111111', description: 'Update CV', ownerType: 'employment_specialist' as const, ownerUserId: 'es-1', status: 'in_progress' as const, targetDate: '2026-11-20', ...overrides });
+const revision = (number: number, goal: string, overrides = {}) => ({ revision: number, employmentGoal: goal, actions: [action()], templateVersionId: 'v1', questionnaireTitle: v1.title, questionnaireVersion: 1, savedByUserId: 'es-1', savedAt: '2026-11-01T10:00:00Z', ...overrides });
+const props = { workspaceId: 'workspace', userId: 'es-1', programmeId: 'programme', participantId: 'alice', assignableSpecialists: [{ userId: 'es-1', label: 'Robert ES' }, { userId: 'es-2', label: 'Other ES' }], staffLabel: (id: string) => ({ 'es-1': 'Robert ES', 'es-2': 'Former ES' }[id] ?? 'Staff member') };
+const retainedKey = 'rev-programme-action-plan:workspace:es-1:programme';
+
+let reads: ActionPlanRead[];
+function respond(saveImpl: (args: Record<string, unknown>) => unknown) {
+  mocks.rpc.mockImplementation((name: string, args: Record<string, unknown>) => {
+    if (name === 'rev_action_plan_read') return Promise.resolve({ data: reads.length > 1 ? reads.shift() : reads[0], error: null });
+    return Promise.resolve(saveImpl(args));
+  });
+}
+async function openPlan() {
+  fireEvent.click(screen.getByRole('button', { name: 'Open action plan' }));
+  return screen.findByLabelText('Employment goal');
+}
+const saveCalls = () => mocks.rpc.mock.calls.filter(([name]) => name === 'rev_action_plan_save').map(([, args]) => args as Record<string, unknown>);
+
+beforeEach(() => { mocks.rpc.mockReset(); window.sessionStorage.clear(); vi.spyOn(window, 'confirm').mockReturnValue(true); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+describe('employment action plan', () => {
+  it('records a goal and owned action linked to the current questionnaire without claiming agreement', async () => {
+    reads = [empty, { ...empty, plan: { planId: 'plan', currentRevision: 1, updatedAt: '2026-11-02T10:00:00Z' }, revisions: [revision(1, 'Warehouse role')] }];
+    respond(() => ({ data: { revision: 1, templateVersionId: 'v1' }, error: null }));
+    render(<ParticipantActionPlan {...props} />);
+    const goal = await openPlan();
+    expect(screen.getByText(/does not record the Service user's agreement/)).toBeInTheDocument();
+    expect(screen.queryByText(/agreed/i)).not.toBeInTheDocument();
+    fireEvent.change(goal, { target: { value: 'Warehouse role' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
+    fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'Update CV' } });
+    const owner = screen.getByLabelText('Responsible for this action');
+    expect(within(owner).getAllByRole('option').map((option) => option.textContent)).toEqual(['Service user', 'Assigned Employment Specialist: Robert ES']);
+    fireEvent.change(owner, { target: { value: 'es-1' } });
+    fireEvent.change(screen.getByLabelText('Target date (optional)'), { target: { value: '2026-11-20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    expect(await screen.findByText('Revision 1 saved. Earlier revisions are kept unchanged.')).toBeInTheDocument();
+    const [call] = saveCalls();
+    expect(call).toMatchObject({ expected_revision: 0, target_template_version_id: 'v1', target_goal: 'Warehouse role' });
+    expect(call.target_actions).toEqual([expect.objectContaining({ description: 'Update CV', ownerType: 'employment_specialist', ownerUserId: 'es-1', status: 'not_started', targetDate: '2026-11-20' })]);
+    expect(Object.keys((call.target_actions as object[])[0]).sort()).toEqual(['description', 'id', 'ownerType', 'ownerUserId', 'status', 'targetDate']);
+    fireEvent.click(screen.getByRole('button', { name: 'Close action plan' }));
+    expect(screen.getByText('Revision 1')).toBeInTheDocument();
+    expect(screen.queryByText('No plan saved yet')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Employment goal')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { userId: 'es-2' },
+    { workspaceId: 'other-workspace' },
+    { programmeId: 'other-programme' },
+    { participantId: 'bob' },
+  ])('resets the confirmed summary when the scope changes: %j', async (nextScope) => {
+    reads = [{ ...empty, plan: { planId: 'plan', currentRevision: 2, updatedAt: '' }, revisions: [revision(2, 'Warehouse role')] }];
+    respond(() => ({ data: null, error: null }));
+    const view = render(<ParticipantActionPlan {...props} />);
+    expect(screen.getByText('Action plan not loaded')).toBeInTheDocument();
+    expect(screen.queryByText('No plan saved yet')).not.toBeInTheDocument();
+    await openPlan();
+    fireEvent.click(screen.getByRole('button', { name: 'Close action plan' }));
+    expect(screen.getByText('Revision 2')).toBeInTheDocument();
+
+    reads = [empty];
+    view.rerender(<ParticipantActionPlan {...props} {...nextScope} />);
+    expect(screen.getByText('Action plan not loaded')).toBeInTheDocument();
+    expect(screen.queryByText('Revision 2')).not.toBeInTheDocument();
+    await openPlan();
+    expect(screen.getByText('No plan saved yet')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close action plan' }));
+    expect(screen.getByText('No plan saved yet')).toBeInTheDocument();
+  });
+
+  it('distinguishes a failed load from a confirmed absence of a plan, including after closing', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: new Error('Network failure') });
+    render(<ParticipantActionPlan {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open action plan' }));
+    await screen.findByRole('alert');
+    expect(screen.getByText('Action plan unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('No plan saved yet')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close action plan' }));
+    expect(screen.getByText('Action plan unavailable')).toBeInTheDocument();
+
+    mocks.rpc.mockResolvedValue({ data: empty, error: null });
+    await openPlan();
+    expect(screen.getByText('No plan saved yet')).toBeInTheDocument();
+  });
+
+  it('keeps the save-confirmed revision on close even if the subsequent read fails', async () => {
+    reads = [empty];
+    respond(() => {
+      mocks.rpc.mockResolvedValue({ data: null, error: new Error('Network failure') });
+      return { data: { revision: 1, templateVersionId: 'v1' }, error: null };
+    });
+    render(<ParticipantActionPlan {...props} />);
+    fireEvent.change(await openPlan(), { target: { value: 'Warehouse role' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Close action plan' }));
+    expect(screen.getByText('Revision 1')).toBeInTheDocument();
+    expect(screen.queryByText('No plan saved yet')).not.toBeInTheDocument();
+    expect(window.sessionStorage.getItem(retainedKey)).toBeNull();
+  });
+
+  it('pauses editing after an unconfirmed save and retries only the exact retained request', async () => {
+    const saved = { plan: { planId: 'plan', currentRevision: 1, updatedAt: '' }, revisions: [revision(1, 'Warehouse role')] };
+    reads = [{ ...empty, ...saved }];
+    let attempt = 0;
+    respond(() => (++attempt === 1 ? { data: null, error: new Error('Network failure') } : { data: { revision: 2, templateVersionId: 'v1' }, error: null }));
+    const lock = vi.fn();
+    render(<ParticipantActionPlan {...props} onNavigationLockChange={lock} />);
+    const goal = await openPlan();
+    fireEvent.change(goal, { target: { value: 'Logistics role' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save not confirmed. Editing is paused so the plan cannot be replaced.');
+    expect(goal).toHaveValue('Logistics role');
+    expect(goal).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add action' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Close action plan' })).toBeDisabled();
+    expect(lock).toHaveBeenLastCalledWith(true);
+    fireEvent.change(goal, { target: { value: 'Something else' } });
+    expect(goal).toHaveValue('Logistics role');
+    expect(JSON.parse(window.sessionStorage.getItem(retainedKey)!)).toMatchObject({ userId: 'es-1', workspaceId: 'workspace', programmeId: 'programme', participantId: 'alice', requestId: saveCalls()[0].target_request_id });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
+    await screen.findByText('Revision 2 saved. Earlier revisions are kept unchanged.');
+    const [first, second] = saveCalls();
+    expect(second).toEqual(first);
+    expect(window.sessionStorage.getItem(retainedKey)).toBeNull();
+    expect(lock).toHaveBeenLastCalledWith(false);
+    expect(goal).toBeEnabled();
+  });
+
+  it('recovers an unconfirmed save after refresh and replays the original payload and request ID', async () => {
+    reads = [empty];
+    respond(() => ({ data: null, error: new Error('Network failure') }));
+    const first = render(<ParticipantActionPlan {...props} />);
+    const goal = await openPlan();
+    fireEvent.change(goal, { target: { value: 'Warehouse role' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }));
+    fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'Update CV' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    await screen.findByRole('alert');
+    const [original] = saveCalls();
+    first.unmount();
+
+    // After refresh the earlier save actually landed; the exact replay returns its original result.
+    reads = [{ ...empty, plan: { planId: 'plan', currentRevision: 1, updatedAt: '' }, revisions: [revision(1, 'Warehouse role')] }];
+    respond(() => ({ data: { revision: 1, templateVersionId: 'v1' }, error: null }));
+    const lock = vi.fn();
+    render(<ParticipantActionPlan {...props} onNavigationLockChange={lock} />);
+    expect(await screen.findByLabelText('Employment goal')).toHaveValue('Warehouse role');
+    expect(screen.getByRole('alert')).toHaveTextContent('Save not confirmed.');
+    expect(screen.getByLabelText('Action')).toHaveValue('Update CV');
+    expect(screen.getByLabelText('Employment goal')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Close action plan' })).toBeDisabled();
+    expect(lock).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
+    await screen.findByText('Revision 1 saved. Earlier revisions are kept unchanged.');
+    expect(saveCalls()[1]).toEqual(original);
+    expect(window.sessionStorage.getItem(retainedKey)).toBeNull();
+    expect(lock).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps a retained request scoped to its user, workspace, programme and Service user', async () => {
+    reads = [empty];
+    respond(() => ({ data: null, error: new Error('Network failure') }));
+    const first = render(<ParticipantActionPlan {...props} />);
+    fireEvent.change(await openPlan(), { target: { value: 'Warehouse role' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    await screen.findByRole('alert');
+    first.unmount();
+    for (const scope of [{ userId: 'es-2' }, { workspaceId: 'other-workspace' }, { programmeId: 'other-programme' }, { participantId: 'bob' }]) {
+      const view = render(<ParticipantActionPlan {...props} {...scope} />);
+      expect(screen.getByRole('button', { name: 'Open action plan' })).toBeEnabled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      view.unmount();
+    }
+    expect(window.sessionStorage.getItem(retainedKey)).not.toBeNull();
+  });
+
+  it('blocks saving when a retained request cannot be read', async () => {
+    window.sessionStorage.setItem(retainedKey, JSON.stringify({ userId: 'es-1', workspaceId: 'workspace', programmeId: 'programme', participantId: 'alice', requestId: 'not-a-uuid' }));
+    reads = [empty];
+    respond(() => ({ data: null, error: null }));
+    render(<ParticipantActionPlan {...props} />);
+    expect(await screen.findByText(/A retained action plan save could not be read/)).toBeInTheDocument();
+    expect(await screen.findByLabelText('Employment goal')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save revision' })).toBeDisabled();
+    expect(saveCalls()).toHaveLength(0);
+  });
+
+  it('flags review for a newer questionnaire and keeps the existing link unless the reviewer chooses otherwise', async () => {
+    reads = [{ plan: { planId: 'plan', currentRevision: 1, updatedAt: '' }, revisions: [revision(1, 'Warehouse role')], currentQuestionnaire: v2, reviewNeeded: true, assignedSpecialistIds: ['es-1'] }];
+    respond(() => ({ data: null, error: Object.assign(new Error('pending'), { code: '40001' }) }));
+    render(<ParticipantActionPlan {...props} />);
+    const goal = await openPlan();
+    expect(goal).toHaveValue('Warehouse role');
+    expect(screen.getByText('Review needed')).toBeInTheDocument();
+    expect(screen.getByText(/Employment questionnaire 2026 - version 2\) has been published since this plan was saved\. The plan and its history are unchanged\./)).toBeInTheDocument();
+    expect(screen.getByText('Linked questionnaire: Employment questionnaire - version 1')).toBeInTheDocument();
+    fireEvent.change(goal, { target: { value: 'Warehouse role soon' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByLabelText(/Link the next revision to the current questionnaire/));
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    await act(async () => {});
+    expect(saveCalls().map((call) => call.target_template_version_id)).toEqual(['v1', 'v2']);
+  });
+
+  it('flags an unassigned ES owner without replacing them and shows earlier revisions read-only', async () => {
+    reads = [{ plan: { planId: 'plan', currentRevision: 2, updatedAt: '' }, revisions: [
+      revision(2, 'Logistics role', { actions: [action({ ownerUserId: 'es-2', ownerNeedsReview: true })] }),
+      revision(1, 'Warehouse role', { savedAt: '2026-10-01T10:00:00Z' }),
+    ], currentQuestionnaire: v1, reviewNeeded: false, assignedSpecialistIds: ['es-1'] }];
+    respond(() => ({ data: { revision: 3, templateVersionId: 'v1' }, error: null }));
+    render(<ParticipantActionPlan {...props} />);
+    await openPlan();
+    expect(screen.getByText(/Owner needs review: Former ES is no longer assigned to this Service user\. The recorded owner has not been changed\./)).toBeInTheDocument();
+    expect(screen.getByLabelText('Responsible for this action')).toHaveValue('es-2');
+    fireEvent.click(screen.getByText('Revision history (2)'));
+    fireEvent.click(screen.getByRole('button', { name: /^Revision 1 - saved/ }));
+    const earlier = screen.getByLabelText('Revision 1 (read-only)');
+    expect(within(earlier).getByText('Employment goal: Warehouse role')).toBeInTheDocument();
+    expect(within(earlier).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(earlier).queryByRole('combobox')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'completed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    await screen.findByText('Revision 3 saved. Earlier revisions are kept unchanged.');
+    expect((saveCalls()[0].target_actions as Record<string, unknown>[])[0]).toEqual(expect.objectContaining({ ownerUserId: 'es-2', status: 'completed' }));
+    expect((saveCalls()[0].target_actions as Record<string, unknown>[])[0]).not.toHaveProperty('ownerNeedsReview');
+  });
+
+  it('does not start a plan without a published questionnaire', async () => {
+    reads = [{ ...empty, currentQuestionnaire: null }];
+    respond(() => ({ data: null, error: null }));
+    render(<ParticipantActionPlan {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open action plan' }));
+    expect(await screen.findByText(/A published vocational questionnaire is needed/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save revision' })).not.toBeInTheDocument();
+  });
+});
