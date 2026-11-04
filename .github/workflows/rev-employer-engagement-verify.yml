@@ -71,6 +71,11 @@ jobs:
           docker exec -i supabase_db_revive-app \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/tests/20261102003000_rev_action_plan_foundation_test.sql
+      - name: Test REV Brain programme opportunity review readiness, privacy and access
+        run: |
+          docker exec -i supabase_db_revive-app \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/tests/20261104001000_rev_brain_programme_opportunity_review_test.sql
       - name: Test Programme Hub tenant and caseload authorization
         shell: bash
         run: |
