@@ -83,3 +83,57 @@ export function deduplicateOpportunities(items: Opportunity[]): Opportunity[] {
     seen.add(key); return true;
   });
 }
+
+/** Opportunity source: a job already recorded in the Service user's programme. External vacancy search is not implemented. */
+export interface ProgrammeVacancyOpportunity {
+  source: { kind: 'programme_vacancy'; vacancyId: string; recordVersion: number; updatedAt: string };
+  title: string; employerName: string; employerSector: string | null; workArea: string | null;
+  requiredSkills: string[]; desiredSkills: string[];
+}
+export type ProfileField = 'skills' | 'qualifications' | 'preferredSectors' | 'preferredLocations';
+export interface SupportedMatch { requirement: string; requirementType: 'Required skill' | 'Helpful skill' | 'Sector' | 'Work area'; profileField: ProfileField }
+export interface EvidenceGap { requirement: string; requirementType: 'Required skill' | 'Helpful skill' }
+/** Review-only reasoning. There is deliberately no score: counts describe recorded evidence, not a likelihood of employment. */
+export interface ProgrammeVacancyReview {
+  vacancyId: string;
+  supportedMatches: SupportedMatch[];
+  missingEvidence: EvidenceGap[];
+  uncertainty: string[];
+  proposedNextSteps: string[];
+  requiredEvidenced: number;
+  requiredTotal: number;
+}
+export function reviewProgrammeVacancy(profile: OrdinaryVocationalSummary, vacancy: ProgrammeVacancyOpportunity): ProgrammeVacancyReview {
+  const supportedMatches: SupportedMatch[] = [];
+  const missingEvidence: EvidenceGap[] = [];
+  const uncertainty: string[] = [];
+  const evidenceFor = (term: string): ProfileField | null =>
+    overlap(profile.skills, [term]).length ? 'skills' : overlap(profile.qualifications, [term]).length ? 'qualifications' : null;
+  const required = [...new Set(vacancy.requiredSkills.map(v => v.trim()).filter(Boolean))];
+  const desired = [...new Set(vacancy.desiredSkills.map(v => v.trim()).filter(Boolean))].filter(v => !overlap(required, [v]).length);
+  let requiredEvidenced = 0;
+  for (const requirement of required) {
+    const field = evidenceFor(requirement);
+    if (field) { requiredEvidenced += 1; supportedMatches.push({ requirement, requirementType: 'Required skill', profileField: field }); }
+    else missingEvidence.push({ requirement, requirementType: 'Required skill' });
+  }
+  for (const requirement of desired) {
+    const field = evidenceFor(requirement);
+    if (field) supportedMatches.push({ requirement, requirementType: 'Helpful skill', profileField: field });
+    else missingEvidence.push({ requirement, requirementType: 'Helpful skill' });
+  }
+  if (!required.length) uncertainty.push('No required skills are listed for this job, so it cannot be checked against them.');
+  if (!vacancy.employerSector) uncertainty.push('The employer sector is not recorded.');
+  else if (overlap(profile.preferredSectors, [vacancy.employerSector]).length) supportedMatches.push({ requirement: vacancy.employerSector, requirementType: 'Sector', profileField: 'preferredSectors' });
+  else if (!profile.preferredSectors.length) uncertainty.push('No preferred sector is recorded in the current questionnaire.');
+  else uncertainty.push(`The employer sector (${vacancy.employerSector}) is not one of the recorded preferred sectors; check the Service user's interest.`);
+  if (!vacancy.workArea) uncertainty.push('The work area is not recorded for this job.');
+  else if (overlap(profile.preferredLocations, [vacancy.workArea]).length) supportedMatches.push({ requirement: vacancy.workArea, requirementType: 'Work area', profileField: 'preferredLocations' });
+  else uncertainty.push(`Travel to ${vacancy.workArea} has not been assessed.`);
+  const missingRequired = missingEvidence.filter(gap => gap.requirementType === 'Required skill').map(gap => gap.requirement);
+  const proposedNextSteps = ['Discuss this job with the Service user and confirm whether they want to pursue it.'];
+  if (missingRequired.length) proposedNextSteps.push(`Check evidence for ${missingRequired.join(', ')}. It may exist but is not recorded in the current questionnaire.`);
+  if (vacancy.workArea && !supportedMatches.some(match => match.requirementType === 'Work area')) proposedNextSteps.push(`Check travel to ${vacancy.workArea}.`);
+  proposedNextSteps.push('If the Service user chooses to pursue it, record the agreed steps in the employment action plan.');
+  return { vacancyId: vacancy.source.vacancyId, supportedMatches, missingEvidence, uncertainty, proposedNextSteps, requiredEvidenced, requiredTotal: required.length };
+}

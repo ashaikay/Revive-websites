@@ -54,6 +54,7 @@ describe('vocational assessment writes', () => {
     fireEvent.change(input, { target: { value: 'Warehouse' } });
     mocks.rpc.mockReturnValueOnce(pending.promise);
     fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Saving. Saving vocational answers. Please wait.');
     expect(input).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Close profile' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Mark completed' })).toBeDisabled();
@@ -61,6 +62,7 @@ describe('vocational assessment writes', () => {
     expect(input).toBeEnabled();
     expect(input).toHaveValue('Warehouse');
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Saved. Draft saved.');
   });
 
   it('retains unsaved answers and unlocks the form when a save fails', async () => {
@@ -74,7 +76,30 @@ describe('vocational assessment writes', () => {
     expect(input).toBeEnabled();
     expect(input).toHaveValue('Warehouse');
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('Save refused');
+    expect(screen.getByRole('alert')).toHaveTextContent('Save error. Save refused');
+  });
+
+  it('focuses and scrolls to a section heading when the section opens', async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    render(<ParticipantVocationalAssessment {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open vocational profile' }));
+    const heading = await screen.findByRole('button', { name: /Employment goals/ });
+    fireEvent.click(heading);
+    expect(heading).toHaveFocus();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    delete (HTMLElement.prototype as { scrollIntoView?: HTMLElement['scrollIntoView'] }).scrollIntoView;
+  });
+
+  it('reports an unknown save outcome and preserves answers when no response is received', async () => {
+    render(<ParticipantVocationalAssessment {...props} />);
+    const input = await openProfile();
+    fireEvent.change(input, { target: { value: 'Warehouse' } });
+    mocks.rpc.mockRejectedValueOnce(new Error('Network lost'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save status unknown. The save could not be confirmed.');
+    expect(input).toHaveValue('Warehouse');
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
   });
 
   it('does not apply a previous participant save to the newly opened participant', async () => {
