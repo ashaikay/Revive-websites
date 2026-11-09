@@ -8,6 +8,7 @@ type Question = { id: string; label: string; description?: string; type: string;
 type Section = { id: string; title: string; questions: Question[] };
 type Snapshot = { id: string; template_id: string; version: number; title: string; sections: Section[]; published_at: string };
 type Assessment = { assessmentId: string; version: number; status: string; answers: Record<string, unknown> };
+type SaveFeedback = { status: 'idle' | 'saving' | 'saved' | 'error' | 'unknown'; message?: string };
 // The core employment profile never requires disclosure of criminal justice,
 // safeguarding or other sensitive information. Optional support requires a
 // separate consented workflow and must not be mixed into the ordinary answers RPC.
@@ -26,6 +27,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>({ status: 'idle' });
   const [dirty, setDirty] = useState(false);
   const [refreshStatus,setRefreshStatus]=useState(0);
   const [completing,setCompleting]=useState(false);
@@ -38,15 +40,22 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   const scope = useRef({ key: scopeKey, token: Symbol() });
   // Lock synchronously, before React has rendered the disabled write controls.
   const write = useRef<symbol | null>(null);
+  const sectionHeadings = useRef<Record<string, HTMLButtonElement | null>>({});
   if (scope.current.key !== scopeKey) {
     scope.current = { key: scopeKey, token: Symbol() };
     write.current = null;
   }
-  useEffect(() => { setSaving(false); setCompleting(false); }, [scopeKey]);
+  useEffect(() => { setSaving(false); setCompleting(false); setSaveFeedback({ status: 'idle' }); }, [scopeKey]);
   useEffect(() => () => { scope.current.token = Symbol(); write.current = null; }, []);
   useEffect(() => {
+    if (!expandedSection) return;
+    const heading = sectionHeadings.current[expandedSection];
+    heading?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    heading?.focus({ preventScroll: true });
+  }, [expandedSection]);
+  useEffect(() => {
     setOpen(false); setSnapshots([]); setSelected(''); setAssessment(null); setAnswers({});
-    setDirty(false); setError(''); setNotice(''); setLoading(false);
+    setDirty(false); setError(''); setNotice(''); setSaveFeedback({ status: 'idle' }); setLoading(false);
     setRefreshStatus(0); setExpandedSection(null); setShowMissing(false); setShowHelp(false);
   }, [workspaceId, programmeId, participantId]);
   useEffect(() => {
@@ -79,7 +88,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
     if (!open || !selected) return;
     let active = true;
     async function loadAssessment() {
-      setLoading(true); setAssessment(null); setAnswers({}); setDirty(false); setNotice(''); setError('');
+      setLoading(true); setAssessment(null); setAnswers({}); setDirty(false); setNotice(''); setSaveFeedback({ status: 'idle' }); setError('');
       try {
         if (!supabaseClient) throw new Error('Database connection unavailable.');
         const { data, error: rpcError } = await supabaseClient.rpc('rev_voc_assessment_draft', {
@@ -107,14 +116,15 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   // The percentage is an answer-progress indicator, not a substitute for server completion.
   const coreAnswered = allQuestions.length - unanswered.length;
   const coreProgressPercent = allQuestions.length ? Math.round((coreAnswered / allQuestions.length) * 100) : 0;
-  const setAnswer = (id: string, value: unknown) => { setAnswers((previous) => ({ ...previous, [id]: value })); setDirty(true); setNotice(''); };
+  const setAnswer = (id: string, value: unknown) => { setAnswers((previous) => ({ ...previous, [id]: value })); setDirty(true); setNotice(''); setSaveFeedback({ status: 'idle' }); };
   const save = async () => {
     if (!assessment || !snapshot || !supabaseClient || saving || completing || write.current || !dirty) return;
     const scopeToken = scope.current.token;
     const writeToken = Symbol();
     write.current = writeToken;
     const current = () => scope.current.token === scopeToken && write.current === writeToken;
-    setSaving(true); setError(''); setNotice('');
+    let responseReceived = false;
+    setSaving(true); setSaveFeedback({ status: 'saving' }); setError(''); setNotice('');
     try {
       const payload: Record<string, unknown> = {};
       for (const section of sections) for (const q of section.questions) {
@@ -125,11 +135,17 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         target_template_version_id: selected, target_action: 'save', target_assessment_id: assessment.assessmentId,
         expected_version: assessment.version, target_answers: payload,
       });
+      responseReceived = true;
       if (!current()) return;
       if (rpcError) throw rpcError;
       const result = data as Assessment;
-      setAssessment(result); setAnswers(result.answers ?? {}); setDirty(false); setRefreshStatus(v=>v+1); onStatusChange?.(participantId); setNotice('Draft saved. You can return to this assessment later.');
-    } catch (cause) { if (current()) setError(cause instanceof Error ? cause.message : 'Save failed. Your unsaved answers remain on this screen.'); }
+      setAssessment(result); setAnswers(result.answers ?? {}); setDirty(false); setRefreshStatus(v=>v+1); onStatusChange?.(participantId);
+      setSaveFeedback({ status: 'saved', message: 'Draft saved. You can return to this assessment later.' });
+    } catch (cause) {
+      if (current()) setSaveFeedback(responseReceived
+        ? { status: 'error', message: `${cause instanceof Error ? cause.message : 'The save was rejected.'} Your answers remain on this screen.` }
+        : { status: 'unknown', message: 'The save could not be confirmed. Your answers remain on this screen. Retry Save progress with the same answers.' });
+    }
     finally { if (current()) { write.current = null; setSaving(false); } }
   };
   const complete = async () => {
@@ -226,7 +242,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         <div className="space-y-2">{sections.map((section) => {
           const expanded = expandedSection === section.id;
           return <section key={section.id} className="overflow-hidden rounded-lg border border-neutral-200">
-            <button type="button" className="flex w-full items-center justify-between gap-3 bg-neutral-50 px-4 py-3 text-left text-base font-semibold" aria-expanded={expanded} onClick={() => setExpandedSection(expanded ? null : section.id)}>
+            <button ref={(element) => { sectionHeadings.current[section.id] = element; }} type="button" className="scroll-mt-4 flex w-full items-center justify-between gap-3 bg-neutral-50 px-4 py-3 text-left text-base font-semibold" aria-expanded={expanded} onClick={() => setExpandedSection(expanded ? null : section.id)}>
               <span>{section.title} · {section.questions.filter(q => answered(answers[q.id])).length} of {section.questions.length} answered{section.questions.some(q => q.required && !answered(answers[q.id])) ? ' · Required answers missing' : ''}</span><span aria-hidden="true">{expanded ? '−' : '+'}</span>
             </button>
             {expanded && <div className="space-y-5 p-4">{section.questions.filter(q => !showMissing || !answered(answers[q.id])).map((q) => <div key={q.id} className={`text-base ${q.required && !answered(answers[q.id]) ? 'rounded-lg border-l-4 border-amber-500 bg-amber-50 p-3' : ''}`}>
@@ -235,10 +251,18 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
             </div>)}{showMissing && section.questions.every(q => answered(answers[q.id])) && <p className="text-base text-green-700">All questions in this section have answers.</p>}</div>}
           </section>;
         })}</div>
-        {assessment.status !== 'completed' && sections.length > 0 && <div className="flex flex-wrap gap-3 pt-2">
-          <button type="button" className="btn-primary" disabled={!dirty || saving || completing} onClick={() => void save()}>{saving ? 'Saving...' : 'Save progress'}</button>
-          <button type="button" className="btn-secondary" disabled={dirty || saving || completing} onClick={() => void complete()}>{completing ? 'Completing...' : 'Mark completed'}</button>
-        </div>}
+        {assessment.status !== 'completed' && sections.length > 0 && <>
+          <div className="flex flex-wrap gap-3 pt-2">
+            <button type="button" className="btn-primary" disabled={!dirty || saving || completing} onClick={() => void save()}>{saving ? 'Saving...' : 'Save progress'}</button>
+            <button type="button" className="btn-secondary" disabled={dirty || saving || completing} onClick={() => void complete()}>{completing ? 'Completing...' : 'Mark completed'}</button>
+          </div>
+          <div aria-live="polite" aria-atomic="true">
+            {saveFeedback.status === 'saving' && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-base text-blue-900"><span className="font-semibold">Saving.</span> Saving vocational answers. Please wait.</p>}
+            {saveFeedback.status === 'saved' && <p role="status" className="rounded border border-green-200 bg-green-50 p-3 text-base text-green-800"><span className="font-semibold">Saved.</span> <span>{saveFeedback.message}</span></p>}
+            {saveFeedback.status === 'error' && <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-base text-red-800"><span className="font-semibold">Save error.</span> <span>{saveFeedback.message}</span></p>}
+            {saveFeedback.status === 'unknown' && <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-base text-amber-900"><span className="font-semibold">Save status unknown.</span> <span>{saveFeedback.message}</span></p>}
+          </div>
+        </>}
         {assessment.status === 'completed' && <p className="text-base font-medium text-green-700">Assessment completed · Read-only</p>}
         {dirty && <p className="text-base text-neutral-700">Save progress before marking completed.</p>}
       </>}

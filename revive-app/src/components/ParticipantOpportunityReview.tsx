@@ -84,7 +84,7 @@ export function ParticipantOpportunityReview({ workspaceId, userId, programmeId,
         </div>
         <div className="text-sm text-neutral-700" aria-label="Opportunity sources">
           <p><span className="font-medium">Opportunity sources:</span> Programme job records (included). External vacancy search is not available yet.</p>
-          <p>Jobs with more evidenced requirements are listed first. This order is not a likelihood of employment. Requirements are compared by their exact wording, so similar skills described differently are not recognised.</p>
+          <p>Jobs with more evidenced requirements are listed first.</p>
         </div>
         {reviews.length === 0 && <p role="status" className="text-base">No active jobs are recorded for this programme.</p>}
         {review.truncated && <p role="status" className="text-sm text-amber-800">Showing {review.opportunities.length} of {review.opportunityCount} active jobs.</p>}
@@ -92,8 +92,12 @@ export function ParticipantOpportunityReview({ workspaceId, userId, programmeId,
           <li key={opportunity.source.vacancyId} className="rounded-lg border border-neutral-200 p-3">
             <h4 className="font-semibold">{opportunity.title}</h4>
             <p className="text-sm text-neutral-700">{opportunity.employerName} - Source: programme job record, updated {formatDate(opportunity.source.updatedAt)}</p>
-            <p className="mt-1 text-sm">{assessment.requiredTotal ? `${assessment.requiredEvidenced} of ${assessment.requiredTotal} required skills have questionnaire evidence.` : 'No required skills listed.'}</p>
-            <OpportunityDetail assessment={assessment} />
+            <p className="mt-1 text-sm">{assessment.requiredTotal ? `${assessment.requiredEvidenced} of ${assessment.requiredTotal} required skills evidenced` : 'No required skills listed'}
+              {' · '}{assessment.supportedMatches.length} supported {' · '}{assessment.missingEvidence.length} to check</p>
+            <details className="mt-2">
+              <summary className="cursor-pointer font-medium text-primary-700">Details</summary>
+              <OpportunityDetail assessment={assessment} />
+            </details>
           </li>)}</ul>}
       </>}
     </div>}
@@ -102,6 +106,7 @@ export function ParticipantOpportunityReview({ workspaceId, userId, programmeId,
 
 function OpportunityDetail({ assessment }: { assessment: ProgrammeVacancyReview }) {
   return <div className="mt-2 grid gap-3 text-sm md:grid-cols-2">
+    <p className="md:col-span-2 text-neutral-700">Evidence means the current questionnaire contains the same wording as the job record. Missing evidence does not mean the Service user lacks a skill, and this review is not a likelihood of employment.</p>
     <div><h5 className="font-medium">Supported by the current questionnaire</h5>
       {assessment.supportedMatches.length ? <ul className="list-disc pl-5">{assessment.supportedMatches.map((match) =>
         <li key={`${match.requirementType}-${match.requirement}`}>{match.requirementType}: {match.requirement} ({fieldLabels[match.profileField]})</li>)}</ul> : <p>No listed requirement is supported yet.</p>}</div>

@@ -950,10 +950,11 @@ function saveTarget(attempt: ProgrammeHubSaveAttempt) {
 }
 function SaveFeedback({ busy, error, message, pending, retry }: { busy: boolean; error: string; message: string; pending: boolean; retry: () => void }) {
   return <div className="col-span-full mt-2" aria-live="polite" aria-atomic="true">
-    {busy ? <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Saving this Programme Hub change. Please wait.</p>
-      : error ? <div role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}{pending && <button type="button" className="btn-secondary ml-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={retry}>Retry same change</button>}</div>
-      : pending ? <div role="status" className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">A retained save must be confirmed before another change.<button type="button" className="btn-secondary ml-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={retry}>Retry same change</button></div>
-      : message ? <p role="status" className="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</p> : null}
+    {busy ? <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><span className="font-semibold">Saving.</span> <span>Saving this Programme Hub change. Please wait.</span></p>
+      : error && pending ? <div role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><span className="font-semibold">Save status unknown.</span> <span>{error}</span><button type="button" className="btn-secondary ml-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={retry}>Retry same change</button></div>
+        : error ? <div role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800"><span className="font-semibold">Save error.</span> <span>{error}</span></div>
+          : pending ? <div role="status" className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><span className="font-semibold">Save status unknown.</span> A retained save must be confirmed before another change.<button type="button" className="btn-secondary ml-2 focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={retry}>Retry same change</button></div>
+            : message ? <p role="status" className="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800"><span className="font-semibold">Saved.</span> <span>{message}</span></p> : null}
   </div>;
 }
 

@@ -82,10 +82,13 @@ describe('Review opportunities', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('rev_brain_programme_opportunity_review', { target_workspace_id: 'workspace', target_programme_id: 'programme', target_participant_id: 'alice' });
     expect(job).toHaveTextContent('Warehouse operative');
     expect(job).toHaveTextContent('Source: programme job record, updated 01/11/2026');
-    expect(job).toHaveTextContent('1 of 2 required skills have questionnaire evidence.');
-    expect(job).toHaveTextContent('Required skill: forklift (Skills answer)');
-    expect(job).toHaveTextContent('Required skill: Stock control');
-    expect(job).toHaveTextContent('Travel to Leeds has not been assessed.');
+    expect(job).toHaveTextContent('1 of 2 required skills evidenced · 3 supported · 1 to check');
+    const details = within(job).getByText('Details').closest('details');
+    expect(details).not.toHaveAttribute('open');
+    expect(details).toHaveTextContent('Missing evidence does not mean the Service user lacks a skill');
+    expect(details).toHaveTextContent('Required skill: forklift (Skills answer)');
+    expect(details).toHaveTextContent('Required skill: Stock control');
+    expect(details).toHaveTextContent('Travel to Leeds has not been assessed.');
     expect(screen.getByLabelText('Profile evidence')).toHaveTextContent('Skills: Forklift, Teamwork');
     expect(screen.getByLabelText('Opportunity sources')).toHaveTextContent('External vacancy search is not available yet.');
     expect(screen.getByText(/not a likelihood of employment/)).toBeInTheDocument();
