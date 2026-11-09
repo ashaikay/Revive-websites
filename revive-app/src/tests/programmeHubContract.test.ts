@@ -4,6 +4,7 @@ import { workspaceNavigationItems } from '@/domain/workspaceNavigation';
 
 const migration = readFileSync(new URL('../../supabase/migrations/20261010100000_rev_programme_hub_employer_foundation.sql', import.meta.url), 'utf8');
 const notesMigration = readFileSync(new URL('../../supabase/migrations/20261010110000_rev_programme_hub_participant_notes.sql', import.meta.url), 'utf8');
+const esIntakeMigration = readFileSync(new URL('../../supabase/migrations/20261109010000_rev_programme_es_participant_intake.sql', import.meta.url), 'utf8');
 const engagementMigration = readFileSync(new URL('../../supabase/migrations/20261011010000_rev_programme_employer_discovery_engagement.sql', import.meta.url), 'utf8');
 const architecture = readFileSync(new URL('../../../REVIVE_AI_MASTER/01_ARCHITECTURE/OUTCOMES_PROGRAMME_HUB_EMPLOYER_ENGAGEMENT_IPS.md', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
@@ -69,6 +70,19 @@ describe('Outcomes / Programme Hub contract', () => {
     expect(notesMigration).toContain('to service_role');
     expect(notesMigration).not.toContain('delete from public.programme_hub_participant_notes');
     expect(notesMigration).not.toContain('update public.programme_hub_participant_notes');
+  });
+
+  it('creates and self-assigns ES intake atomically with current programme authority and exact replay', () => {
+    expect(esIntakeMigration).toContain('create function public.save_rev_programme_hub_es_participant_intake');
+    expect(esIntakeMigration).toContain('member.status = \'active\'');
+    expect(esIntakeMigration).toContain('adviser.user_id = member.user_id');
+    expect(esIntakeMigration).toContain('adviser.active');
+    expect(esIntakeMigration).toContain('insert into public.programme_hub_participants');
+    expect(esIntakeMigration).toContain('insert into public.programme_hub_participant_advisers');
+    expect(esIntakeMigration).toContain("prior.operation <> 'participant_intake'");
+    expect(esIntakeMigration).toContain('return prior.result');
+    expect(esIntakeMigration).toContain('from public, anon, authenticated');
+    expect(esIntakeMigration).toContain('to service_role');
   });
 
   it('keeps employer discovery, engagement history and prepared outreach tenant-scoped and idempotent', () => {

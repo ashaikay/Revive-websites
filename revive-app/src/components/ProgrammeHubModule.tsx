@@ -487,7 +487,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       vacancySearchGeographyKeys: splitKeys(participantDraft.vacancySearchGeographyKeys),
     };
     void saveAttempt(
-      attempt('participant', selectedProgramme.id, participantEdit?.id ?? null, participantEdit?.version ?? 0, payload),
+      attempt(participantEdit || isManager ? 'participant' : 'participant_intake', selectedProgramme.id, participantEdit?.id ?? null, participantEdit?.version ?? 0, payload),
       participantEdit ? 'Employment profile saved.' : 'Service user added.',
     ).then((confirmed) => { if (confirmed) resetParticipant(); });
   };
@@ -755,7 +755,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       </section>)}
       </div>
 
-      {selectedProgramme && isManager && !participantEdit && <details className="card p-5" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'participant' && (busy || pending)) event.currentTarget.open = true; }} open={feedbackTarget === 'participant' && (busy || !!pending || !!error || !!message)}>
+      {selectedProgramme && (isManager || isAdviser) && !participantEdit && <details className="card p-5" onToggle={(event) => { if (!event.currentTarget.open && feedbackTarget === 'participant' && (busy || pending)) event.currentTarget.open = true; }} open={feedbackTarget === 'participant' && (busy || !!pending || !!error || !!message)}>
         <summary className="cursor-pointer font-semibold">New Service user</summary>
         <h2 className="mt-3 text-xl font-semibold">Service users</h2>
         <form className="grid gap-3 md:grid-cols-3" data-save-target="participant" noValidate onSubmit={saveParticipant}><p className="col-span-full text-sm text-neutral-600">Use commas to separate jobs, skills or locations.</p>
@@ -946,6 +946,7 @@ function FormActions({ editing, busy, saving, cancel, saveLabel = 'Save changes'
   return <div className="flex flex-wrap items-end gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy}>{saving ? 'Saving...' : editing ? saveLabel : addLabel}</button>{editing && <button type="button" disabled={busy} className="btn-secondary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" onClick={cancel}>Cancel</button>}</div>;
 }
 function saveTarget(attempt: ProgrammeHubSaveAttempt) {
+  if (attempt.operation === 'participant_intake') return 'participant';
   return attempt.operation === 'participant_note' || attempt.operation === 'participant_contact' ? `${attempt.operation}:${attempt.payload.participantId}` : attempt.operation;
 }
 function SaveFeedback({ busy, error, message, pending, retry }: { busy: boolean; error: string; message: string; pending: boolean; retry: () => void }) {

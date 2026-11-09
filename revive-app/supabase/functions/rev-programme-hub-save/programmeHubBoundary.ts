@@ -5,6 +5,7 @@ export type ProgrammeHubOperation =
   | 'contact'
   | 'vacancy'
   | 'participant'
+  | 'participant_intake'
   | 'participant_adviser'
   | 'participant_note'
   | 'participant_contact';
@@ -30,6 +31,8 @@ export interface ProgrammeHubDependencies {
 export type ProgrammeHubSaveErrorCode =
   | 'workspace_access_denied'
   | 'programme_manager_required'
+  | 'programme_adviser_required'
+  | 'participant_duplicate'
   | 'participant_contact_changed'
   | 'participant_unavailable'
   | 'active_adviser_required'
@@ -59,11 +62,13 @@ export function classifyProgrammeHubDatabaseError(
   const message = typeof error.message === 'string' ? error.message : '';
   if (code === '42501') return new ProgrammeHubSaveFailure(403, 'workspace_access_denied');
   if (message.includes('Programme manager required')) return new ProgrammeHubSaveFailure(403, 'programme_manager_required');
+  if (message.includes('Programme adviser required')) return new ProgrammeHubSaveFailure(403, 'programme_adviser_required');
   if (message.includes('Participant contact unavailable or changed')) return new ProgrammeHubSaveFailure(409, 'participant_contact_changed');
   if (message.includes('Participant unavailable')) return new ProgrammeHubSaveFailure(409, 'participant_unavailable');
   if (message.includes('Active adviser required')) return new ProgrammeHubSaveFailure(409, 'active_adviser_required');
   if (message.includes('Caseload assignment unavailable or changed')) return new ProgrammeHubSaveFailure(409, 'caseload_assignment_changed');
   if (message.includes('Programme request unavailable')) return new ProgrammeHubSaveFailure(409, 'request_changed');
+  if (code === '23505' && operation === 'participant_intake') return new ProgrammeHubSaveFailure(409, 'participant_duplicate');
   if (code === '23505' && operation === 'participant_adviser') return new ProgrammeHubSaveFailure(409, 'caseload_assignment_exists');
   if (['22P02', '22007', '22023', '23514'].includes(code)) return new ProgrammeHubSaveFailure(400, 'programme_record_invalid');
   if (code.startsWith('23') || code === 'P0001') return new ProgrammeHubSaveFailure(409, 'programme_record_rejected');
@@ -72,7 +77,7 @@ export function classifyProgrammeHubDatabaseError(
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const operations: ProgrammeHubOperation[] = ['programme', 'adviser', 'employer', 'contact', 'vacancy', 'participant', 'participant_adviser', 'participant_note', 'participant_contact'];
+const operations: ProgrammeHubOperation[] = ['programme', 'adviser', 'employer', 'contact', 'vacancy', 'participant', 'participant_intake', 'participant_adviser', 'participant_note', 'participant_contact'];
 const validId = (value: unknown): value is string => typeof value === 'string' && uuid.test(value);
 const text = (value: unknown, max: number, optional = false): value is string =>
   typeof value === 'string' && ((optional && value === '') || (value.length >= 1 && value.length <= max && value.trim() === value));
@@ -110,6 +115,7 @@ function validPayload(operation: ProgrammeHubOperation, payload: unknown): paylo
         text(value.vacancyKey, 120) && text(value.title, 200) && text(value.workGeographyKey, 120, true) &&
         tags(value.requiredSkillKeys) && tags(value.desiredSkillKeys) && typeof value.active === 'boolean';
     case 'participant':
+    case 'participant_intake':
       return exact(value, ['participantKey', 'preferredName', 'caseReference', 'desiredRoleKeys', 'skillKeys', 'vacancySearchGeographyKeys', 'residencyEvidenceReference', 'active']) &&
         text(value.participantKey, 120) && text(value.preferredName, 160) && text(value.caseReference, 120) &&
         tags(value.desiredRoleKeys) && tags(value.skillKeys) && tags(value.vacancySearchGeographyKeys) &&
@@ -174,6 +180,7 @@ export async function handleProgrammeHubSave(request: Request, dependencies: Pro
       (body.expectedVersion as number) < 0 || (body.expectedVersion as number) >= Number.MAX_SAFE_INTEGER ||
       (body.recordId === null ? body.expectedVersion !== 0 : body.expectedVersion === 0) ||
       (body.operation === 'participant_note' && (body.recordId !== null || body.expectedVersion !== 0)) ||
+      (body.operation === 'participant_intake' && (body.recordId !== null || body.expectedVersion !== 0)) ||
       (body.operation === 'programme' ? body.programmeId !== null : !validId(body.programmeId)) ||
       !validPayload(body.operation as ProgrammeHubOperation, body.payload)) {
       return reply(400, { error: 'Invalid programme record.' });

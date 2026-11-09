@@ -169,6 +169,10 @@ export async function submitProgrammeHubAttempt(attempt: ProgrammeHubSaveAttempt
       if (errorCode === 'participant_contact_changed') throw new ProgrammeHubSaveRejectedError('These contact details changed. Cancel editing to load the latest saved details.', response.status, errorCode);
       const message = errorCode === 'workspace_access_denied' || errorCode === 'programme_manager_required'
         ? 'You do not have permission to save this Programme Hub change.'
+        : errorCode === 'programme_adviser_required'
+          ? 'You must be an active Employment Specialist for this programme to add a Service user.'
+          : errorCode === 'participant_duplicate'
+            ? 'A Service user with that ID or case reference already exists in this programme.'
         : errorCode === 'active_adviser_required'
           ? 'The selected Employment Specialist is not actively registered for this programme.'
           : errorCode === 'participant_unavailable'

@@ -85,6 +85,37 @@ test('accepts minimal participant employment data without clinical or outcome fi
   assert.equal((await handleProgrammeHubSave(request({ ...body, payload: { ...body.payload, diagnosis: 'not allowed' } }), dependencies())).status, 400);
 });
 
+test('accepts ES participant intake only as a new record and binds the signed-in actor', async () => {
+  let captured: ProgrammeHubSaveInput | undefined;
+  const body = {
+    operation: 'participant_intake',
+    workspaceId,
+    programmeId,
+    recordId: null,
+    requestId,
+    expectedVersion: 0,
+    payload: {
+      participantKey: 'participant-001',
+      preferredName: 'Alex',
+      caseReference: 'CASE-001',
+      desiredRoleKeys: ['retail'],
+      skillKeys: ['customer_service'],
+      vacancySearchGeographyKeys: ['configured-area-a'],
+      residencyEvidenceReference: '',
+      active: true,
+    },
+  };
+  const response = await handleProgrammeHubSave(request(body), dependencies(async (input) => {
+    captured = input;
+    return { operation: 'participant_intake', record_id: recordId, workspace_id: workspaceId, programme_id: programmeId, version: 1 };
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(captured?.initiating_user_id, userId);
+  assert.equal(captured?.target_record_id, null);
+  assert.equal(captured?.expected_version, 0);
+  assert.equal((await handleProgrammeHubSave(request({ ...body, recordId, expectedVersion: 1 }), dependencies())).status, 400);
+});
+
 test('requires exact vacancy fields and refuses invented or malformed geography input', async () => {
   const body = {
     operation: 'vacancy',
@@ -173,6 +204,14 @@ test('reports missing adviser registration, stale assignment and workspace denia
 });
 
 test('classifies database errors without exposing database messages', () => {
+  assert.deepEqual(
+    classifyProgrammeHubDatabaseError('participant_intake', { code: '23505', message: 'duplicate key value' }),
+    new ProgrammeHubSaveFailure(409, 'participant_duplicate'),
+  );
+  assert.deepEqual(
+    classifyProgrammeHubDatabaseError('participant_intake', { code: 'P0001', message: 'Programme adviser required' }),
+    new ProgrammeHubSaveFailure(403, 'programme_adviser_required'),
+  );
   assert.deepEqual(
     classifyProgrammeHubDatabaseError('participant_adviser', { code: '23505', message: 'duplicate key value' }),
     new ProgrammeHubSaveFailure(409, 'caseload_assignment_exists'),

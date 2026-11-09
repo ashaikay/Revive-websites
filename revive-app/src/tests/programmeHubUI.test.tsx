@@ -1061,8 +1061,56 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     const card = await openServiceUser('Assigned 11');
     expect(within(card).getByLabelText('Add a note')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Assign ES' })).toBeNull();
-    expect(screen.queryByText('New Service user')).toBeNull();
+    expect(screen.getByText('New Service user')).toBeVisible();
     expect(screen.queryByText('Add ES to programme')).toBeNull();
+  });
+
+  it('lets an active ES create a Service user through atomic self-intake without manager controls', async () => {
+    setRows('member');
+    mocks.invoke.mockImplementation(async (_name: string, { body }: { body: Record<string, unknown> }) => ({
+      data: { operation: body.operation, recordId: savedId, workspaceId, programmeId, version: 1 },
+      error: null,
+    }));
+    await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />, 'Caseload');
+    const intake = screen.getByText('New Service user').closest('details')!;
+    fireEvent.click(within(intake).getByText('New Service user'));
+    fireEvent.change(within(intake).getByLabelText('Service user ID'), { target: { value: 'PART-ES-001' } });
+    fireEvent.change(within(intake).getByLabelText('Known as'), { target: { value: 'Robin' } });
+    fireEvent.change(within(intake).getByLabelText('Case reference'), { target: { value: 'CASE-ES-001' } });
+    fireEvent.click(within(intake).getByRole('button', { name: 'Add Service user' }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(1));
+    expect(mocks.invoke.mock.calls[0][1].body).toMatchObject({
+      operation: 'participant_intake',
+      workspaceId,
+      programmeId,
+      recordId: null,
+      expectedVersion: 0,
+      payload: { participantKey: 'PART-ES-001', preferredName: 'Robin', caseReference: 'CASE-ES-001', active: true },
+    });
+    expect(await within(intake).findByText('Service user added.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Assign ES' })).toBeNull();
+    expect(screen.queryByText('Add ES to programme')).toBeNull();
+  });
+
+  it('retains the exact ES intake request and entered fields when the save outcome is unknown', async () => {
+    setRows('member');
+    mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('network unavailable') });
+    await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />, 'Caseload');
+    const intake = screen.getByText('New Service user').closest('details')!;
+    fireEvent.click(within(intake).getByText('New Service user'));
+    const serviceUserId = within(intake).getByLabelText('Service user ID');
+    fireEvent.change(serviceUserId, { target: { value: 'PART-ES-RETRY' } });
+    fireEvent.change(within(intake).getByLabelText('Known as'), { target: { value: 'Taylor' } });
+    fireEvent.change(within(intake).getByLabelText('Case reference'), { target: { value: 'CASE-ES-RETRY' } });
+    fireEvent.click(within(intake).getByRole('button', { name: 'Add Service user' }));
+    expect(await within(intake).findByRole('alert')).toHaveTextContent('Save status unknown');
+    expect(serviceUserId).toHaveValue('PART-ES-RETRY');
+    const original = mocks.invoke.mock.calls[0][1].body;
+    mocks.invoke.mockResolvedValueOnce({ data: { operation: 'participant_intake', recordId: savedId, workspaceId, programmeId, version: 1 }, error: null });
+    fireEvent.click(within(intake).getByRole('button', { name: 'Retry same change' }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
+    expect(mocks.invoke.mock.calls[1][1].body).toEqual(original);
+    expect(await within(intake).findByText('The retained Programme Hub change was confirmed.')).toBeVisible();
   });
 
   it('keeps uncertain note saves pinned to the same record and exact request', async () => {
