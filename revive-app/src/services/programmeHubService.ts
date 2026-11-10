@@ -175,6 +175,8 @@ export async function submitProgrammeHubAttempt(attempt: ProgrammeHubSaveAttempt
             ? 'A Service user with that ID or case reference already exists in this programme.'
         : errorCode === 'active_adviser_required'
           ? 'The selected Employment Specialist is not actively registered for this programme.'
+          : errorCode === 'participant_archived'
+            ? 'This Service user is archived and read-only. Reactivate the record before making changes.'
           : errorCode === 'participant_unavailable'
             ? 'The selected Service user is no longer available in this programme.'
             : errorCode === 'caseload_assignment_exists'

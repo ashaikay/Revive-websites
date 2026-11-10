@@ -41,8 +41,9 @@ const saveFailure = (cause: unknown) => {
 const retainedUnreadable = 'A retained action plan save could not be read. Nothing new can be saved here; contact support before making another change.';
 const definitiveCodes = new Set(['40001', '42501', '22023']);
 
-export function ParticipantActionPlan({ workspaceId, userId, programmeId, participantId, assignableSpecialists = [], staffLabel = () => 'Staff member', onNavigationLockChange }: {
+export function ParticipantActionPlan({ workspaceId, userId, programmeId, participantId, assignableSpecialists = [], staffLabel = () => 'Staff member', onNavigationLockChange, readOnly = false }: {
   workspaceId: string; userId: string; programmeId: string; participantId: string;
+  readOnly?: boolean;
   assignableSpecialists?: { userId: string; label: string }[];
   staffLabel?: (userId: string) => string;
   onNavigationLockChange?: (locked: boolean) => void;
@@ -133,7 +134,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
   const linkedVersion = !latest ? data?.currentQuestionnaire?.templateVersionId ?? null
     : data?.reviewNeeded && linkCurrent ? data.currentQuestionnaire?.templateVersionId ?? null
       : latest.templateVersionId;
-  const editable = !loading && !saving && !retained && !retainedInvalid;
+  const editable = !readOnly && !loading && !saving && !retained && !retainedInvalid;
   const invalid = !draft.goal.trim() || draft.actions.some((action) => !action.description.trim() || (action.ownerType === 'employment_specialist' && !action.ownerUserId));
   const ownerNeedsReview = (action: PlanAction) => action.ownerType === 'employment_specialist' && !!action.ownerUserId && !assignedIds.has(action.ownerUserId);
 
@@ -141,7 +142,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
   const updateAction = (id: string, patch: Partial<PlanAction>) => edit({ ...draft, actions: draft.actions.map((action) => action.id === id ? { ...action, ...patch } : action) });
 
   const save = async () => {
-    if (!supabaseClient || saving || retainedInvalid) return;
+    if (!supabaseClient || saving || retainedInvalid || (readOnly && !retained)) return;
     let attempt = retained;
     if (!attempt) {
       if (!data || !linkedVersion || !dirty || invalid) return;
@@ -208,6 +209,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
     </div>
     {open && <div className="mt-4 space-y-4">
       <p className="rounded-lg bg-neutral-50 p-3 text-sm text-neutral-800">Recorded by staff for employment support. Saving does not record the Service user's agreement, send messages, make applications or complete anything automatically. Do not record health, offence, safeguarding or other sensitive details here.</p>
+      {readOnly && <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Archived record - action-plan revisions are read-only. Revision history remains available.</p>}
       {loading && <p role="status" className="text-base">Loading action plan...</p>}
       {error && <p role="alert" className="text-base text-red-700">{error}</p>}
       {notice && <p role="status" className="text-base text-green-700">{notice}</p>}
@@ -258,7 +260,7 @@ export function ParticipantActionPlan({ workspaceId, userId, programmeId, partic
             onClick={() => edit({ ...draft, actions: [...draft.actions, { id: newId(), description: '', ownerType: 'service_user', ownerUserId: null, status: 'not_started', targetDate: null }] })}>Add action</button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" className="btn-primary" disabled={retained ? saving : (!dirty || invalid || saving || loading || !linkedVersion || retainedInvalid)} onClick={() => void save()}>{saving ? 'Saving...' : retained ? 'Retry save' : 'Save revision'}</button>
+          <button type="button" className="btn-primary" disabled={retained ? saving : (readOnly || !dirty || invalid || saving || loading || !linkedVersion || retainedInvalid)} onClick={() => void save()}>{saving ? 'Saving...' : retained ? 'Retry save' : 'Save revision'}</button>
           {dirty && !saving && !retained && <span className="text-sm text-neutral-600">Unsaved changes</span>}
         </div>
         {data.revisions.length > 0 && <details className="rounded-lg border border-neutral-200 p-3">

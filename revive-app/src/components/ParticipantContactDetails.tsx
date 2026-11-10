@@ -3,9 +3,10 @@ import { supabaseClient } from '@/data/supabaseClient';
 import type { ProgrammeHubSaveAttempt } from '@/domain/programmeHub';
 import { emptyParticipantContact, normaliseParticipantContact, participantContactColumns, participantContactError, parseParticipantContact, type ParticipantContactDraft, type ParticipantContactRecord } from '@/services/programmeParticipantContacts';
 
-export function ParticipantContactDetails({ workspaceId, programmeId, participantId, openRequest, refreshKey, busy, pending, feedback, onSave, onEditingChange }: {
+export function ParticipantContactDetails({ workspaceId, programmeId, participantId, openRequest, refreshKey, busy, pending, feedback, onSave, onEditingChange, readOnly = false }: {
   workspaceId: string; programmeId: string; participantId: string; openRequest: number; refreshKey: number;
   busy: boolean; pending: ProgrammeHubSaveAttempt | null; feedback: React.ReactNode;
+  readOnly?: boolean;
   onEditingChange?: (editing: boolean) => void;
   onSave: (record: ParticipantContactRecord | null, draft: ParticipantContactDraft) => Promise<boolean>;
 }) {
@@ -64,7 +65,8 @@ export function ParticipantContactDetails({ workspaceId, programmeId, participan
     {error && <div className="mt-2 text-sm" role="alert">{error}<button type="button" className="btn-secondary ml-2" onClick={() => setReload((value) => value + 1)}>Retry loading</button></div>}
     {loaded && !error && !editing && <div className="mt-3">
       {record ? <dl className="grid gap-3 text-sm sm:grid-cols-2">{fields.map(([field, label]) => <div key={field}><dt className="font-medium">{label}</dt><dd className="break-words text-neutral-600">{record[field] || 'Not added'}</dd></div>)}</dl> : <p className="text-sm text-neutral-600">No contact details added.</p>}
-      <button type="button" className="btn-secondary mt-3" disabled={busy} onClick={() => { setDraft(record ?? emptyParticipantContact); setEditing(true); setValidation(''); }}>{record ? 'Edit contact details' : 'Add contact details'}</button>
+      {readOnly ? <p className="mt-3 text-sm text-neutral-600">Archived record - contact details are read-only.</p>
+        : <button type="button" className="btn-secondary mt-3" disabled={busy} onClick={() => { setDraft(record ?? emptyParticipantContact); setEditing(true); setValidation(''); }}>{record ? 'Edit contact details' : 'Add contact details'}</button>}
     </div>}
     {loaded && !error && editing && <form className="mt-3 grid gap-3 sm:grid-cols-2" noValidate onSubmit={(event) => {
       event.preventDefault();

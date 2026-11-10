@@ -35,6 +35,7 @@ export type ProgrammeHubSaveErrorCode =
   | 'participant_duplicate'
   | 'participant_contact_changed'
   | 'participant_unavailable'
+  | 'participant_archived'
   | 'active_adviser_required'
   | 'caseload_assignment_exists'
   | 'caseload_assignment_changed'
@@ -64,6 +65,7 @@ export function classifyProgrammeHubDatabaseError(
   if (message.includes('Programme manager required')) return new ProgrammeHubSaveFailure(403, 'programme_manager_required');
   if (message.includes('Programme adviser required')) return new ProgrammeHubSaveFailure(403, 'programme_adviser_required');
   if (message.includes('Participant contact unavailable or changed')) return new ProgrammeHubSaveFailure(409, 'participant_contact_changed');
+  if (message.includes('Archived participant is read only')) return new ProgrammeHubSaveFailure(409, 'participant_archived');
   if (message.includes('Participant unavailable')) return new ProgrammeHubSaveFailure(409, 'participant_unavailable');
   if (message.includes('Active adviser required')) return new ProgrammeHubSaveFailure(409, 'active_adviser_required');
   if (message.includes('Caseload assignment unavailable or changed')) return new ProgrammeHubSaveFailure(409, 'caseload_assignment_changed');

@@ -17,7 +17,7 @@ const ordinarySections = coreVocationalSections;
 const hasOptionalSupportSection = (sections: Section[]) => sections.some((section) => optionalSupportSection.test(section.title));
 const answered = (value: unknown) => value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
 
-export function ParticipantVocationalAssessment({ workspaceId, programmeId, participantId, participantName, caseReference, assignedSpecialists = [], isManager = false, consentAdvisers = [], onReviewQuestionnaire, onStatusChange }: { workspaceId: string; programmeId: string; participantId: string; participantName?: string; caseReference?: string; assignedSpecialists?: string[]; isManager?: boolean; consentAdvisers?: { userId: string; label: string }[]; onReviewQuestionnaire?: () => void; onStatusChange?: (participantId: string) => void }) {
+export function ParticipantVocationalAssessment({ workspaceId, programmeId, participantId, participantName, caseReference, assignedSpecialists = [], isManager = false, consentAdvisers = [], onReviewQuestionnaire, onStatusChange, readOnly = false }: { workspaceId: string; programmeId: string; participantId: string; participantName?: string; caseReference?: string; assignedSpecialists?: string[]; isManager?: boolean; consentAdvisers?: { userId: string; label: string }[]; onReviewQuestionnaire?: () => void; onStatusChange?: (participantId: string) => void; readOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [selected, setSelected] = useState('');
@@ -116,9 +116,9 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   // The percentage is an answer-progress indicator, not a substitute for server completion.
   const coreAnswered = allQuestions.length - unanswered.length;
   const coreProgressPercent = allQuestions.length ? Math.round((coreAnswered / allQuestions.length) * 100) : 0;
-  const setAnswer = (id: string, value: unknown) => { setAnswers((previous) => ({ ...previous, [id]: value })); setDirty(true); setNotice(''); setSaveFeedback({ status: 'idle' }); };
+  const setAnswer = (id: string, value: unknown) => { if (readOnly) return; setAnswers((previous) => ({ ...previous, [id]: value })); setDirty(true); setNotice(''); setSaveFeedback({ status: 'idle' }); };
   const save = async () => {
-    if (!assessment || !snapshot || !supabaseClient || saving || completing || write.current || !dirty) return;
+    if (readOnly || !assessment || !snapshot || !supabaseClient || saving || completing || write.current || !dirty) return;
     const scopeToken = scope.current.token;
     const writeToken = Symbol();
     write.current = writeToken;
@@ -149,7 +149,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
     finally { if (current()) { write.current = null; setSaving(false); } }
   };
   const complete = async () => {
-    if(!assessment || !supabaseClient || saving || completing || write.current || dirty || assessment.status==='completed' || sections.length===0)return;
+    if(readOnly || !assessment || !supabaseClient || saving || completing || write.current || dirty || assessment.status==='completed' || sections.length===0)return;
     if(requiredMissing.length) { setShowMissing(true); setExpandedSection(sections.find(s => s.questions.some(q => requiredMissing.some(m => m.id === q.id)))?.id ?? null); setError(`${requiredMissing.length} required question(s) remain unanswered. Open the highlighted section and save before completing.`); return; }
     if(!window.confirm('Mark this vocational assessment as completed? This will lock the assessment.'))return;
     const scopeToken = scope.current.token;
@@ -172,18 +172,18 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
   };
   const renderQuestion = (q: Question) => {
     const value = answers[q.id];
-    const readOnly = assessment?.status === 'completed' || loading || saving || completing;
+    const questionReadOnly = readOnly || assessment?.status === 'completed' || loading || saving || completing;
     const common = 'mt-1 w-full rounded border border-neutral-300 p-2';
-    if (q.type === 'long_text') return <textarea disabled={readOnly} className={common} rows={3} value={String(value ?? '')} onChange={(e) => setAnswer(q.id, e.target.value)} />;
-    if (q.type === 'short_text' || q.type === 'date' || q.type === 'number') return <input disabled={readOnly} className={common} type={q.type === 'date' ? 'date' : q.type === 'number' ? 'number' : 'text'} value={value == null ? '' : String(value)} onChange={(e) => setAnswer(q.id, q.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value)} />;
-    if (q.type === 'checkbox') return <input disabled={readOnly} className="ml-2" type="checkbox" checked={value === true} onChange={(e) => setAnswer(q.id, e.target.checked)} />;
+    if (q.type === 'long_text') return <textarea disabled={questionReadOnly} className={common} rows={3} value={String(value ?? '')} onChange={(e) => setAnswer(q.id, e.target.value)} />;
+    if (q.type === 'short_text' || q.type === 'date' || q.type === 'number') return <input disabled={questionReadOnly} className={common} type={q.type === 'date' ? 'date' : q.type === 'number' ? 'number' : 'text'} value={value == null ? '' : String(value)} onChange={(e) => setAnswer(q.id, q.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value)} />;
+    if (q.type === 'checkbox') return <input disabled={questionReadOnly} className="ml-2" type="checkbox" checked={value === true} onChange={(e) => setAnswer(q.id, e.target.checked)} />;
     if (q.type === 'single_select' || q.type === 'yes_no_prefer_not') {
       const options = q.type === 'yes_no_prefer_not' ? ['yes', 'no', 'prefer_not_to_say'] : (q.options ?? []);
-      return <select disabled={readOnly} className={common} value={String(value ?? '')} onChange={(e) => setAnswer(q.id, e.target.value || null)}><option value="">Select an answer</option>{options.map((opt) => <option key={opt} value={opt}>{opt.replace(/_/g, ' ')}</option>)}</select>;
+      return <select disabled={questionReadOnly} className={common} value={String(value ?? '')} onChange={(e) => setAnswer(q.id, e.target.value || null)}><option value="">Select an answer</option>{options.map((opt) => <option key={opt} value={opt}>{opt.replace(/_/g, ' ')}</option>)}</select>;
     }
     if (q.type === 'multi_select') return <div className="mt-1 space-y-1">{(q.options ?? []).map((opt) => {
       const current = Array.isArray(value) ? value as string[] : [];
-      return <label key={opt} className="flex items-center gap-2"><input disabled={readOnly} type="checkbox" checked={current.includes(opt)} onChange={(e) => setAnswer(q.id, e.target.checked ? [...current, opt] : current.filter((item) => item !== opt))} />{opt}</label>;
+      return <label key={opt} className="flex items-center gap-2"><input disabled={questionReadOnly} type="checkbox" checked={current.includes(opt)} onChange={(e) => setAnswer(q.id, e.target.checked ? [...current, opt] : current.filter((item) => item !== opt))} />{opt}</label>;
     })}</div>;
     return <span className="text-amber-700">Unsupported question type.</span>;
   };
@@ -196,6 +196,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
       </button>
     </div>
     {open && <div className="mt-4 space-y-4">
+      {readOnly && <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Archived record - vocational answers are read-only. Saved questionnaires and answers remain available.</p>}
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-base text-neutral-700">Assigned ES: {assignedSpecialists.length ? assignedSpecialists.join(', ') : 'Not assigned'}</span>
         <button type="button" className="btn-secondary" aria-expanded={showHelp} onClick={() => setShowHelp(v => !v)} aria-label="How vocational profiles work">Help</button>
@@ -213,7 +214,7 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
           {snapshots.map((v, index) => <option key={v.id} value={v.id}>{v.title} · version {v.version} ({index === 0 ? 'current' : 'earlier'})</option>)}
         </select>
       </details>}
-      {assessment && !loading && isManager && <VocationalConsentManager key={assessment.assessmentId} assessmentId={assessment.assessmentId} advisers={consentAdvisers} />}
+      {assessment && !loading && isManager && !readOnly && <VocationalConsentManager key={assessment.assessmentId} assessmentId={assessment.assessmentId} advisers={consentAdvisers} />}
       {assessment && !loading && <>
         {allQuestions.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3">
           <div className="min-w-0 flex-1">
@@ -253,8 +254,8 @@ export function ParticipantVocationalAssessment({ workspaceId, programmeId, part
         })}</div>
         {assessment.status !== 'completed' && sections.length > 0 && <>
           <div className="flex flex-wrap gap-3 pt-2">
-            <button type="button" className="btn-primary" disabled={!dirty || saving || completing} onClick={() => void save()}>{saving ? 'Saving...' : 'Save progress'}</button>
-            <button type="button" className="btn-secondary" disabled={dirty || saving || completing} onClick={() => void complete()}>{completing ? 'Completing...' : 'Mark completed'}</button>
+            <button type="button" className="btn-primary" disabled={readOnly || !dirty || saving || completing} onClick={() => void save()}>{saving ? 'Saving...' : 'Save progress'}</button>
+            <button type="button" className="btn-secondary" disabled={readOnly || dirty || saving || completing} onClick={() => void complete()}>{completing ? 'Completing...' : 'Mark completed'}</button>
           </div>
           <div aria-live="polite" aria-atomic="true">
             {saveFeedback.status === 'saving' && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-base text-blue-900"><span className="font-semibold">Saving.</span> Saving vocational answers. Please wait.</p>}
