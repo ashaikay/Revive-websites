@@ -636,6 +636,67 @@ describe('Outcomes / Programme Hub employer foundation', () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
+  it('requires ES review and confirmation, warns about likely duplicates and retains the exact unknown import', async () => {
+    setRows('member');
+    const employerId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    mocks.rows.programme_hub_employers = [{ id: employerId, workspace_id: workspaceId, programme_id: programmeId, employer_key: 'EMP-WAREHOUSE', display_name: 'Birmingham Logistics', sector_key: 'warehousing', primary_geography_key: 'Birmingham', active: true, version: 1 }];
+    mocks.rows.programme_hub_vacancies = [{
+      id: savedId, workspace_id: workspaceId, programme_id: programmeId, employer_id: employerId, employer_contact_id: null,
+      vacancy_key: 'VAC-EXISTING', title: 'Warehouse operative', work_geography_key: 'Birmingham',
+      required_skill_keys: [], desired_skill_keys: [], source_text: null,
+      source_url: 'https://jobs.example.test/warehouse-1', source_added_at: null,
+      published_pay: null, published_shifts: null, closing_date: null, active: true, version: 1,
+    }];
+    mocks.invoke.mockResolvedValueOnce({ data: null, error: new Error('network unavailable') });
+    await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />, 'Job opportunities');
+    fireEvent.click(screen.getByText('Paste and review job advert'));
+    const importSection = screen.getByRole('heading', { name: 'Import a reviewed job advert' }).closest('section')!;
+    fireEvent.change(within(importSection).getByLabelText('Job advert text'), { target: { value: 'Warehouse operative. £12.50 per hour. Forklift certificate required.' } });
+    fireEvent.change(within(importSection).getByLabelText('Source URL (optional)'), { target: { value: 'https://jobs.example.test/warehouse-1' } });
+    fireEvent.change(within(importSection).getByLabelText('Employer'), { target: { value: employerId } });
+    fireEvent.change(within(importSection).getByLabelText('Job record reference'), { target: { value: 'VAC-IMPORT-001' } });
+    fireEvent.change(within(importSection).getByLabelText('Role'), { target: { value: 'Warehouse operative' } });
+    fireEvent.change(within(importSection).getByLabelText('Location'), { target: { value: 'Birmingham' } });
+    fireEvent.change(within(importSection).getByLabelText('Published pay'), { target: { value: '£12.50 per hour' } });
+    fireEvent.change(within(importSection).getByLabelText('Required skills (comma separated)'), { target: { value: 'forklift certificate' } });
+    fireEvent.click(within(importSection).getByRole('button', { name: 'Review before saving' }));
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(await within(importSection).findByRole('alert')).toHaveTextContent('VAC-EXISTING');
+    const confirmation = screen.getByRole('heading', { name: 'Confirm reviewed job advert' }).closest('div')!;
+    expect(within(confirmation).getAllByText('Not provided').length).toBeGreaterThan(0);
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Confirm and save' }));
+    await waitFor(() => expect(within(importSection).getAllByRole('alert').some((alert) => alert.textContent?.includes('Save outcome is unknown'))).toBe(true));
+    const retained = JSON.parse(window.sessionStorage.getItem(`rev-programme-hub-save:${workspaceId}:${adviserId}`) ?? 'null');
+    expect(retained).toMatchObject({
+      operation: 'job_advert_import',
+      programmeId,
+      recordId: null,
+      expectedVersion: 0,
+      payload: {
+        employerId,
+        employerContactId: '',
+        vacancyKey: 'VAC-IMPORT-001',
+        title: 'Warehouse operative',
+        workGeographyKey: 'Birmingham',
+        publishedPay: '£12.50 per hour',
+        publishedShifts: '',
+        requiredSkillKeys: ['forklift certificate'],
+        closingDate: '',
+        sourceText: 'Warehouse operative. £12.50 per hour. Forklift certificate required.',
+        sourceUrl: 'https://jobs.example.test/warehouse-1',
+      },
+    });
+    const originalRequest = mocks.invoke.mock.calls[0][1].body;
+    mocks.invoke.mockResolvedValueOnce({
+      data: { operation: 'job_advert_import', recordId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', workspaceId, programmeId, version: 1 },
+      error: null,
+    });
+    fireEvent.click(within(importSection).getByRole('button', { name: 'Retry same change' }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
+    expect(mocks.invoke.mock.calls[1][1].body).toEqual(originalRequest);
+    expect(await within(importSection).findByText('The retained Programme Hub change was confirmed.')).toBeVisible();
+  });
+
   it('keeps only one record open and preserves note drafts when returning to it', async () => {
     setRows('owner', true);
     mocks.rows.programme_hub_participants = [participantRow, { ...secondParticipantRow, programme_id: programmeId }];

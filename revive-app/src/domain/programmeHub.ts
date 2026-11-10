@@ -4,6 +4,7 @@ export type ProgrammeHubOperation =
   | 'employer'
   | 'contact'
   | 'vacancy'
+  | 'job_advert_import'
   | 'participant'
   | 'participant_intake'
   | 'participant_adviser'
@@ -76,6 +77,12 @@ export interface ProgrammeHubVacancy {
   workGeographyKey: string | null;
   requiredSkillKeys: string[];
   desiredSkillKeys: string[];
+  sourceText: string | null;
+  sourceUrl: string | null;
+  sourceAddedAt: string | null;
+  publishedPay: string | null;
+  publishedShifts: string | null;
+  closingDate: string | null;
   active: boolean;
   version: number;
 }

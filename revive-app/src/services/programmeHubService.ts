@@ -21,6 +21,8 @@ const object = (value: unknown): Record<string, unknown> => {
 };
 const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const nullableText = (value: unknown): value is string | null => value === null || typeof value === 'string';
+const nullableDate = (value: unknown): value is string | null =>
+  value === null || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value));
 const version = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 1;
 const tags = (value: unknown): value is string[] => Array.isArray(value) && value.every(text);
 const assignmentTimestamp = (value: unknown): string | null => {
@@ -42,7 +44,7 @@ export const programmeHubColumns = {
   advisers: 'id,workspace_id,programme_id,user_id,active,version',
   employers: 'id,workspace_id,programme_id,employer_key,display_name,sector_key,primary_geography_key,active,version',
   contacts: 'id,workspace_id,programme_id,employer_id,contact_key,preferred_name,role_title,business_email,business_phone,suppressed,suppression_reason_key,active,version',
-  vacancies: 'id,workspace_id,programme_id,employer_id,employer_contact_id,vacancy_key,title,work_geography_key,required_skill_keys,desired_skill_keys,active,version',
+  vacancies: 'id,workspace_id,programme_id,employer_id,employer_contact_id,vacancy_key,title,work_geography_key,required_skill_keys,desired_skill_keys,source_text,source_url,source_added_at,published_pay,published_shifts,closing_date,active,version',
   participants: 'id,workspace_id,programme_id,participant_key,preferred_name,case_reference,desired_role_keys,skill_keys,vacancy_search_geography_keys,residency_evidence_reference,active,version',
   participantAdvisers: 'id,workspace_id,programme_id,participant_id,adviser_user_id,active,version,created_at,updated_at',
   participantNotes: 'id,workspace_id,programme_id,participant_id,body,author_user_id,created_at,version',
@@ -110,8 +112,14 @@ export async function loadProgrammeHubData(workspaceId: string, gateway: Program
     return { id: row.id as string, workspaceId, programmeId: row.programme_id, employerId: row.employer_id, contactKey: row.contact_key, preferredName: row.preferred_name, roleTitle: row.role_title, businessEmail: row.business_email, businessPhone: row.business_phone, suppressed: row.suppressed, suppressionReasonKey: row.suppression_reason_key, active: row.active as boolean, version: row.version as number };
   });
   const vacancies = rows(vacancyRows).map((row): ProgrammeHubVacancy => {
-    if (!common(row, workspaceId) || !id(row.programme_id) || !id(row.employer_id) || !(row.employer_contact_id === null || id(row.employer_contact_id)) || !text(row.vacancy_key) || !text(row.title) || !nullableText(row.work_geography_key) || !tags(row.required_skill_keys) || !tags(row.desired_skill_keys)) throw new Error('Invalid Programme Hub vacancy.');
-    return { id: row.id as string, workspaceId, programmeId: row.programme_id, employerId: row.employer_id, employerContactId: row.employer_contact_id, vacancyKey: row.vacancy_key, title: row.title, workGeographyKey: row.work_geography_key, requiredSkillKeys: row.required_skill_keys, desiredSkillKeys: row.desired_skill_keys, active: row.active as boolean, version: row.version as number };
+    const sourceText = row.source_text ?? null;
+    const sourceUrl = row.source_url ?? null;
+    const sourceAddedAt = row.source_added_at ?? null;
+    const publishedPay = row.published_pay ?? null;
+    const publishedShifts = row.published_shifts ?? null;
+    const closingDate = row.closing_date ?? null;
+    if (!common(row, workspaceId) || !id(row.programme_id) || !id(row.employer_id) || !(row.employer_contact_id === null || id(row.employer_contact_id)) || !text(row.vacancy_key) || !text(row.title) || !nullableText(row.work_geography_key) || !tags(row.required_skill_keys) || !tags(row.desired_skill_keys) || !nullableText(sourceText) || !nullableText(sourceUrl) || !nullableText(sourceAddedAt) || !nullableText(publishedPay) || !nullableText(publishedShifts) || !nullableDate(closingDate)) throw new Error('Invalid Programme Hub vacancy.');
+    return { id: row.id as string, workspaceId, programmeId: row.programme_id, employerId: row.employer_id, employerContactId: row.employer_contact_id, vacancyKey: row.vacancy_key, title: row.title, workGeographyKey: row.work_geography_key, requiredSkillKeys: row.required_skill_keys, desiredSkillKeys: row.desired_skill_keys, sourceText, sourceUrl, sourceAddedAt, publishedPay, publishedShifts, closingDate, active: row.active as boolean, version: row.version as number };
   });
   const participants = rows(participantRows).map((row): ProgrammeHubParticipant => {
     if (!common(row, workspaceId) || !id(row.programme_id) || !text(row.participant_key) || !text(row.preferred_name) || !text(row.case_reference) || !tags(row.desired_role_keys) || !tags(row.skill_keys) || !tags(row.vacancy_search_geography_keys) || !nullableText(row.residency_evidence_reference)) throw new Error('Invalid Programme Hub participant.');

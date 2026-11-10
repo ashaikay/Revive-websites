@@ -48,7 +48,9 @@ const blankProgramme = { name: '', timezone: 'Europe/London', brandingName: '', 
 const blankEmployer = { employerKey: '', displayName: '', sectorKey: '', primaryGeographyKey: '', active: true };
 const blankContact = { employerId: '', contactKey: '', preferredName: '', roleTitle: '', businessEmail: '', businessPhone: '', suppressed: false, suppressionReasonKey: '', active: true };
 const blankVacancy = { employerId: '', employerContactId: '', vacancyKey: '', title: '', workGeographyKey: '', requiredSkillKeys: '', desiredSkillKeys: '', active: true };
+const blankJobAdvert = { sourceText: '', sourceUrl: '', employerId: '', employerContactId: '', vacancyKey: '', title: '', workGeographyKey: '', publishedPay: '', publishedShifts: '', requiredSkillKeys: '', closingDate: '' };
 const blankParticipant = { participantKey: '', preferredName: '', caseReference: '', desiredRoleKeys: '', skillKeys: '', vacancySearchGeographyKeys: '', residencyEvidenceReference: '', active: true };
+const duplicateText = (value: string | null) => (value ?? '').trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const programmeSelectionKey = (workspaceId: string, userId: string) => `rev-programme-hub-selection:${workspaceId}:${userId}`;
 const programmeIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -97,6 +99,8 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const [contactDraft, setContactDraft] = useState(blankContact);
   const [vacancyEdit, setVacancyEdit] = useState<ProgrammeHubVacancy | null>(null);
   const [vacancyDraft, setVacancyDraft] = useState(blankVacancy);
+  const [jobAdvertDraft, setJobAdvertDraft] = useState(blankJobAdvert);
+  const [jobAdvertReview, setJobAdvertReview] = useState(false);
   const [participantEdit, setParticipantEdit] = useState<ProgrammeHubParticipant | null>(null);
   const [participantDraft, setParticipantDraft] = useState(blankParticipant);
   const [adviserUserId, setAdviserUserId] = useState('');
@@ -247,6 +251,15 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const programmeEmployers = data.employers.filter((item) => item.programmeId === selectedProgrammeId);
   const programmeContacts = data.contacts.filter((item) => item.programmeId === selectedProgrammeId);
   const programmeVacancies = data.vacancies.filter((item) => item.programmeId === selectedProgrammeId);
+  const likelyJobAdvertDuplicates = programmeVacancies.filter((vacancy) => {
+    const sameSource = !!jobAdvertDraft.sourceUrl && duplicateText(vacancy.sourceUrl) === duplicateText(jobAdvertDraft.sourceUrl);
+    const sameEmployerAndRole = vacancy.employerId === jobAdvertDraft.employerId &&
+      duplicateText(vacancy.title) === duplicateText(jobAdvertDraft.title);
+    const sameRoleAndLocation = !!jobAdvertDraft.workGeographyKey &&
+      duplicateText(vacancy.title) === duplicateText(jobAdvertDraft.title) &&
+      duplicateText(vacancy.workGeographyKey) === duplicateText(jobAdvertDraft.workGeographyKey);
+    return sameSource || sameEmployerAndRole || sameRoleAndLocation;
+  });
   const programmeParticipants = data.participants.filter((item) => item.programmeId === selectedProgrammeId);
   const programmeAdvisers = data.advisers.filter((item) => item.programmeId === selectedProgrammeId);
   const activeProgrammeAdvisers = programmeAdvisers.filter((adviser) => adviser.active && data.members.some((member) => member.userId === adviser.userId && member.status === 'active'));
@@ -274,7 +287,7 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const selectedParticipantId = recordParticipantId ?? (openRecordRequest?.programmeId === selectedProgrammeId ? openRecordRequest.participantId : null);
   const selectedParticipants = programmeParticipants.filter((participant) => participant.id === selectedParticipantId);
   const recordNavigationLocked = busy || !!pending || !!participantEdit || contactEditing || employerLocked || teamLocked || !!unassignId || !!adviserStatusId || !!participantStatusId || actionPlanLocked || !!retainedActionPlanId;
-  const pendingArea: ProgrammeArea | null = !pending ? (retainedActionPlanId ? 'caseload' : null) : pending.operation === 'programme' ? 'settings' : pending.operation === 'adviser' || pending.operation === 'participant_adviser' ? 'team' : pending.operation === 'vacancy' ? 'jobs' : pending.operation === 'employer' || pending.operation === 'contact' ? 'employers' : 'caseload';
+  const pendingArea: ProgrammeArea | null = !pending ? (retainedActionPlanId ? 'caseload' : null) : pending.operation === 'programme' ? 'settings' : pending.operation === 'adviser' || pending.operation === 'participant_adviser' ? 'team' : pending.operation === 'vacancy' || pending.operation === 'job_advert_import' ? 'jobs' : pending.operation === 'employer' || pending.operation === 'contact' ? 'employers' : 'caseload';
   const currentArea: ProgrammeArea = teamLocked ? 'team' : employerLocked ? 'employers' : pendingArea ?? area ?? (isManager ? data.programmes.length ? 'team' : 'settings' : 'caseload');
   const changeArea = (next: ProgrammeArea) => {
     if (recordNavigationLocked || ((next === 'settings' || next === 'team' || next === 'vocational') && !isManager)) return;
@@ -408,6 +421,10 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
   const resetEmployer = () => { setEmployerEdit(null); setEmployerDraft(blankEmployer); };
   const resetContact = () => { setContactEdit(null); setContactDraft({ ...blankContact, employerId: programmeEmployers[0]?.id ?? '' }); };
   const resetVacancy = () => { setVacancyEdit(null); setVacancyDraft({ ...blankVacancy, employerId: programmeEmployers[0]?.id ?? '' }); };
+  const resetJobAdvert = () => {
+    setJobAdvertDraft({ ...blankJobAdvert, employerId: programmeEmployers[0]?.id ?? '' });
+    setJobAdvertReview(false);
+  };
   const resetParticipant = () => { setParticipantEdit(null); setParticipantDraft(blankParticipant); };
   const selectProgramme = (programmeId: string) => {
     if (recordNavigationLocked) return;
@@ -423,6 +440,8 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
     setContactDraft(blankContact);
     setVacancyEdit(null);
     setVacancyDraft(blankVacancy);
+    setJobAdvertDraft(blankJobAdvert);
+    setJobAdvertReview(false);
     resetParticipant();
     setAssignmentParticipantId('');
     setAssignmentAdviserId('');
@@ -481,6 +500,32 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       attempt('vacancy', selectedProgramme.id, vacancyEdit?.id ?? null, vacancyEdit?.version ?? 0, payload),
       vacancyEdit ? 'Vacancy updated.' : 'Vacancy created.',
     ).then((confirmed) => { if (confirmed) resetVacancy(); });
+  };
+  const reviewJobAdvert = (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedProgramme) return;
+    if (!validateForm(event.currentTarget as HTMLFormElement, [
+      [jobAdvertDraft.sourceText, 'the pasted job advert'],
+      [jobAdvertDraft.employerId, 'an employer'],
+      [jobAdvertDraft.vacancyKey, 'a Job opportunity reference'],
+      [jobAdvertDraft.title, 'a role title'],
+    ])) return;
+    setError('');
+    setMessage('');
+    setFeedbackTarget('job_advert_import');
+    setJobAdvertReview(true);
+  };
+  const confirmJobAdvert = () => {
+    if (!selectedProgramme || !jobAdvertReview) return;
+    const payload = {
+      ...jobAdvertDraft,
+      requiredSkillKeys: splitKeys(jobAdvertDraft.requiredSkillKeys),
+    };
+    void saveAttempt(
+      attempt('job_advert_import', selectedProgramme.id, null, 0, payload),
+      'Reviewed job advert saved. It is now available in opportunity review.',
+      'job_advert_import',
+    ).then((confirmed) => { if (confirmed) resetJobAdvert(); });
   };
   const saveParticipant = (event: FormEvent) => {
     event.preventDefault();
@@ -873,6 +918,45 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
       </div>
       <div hidden={currentArea !== 'jobs'} className="space-y-6">
         {selectedProgramme && canMaintainEmployerRecords && (
+          <>
+          <section className="card p-5">
+            <h2 className="text-xl font-semibold">Import a reviewed job advert</h2>
+            <p className="mt-1 text-sm text-neutral-600">Paste the advert, then record only what it states. REV does not fetch the URL, extract details automatically or independently verify the vacancy.</p>
+            <details className="mt-4" open={jobAdvertReview || feedbackTarget === 'job_advert_import'} onToggle={(event) => {
+              if (!event.currentTarget.open && (jobAdvertReview || (feedbackTarget === 'job_advert_import' && (busy || !!pending)))) event.currentTarget.open = true;
+            }}>
+              <summary className="cursor-pointer font-medium">Paste and review job advert</summary>
+              <form className="mt-3 grid gap-3 md:grid-cols-3" data-save-target="job_advert_import" noValidate onSubmit={reviewJobAdvert}>
+                {!jobAdvertReview ? <>
+                  <div className="md:col-span-3"><Field label="Job advert text"><textarea disabled={busy || !!pending} required maxLength={20000} rows={10} className={inputClass} value={jobAdvertDraft.sourceText} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, sourceText: event.target.value })} /></Field></div>
+                  <div className="md:col-span-3"><Field label="Source URL (optional)"><input disabled={busy || !!pending} type="url" maxLength={2000} className={inputClass} value={jobAdvertDraft.sourceUrl} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, sourceUrl: event.target.value })} /></Field></div>
+                  <Field label="Employer"><select disabled={busy || !!pending} required className={inputClass} value={jobAdvertDraft.employerId} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, employerId: event.target.value, employerContactId: '' })}><option value="">Select existing programme employer</option>{programmeEmployers.filter((employer) => employer.active).map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
+                  <Field label="Employer contact (optional)"><select disabled={busy || !!pending} className={inputClass} value={jobAdvertDraft.employerContactId} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, employerContactId: event.target.value })}><option value="">Not provided</option>{programmeContacts.filter((contact) => contact.employerId === jobAdvertDraft.employerId && contact.active).map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}</option>)}</select></Field>
+                  <Field label="Job record reference"><input disabled={busy || !!pending} required maxLength={120} className={inputClass} value={jobAdvertDraft.vacancyKey} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, vacancyKey: event.target.value })} /></Field>
+                  <Field label="Role"><input disabled={busy || !!pending} required maxLength={200} className={inputClass} value={jobAdvertDraft.title} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, title: event.target.value })} /></Field>
+                  <Field label="Location"><input disabled={busy || !!pending} maxLength={120} placeholder="Not provided" className={inputClass} value={jobAdvertDraft.workGeographyKey} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, workGeographyKey: event.target.value })} /></Field>
+                  <Field label="Published pay"><input disabled={busy || !!pending} maxLength={500} placeholder="Not provided" className={inputClass} value={jobAdvertDraft.publishedPay} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, publishedPay: event.target.value })} /></Field>
+                  <Field label="Published shifts"><textarea disabled={busy || !!pending} maxLength={1000} rows={3} placeholder="Not provided" className={inputClass} value={jobAdvertDraft.publishedShifts} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, publishedShifts: event.target.value })} /></Field>
+                  <Field label="Required skills (comma separated)"><textarea disabled={busy || !!pending} rows={3} placeholder="Not provided" className={inputClass} value={jobAdvertDraft.requiredSkillKeys} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, requiredSkillKeys: event.target.value })} /></Field>
+                  <Field label="Stated closing date"><input disabled={busy || !!pending} type="date" className={inputClass} value={jobAdvertDraft.closingDate} onChange={(event) => setJobAdvertDraft({ ...jobAdvertDraft, closingDate: event.target.value })} /></Field>
+                  <div className="md:col-span-3 flex flex-wrap gap-2"><button className="btn-primary focus-visible:ring-2 active:scale-[0.98] disabled:cursor-not-allowed" disabled={busy || !!pending}>Review before saving</button><button type="button" className="btn-secondary" disabled={busy || !!pending} onClick={resetJobAdvert}>Clear</button></div>
+                </> : <div className="md:col-span-3 rounded border border-neutral-200 bg-neutral-50 p-4">
+                  <h3 className="font-semibold">Confirm reviewed job advert</h3>
+                  <p className="mt-1 text-sm text-neutral-600">This records staff-confirmed fields alongside the original pasted wording. It does not mark the vacancy as independently verified.</p>
+                  {likelyJobAdvertDuplicates.length > 0 && <div role="alert" className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><strong>Possible duplicate:</strong> {likelyJobAdvertDuplicates.map((vacancy) => `${vacancy.title} (${vacancy.vacancyKey})`).join(', ')}. Check the existing record before confirming.</div>}
+                  <DetailFields fields={[
+                    ['Employer', programmeEmployers.find((employer) => employer.id === jobAdvertDraft.employerId)?.displayName],
+                    ['Role', jobAdvertDraft.title], ['Location', jobAdvertDraft.workGeographyKey],
+                    ['Published pay', jobAdvertDraft.publishedPay], ['Published shifts', jobAdvertDraft.publishedShifts],
+                    ['Required skills', splitKeys(jobAdvertDraft.requiredSkillKeys)], ['Stated closing date', jobAdvertDraft.closingDate],
+                    ['Source URL', jobAdvertDraft.sourceUrl], ['Source advert wording', jobAdvertDraft.sourceText],
+                  ]} />
+                  <div className="mt-4 flex flex-wrap gap-2"><button type="button" className="btn-primary" disabled={busy || !!pending} onClick={confirmJobAdvert}>{busy && feedbackTarget === 'job_advert_import' ? 'Saving...' : 'Confirm and save'}</button><button type="button" className="btn-secondary" disabled={busy || !!pending} onClick={() => setJobAdvertReview(false)}>Edit details</button></div>
+                </div>}
+                {renderSaveFeedback('job_advert_import')}
+              </form>
+            </details>
+          </section>
           <RecordSection formLocked={feedbackTarget === 'vacancy' && (busy || !!pending)} formLabel="Add job opportunity" formOpen={!!vacancyEdit || (feedbackTarget === 'vacancy' && (busy || !!pending || !!error || !!message))} title="Job opportunities" empty="No Job opportunities have been added to this programme." form={<form className="grid gap-3 md:grid-cols-3" data-save-target="vacancy" noValidate onSubmit={saveVacancy}>
             <Field label="Employer"><select disabled={busy || !!pending} required className={inputClass} value={vacancyDraft.employerId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerId: event.target.value, employerContactId: '' })}><option value="">Select employer</option>{programmeEmployers.map((employer) => <option key={employer.id} value={employer.id}>{employer.displayName}</option>)}</select></Field>
             <Field label="Employer contact"><select disabled={busy || !!pending} className={inputClass} value={vacancyDraft.employerContactId} onChange={(event) => setVacancyDraft({ ...vacancyDraft, employerContactId: event.target.value })}><option value="">No contact selected</option>{programmeContacts.filter((contact) => contact.employerId === vacancyDraft.employerId).map((contact) => <option key={contact.id} value={contact.id}>{contact.preferredName}</option>)}</select></Field>
@@ -886,10 +970,14 @@ export function ProgrammeHubModule({ workspaceId, userId }: { workspaceId: strin
             {programmeVacancies.map((vacancy) => <RecordRow key={vacancy.id} title={vacancy.title} detail={vacancy.workGeographyKey ? `Work area: ${vacancy.workGeographyKey}` : 'Work area needs review'} edit={() => editVacancy(vacancy)} fields={[
               ['Job opportunity reference', vacancy.vacancyKey], ['Employer', programmeEmployers.find((employer) => employer.id === vacancy.employerId)?.displayName],
               ['Employer contact', programmeContacts.find((contact) => contact.id === vacancy.employerContactId)?.preferredName],
-              ['Work area', vacancy.workGeographyKey], ['Required skills', vacancy.requiredSkillKeys], ['Helpful skills', vacancy.desiredSkillKeys],
+              ['Work area', vacancy.workGeographyKey], ['Published pay', vacancy.publishedPay], ['Published shifts', vacancy.publishedShifts],
+              ['Required skills', vacancy.requiredSkillKeys], ['Helpful skills', vacancy.desiredSkillKeys], ['Stated closing date', vacancy.closingDate],
+              ['Source URL', vacancy.sourceUrl], ['Date added', vacancy.sourceAddedAt?.slice(0, 10)], ['Source advert wording', vacancy.sourceText],
+              ['Verification', vacancy.sourceText ? 'Not independently verified' : null],
               ['Record status', vacancy.active ? 'Active' : 'Inactive'],
             ]} />)}
           </RecordSection>
+          </>
         )}
       </div>
 

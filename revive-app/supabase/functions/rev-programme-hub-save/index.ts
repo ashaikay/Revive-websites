@@ -31,7 +31,15 @@ Deno.serve((request) => handleProgrammeHubSave(request, {
     const service = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data, error } = input.target_operation === 'participant_intake'
+    const { data, error } = input.target_operation === 'job_advert_import'
+      ? await service.rpc('save_rev_programme_hub_job_advert_import', {
+          target_workspace_id: input.target_workspace_id,
+          initiating_user_id: input.initiating_user_id,
+          target_request_id: input.target_request_id,
+          target_programme_id: input.target_programme_id,
+          target_payload: input.target_payload,
+        })
+      : input.target_operation === 'participant_intake'
       ? await service.rpc('save_rev_programme_hub_es_participant_intake', {
           target_workspace_id: input.target_workspace_id,
           initiating_user_id: input.initiating_user_id,

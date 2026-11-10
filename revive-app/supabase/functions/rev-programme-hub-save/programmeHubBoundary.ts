@@ -4,6 +4,7 @@ export type ProgrammeHubOperation =
   | 'employer'
   | 'contact'
   | 'vacancy'
+  | 'job_advert_import'
   | 'participant'
   | 'participant_intake'
   | 'participant_adviser'
@@ -79,13 +80,29 @@ export function classifyProgrammeHubDatabaseError(
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const operations: ProgrammeHubOperation[] = ['programme', 'adviser', 'employer', 'contact', 'vacancy', 'participant', 'participant_intake', 'participant_adviser', 'participant_note', 'participant_contact'];
+const operations: ProgrammeHubOperation[] = ['programme', 'adviser', 'employer', 'contact', 'vacancy', 'job_advert_import', 'participant', 'participant_intake', 'participant_adviser', 'participant_note', 'participant_contact'];
 const validId = (value: unknown): value is string => typeof value === 'string' && uuid.test(value);
 const text = (value: unknown, max: number, optional = false): value is string =>
   typeof value === 'string' && ((optional && value === '') || (value.length >= 1 && value.length <= max && value.trim() === value));
 const tags = (value: unknown): value is string[] =>
   Array.isArray(value) && value.length <= 50 &&
   value.every((item) => text(item, 120)) && new Set(value).size === value.length;
+const sourceUrl = (value: unknown): value is string => {
+  if (value === '') return true;
+  if (!text(value, 2000)) return false;
+  try {
+    const parsed = new URL(value);
+    return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+};
+const date = (value: unknown): value is string => {
+  if (value === '') return true;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
 const exact = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).sort().join(',') === [...keys].sort().join(',');
 
 function validPayload(operation: ProgrammeHubOperation, payload: unknown): payload is Record<string, unknown> {
@@ -116,6 +133,14 @@ function validPayload(operation: ProgrammeHubOperation, payload: unknown): paylo
         validId(value.employerId) && (value.employerContactId === '' || validId(value.employerContactId)) &&
         text(value.vacancyKey, 120) && text(value.title, 200) && text(value.workGeographyKey, 120, true) &&
         tags(value.requiredSkillKeys) && tags(value.desiredSkillKeys) && typeof value.active === 'boolean';
+    case 'job_advert_import':
+      return exact(value, ['employerId', 'employerContactId', 'vacancyKey', 'title', 'workGeographyKey', 'publishedPay', 'publishedShifts', 'requiredSkillKeys', 'closingDate', 'sourceText', 'sourceUrl']) &&
+        validId(value.employerId) && (value.employerContactId === '' || validId(value.employerContactId)) &&
+        text(value.vacancyKey, 120) && text(value.title, 200) && text(value.workGeographyKey, 120, true) &&
+        text(value.publishedPay, 500, true) && text(value.publishedShifts, 1000, true) &&
+        tags(value.requiredSkillKeys) && date(value.closingDate) &&
+        typeof value.sourceText === 'string' && value.sourceText.trim().length > 0 && value.sourceText.length <= 20000 &&
+        sourceUrl(value.sourceUrl);
     case 'participant':
     case 'participant_intake':
       return exact(value, ['participantKey', 'preferredName', 'caseReference', 'desiredRoleKeys', 'skillKeys', 'vacancySearchGeographyKeys', 'residencyEvidenceReference', 'active']) &&
@@ -183,6 +208,7 @@ export async function handleProgrammeHubSave(request: Request, dependencies: Pro
       (body.recordId === null ? body.expectedVersion !== 0 : body.expectedVersion === 0) ||
       (body.operation === 'participant_note' && (body.recordId !== null || body.expectedVersion !== 0)) ||
       (body.operation === 'participant_intake' && (body.recordId !== null || body.expectedVersion !== 0)) ||
+      (body.operation === 'job_advert_import' && (body.recordId !== null || body.expectedVersion !== 0)) ||
       (body.operation === 'programme' ? body.programmeId !== null : !validId(body.programmeId)) ||
       !validPayload(body.operation as ProgrammeHubOperation, body.payload)) {
       return reply(400, { error: 'Invalid programme record.' });

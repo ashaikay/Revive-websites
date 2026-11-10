@@ -73,6 +73,14 @@ const saveNote = (actorId, workspaceId, programmeId, participantId, body, reques
     target_participant_id: participantId,
     note_body: body,
   });
+const saveJobAdvert = (actorId, workspaceId, programmeId, payload, requestId = randomUUID(), token = serviceKey) =>
+  rpc(token, 'save_rev_programme_hub_job_advert_import', {
+    target_workspace_id: workspaceId,
+    initiating_user_id: actorId,
+    target_request_id: requestId,
+    target_programme_id: programmeId,
+    target_payload: payload,
+  });
 const read = (token, table, workspaceId) => request(token, 'GET', `/rest/v1/${table}?workspace_id=eq.${workspaceId}&select=*`);
 const hasExactRecordIds = (rows, expectedIds) =>
   rows.length === expectedIds.length &&
@@ -127,6 +135,41 @@ const vacancyCreated = await save(adviser.id, workspaceId, 'vacancy', programmeI
   requiredSkillKeys: ['customer_service'], desiredSkillKeys: [], active: true,
 });
 check('ADVISER_CREATES_VACANCY', vacancyCreated.status === 200);
+const importedAdvertPayload = {
+  employerId,
+  employerContactId: '',
+  vacancyKey: 'VAC-IMPORT-001',
+  title: 'Reviewed warehouse role',
+  workGeographyKey: 'Birmingham',
+  publishedPay: '£12.50 per hour',
+  publishedShifts: '',
+  requiredSkillKeys: ['forklift certificate'],
+  closingDate: '2026-12-01',
+  sourceText: 'Reviewed warehouse role in Birmingham. Pay £12.50 per hour. Forklift certificate required.',
+  sourceUrl: 'https://jobs.example.test/vac-import-001',
+};
+const importedAdvertRequestId = randomUUID();
+const adviserImport = await saveJobAdvert(adviser.id, workspaceId, programmeId, importedAdvertPayload, importedAdvertRequestId);
+check('ADVISER_IMPORTS_REVIEWED_JOB_ADVERT', adviserImport.status === 200);
+check('ADVISER_IMPORT_EXACT_REPLAY', (await saveJobAdvert(adviser.id, workspaceId, programmeId, importedAdvertPayload, importedAdvertRequestId)).payload?.record_id === adviserImport.payload?.record_id);
+check('ADVISER_IMPORT_CHANGED_REPLAY_DENIED', (await saveJobAdvert(adviser.id, workspaceId, programmeId, { ...importedAdvertPayload, title: 'Changed role' }, importedAdvertRequestId)).status >= 400);
+check('NON_ADVISER_IMPORT_DENIED', (await saveJobAdvert(otherMember.id, workspaceId, programmeId, { ...importedAdvertPayload, vacancyKey: 'VAC-IMPORT-002' })).status >= 400);
+check('DUPLICATE_JOB_REFERENCE_DENIED', (await saveJobAdvert(owner.id, workspaceId, programmeId, importedAdvertPayload)).status === 409);
+const ownerImport = await saveJobAdvert(owner.id, workspaceId, programmeId, {
+  ...importedAdvertPayload,
+  vacancyKey: 'VAC-IMPORT-003',
+  title: 'Manager reviewed warehouse role',
+  sourceUrl: '',
+});
+check('MANAGER_IMPORTS_REVIEWED_JOB_ADVERT', ownerImport.status === 200);
+const importedRows = (await read(serviceKey, 'programme_hub_vacancies', workspaceId)).rows.filter((row) => row.vacancy_key.startsWith('VAC-IMPORT-'));
+check('IMPORTED_SOURCE_WORDING_PRESERVED', importedRows.length === 2 && importedRows.some((row) =>
+  row.id === adviserImport.payload?.record_id
+  && row.source_text === importedAdvertPayload.sourceText
+  && row.source_url === importedAdvertPayload.sourceUrl
+  && row.source_added_at
+  && row.published_shifts === null
+));
 
 const participantPayload = {
   participantKey: 'PART-001', preferredName: 'Alex', caseReference: 'CASE-001',

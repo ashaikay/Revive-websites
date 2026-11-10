@@ -139,6 +139,47 @@ test('requires exact vacancy fields and refuses invented or malformed geography 
   assert.equal((await handleProgrammeHubSave(request({ ...body, payload: { ...body.payload, postcodeProvesEligibility: true } }), dependencies())).status, 400);
 });
 
+test('accepts a reviewed job advert import without extracting or inventing missing fields', async () => {
+  let captured: ProgrammeHubSaveInput | undefined;
+  const body = {
+    operation: 'job_advert_import',
+    workspaceId,
+    programmeId,
+    recordId: null,
+    requestId,
+    expectedVersion: 0,
+    payload: {
+      employerId: recordId,
+      employerContactId: '',
+      vacancyKey: 'vacancy-import-001',
+      title: 'Warehouse operative',
+      workGeographyKey: '',
+      publishedPay: '£12.50 per hour',
+      publishedShifts: '',
+      requiredSkillKeys: ['forklift certificate'],
+      closingDate: '2026-12-01',
+      sourceText: 'Warehouse operative. £12.50 per hour. Forklift certificate required.',
+      sourceUrl: 'https://jobs.example.test/vacancy-001',
+    },
+  };
+  const response = await handleProgrammeHubSave(request(body), dependencies(async (input) => {
+    captured = input;
+    return { operation: 'job_advert_import', record_id: recordId, workspace_id: workspaceId, programme_id: programmeId, version: 1 };
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(captured?.target_payload, body.payload);
+  assert.equal((await handleProgrammeHubSave(request({ ...body, recordId, expectedVersion: 1 }), dependencies())).status, 400);
+  for (const payload of [
+    { ...body.payload, eligibility: 'assumed' },
+    { ...body.payload, sourceText: '   ' },
+    { ...body.payload, sourceUrl: 'javascript:alert(1)' },
+    { ...body.payload, sourceUrl: 'https://user:password@example.test/job' },
+    { ...body.payload, closingDate: '2026-02-31' },
+  ]) {
+    assert.equal((await handleProgrammeHubSave(request({ ...body, payload }), dependencies())).status, 400);
+  }
+});
+
 test('denies foreign origins, missing authentication and inactive workspace access', async () => {
   const foreign = request(programmeBody, { headers: { Origin: 'https://example.invalid', Authorization: 'Bearer test', 'Content-Type': 'application/json' } });
   assert.equal((await handleProgrammeHubSave(foreign, dependencies())).status, 403);
