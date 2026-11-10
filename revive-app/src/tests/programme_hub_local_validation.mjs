@@ -74,6 +74,9 @@ const saveNote = (actorId, workspaceId, programmeId, participantId, body, reques
     note_body: body,
   });
 const read = (token, table, workspaceId) => request(token, 'GET', `/rest/v1/${table}?workspace_id=eq.${workspaceId}&select=*`);
+const hasExactRecordIds = (rows, expectedIds) =>
+  rows.length === expectedIds.length &&
+  rows.map((row) => row.id).sort().join(',') === [...expectedIds].sort().join(',');
 
 const owner = await identity('owner');
 const adviser = await identity('adviser');
@@ -158,10 +161,12 @@ check('AUTHENTICATED_ADVISER_INTAKE_RPC_DENIED', (await save(adviser.id, workspa
 
 const assignmentCreated = await save(owner.id, workspaceId, 'participant_adviser', programmeId, null, 0, { participantId, adviserUserId: adviser.id, active: true });
 check('OWNER_ASSIGNS_CASELOAD', assignmentCreated.status === 200);
-check('ASSIGNED_ADVISER_READS_PARTICIPANT', (await read(adviser.token, 'programme_hub_participants', workspaceId)).rows.length === 1);
+const adviserParticipants = await read(adviser.token, 'programme_hub_participants', workspaceId);
+check('ASSIGNED_ADVISER_READS_PARTICIPANT', hasExactRecordIds(adviserParticipants.rows, [participantId, adviserIntakeId]));
 check('UNASSIGNED_MEMBER_READS_NO_PARTICIPANTS', (await read(otherMember.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
 check('OUTSIDER_READS_NO_PARTICIPANTS', (await read(outsider.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
-check('OWNER_READS_PROGRAMME_WIDE_PARTICIPANTS', (await read(owner.token, 'programme_hub_participants', workspaceId)).rows.length === 2);
+const ownerParticipants = await read(owner.token, 'programme_hub_participants', workspaceId);
+check('OWNER_READS_PROGRAMME_WIDE_PARTICIPANTS', hasExactRecordIds(ownerParticipants.rows, [participantId, unassignedId, adviserIntakeId]));
 check('ADVISER_READS_PROGRAMME_EMPLOYERS', (await read(adviser.token, 'programme_hub_employers', workspaceId)).rows.length === 1);
 check('NON_ADVISER_READS_NO_EMPLOYERS', (await read(otherMember.token, 'programme_hub_employers', workspaceId)).rows.length === 0);
 
