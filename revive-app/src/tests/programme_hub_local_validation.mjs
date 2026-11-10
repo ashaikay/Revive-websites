@@ -215,6 +215,10 @@ check('DUPLICATE_ADVISER_INTAKE_DENIED', (await save(adviser.id, workspaceId, 'p
 check('NON_ADVISER_INTAKE_DENIED', (await save(otherMember.id, workspaceId, 'participant_intake', programmeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-002', caseReference: 'CASE-ES-002' })).status >= 400);
 const otherProgrammeCreated = await save(owner.id, workspaceId, 'programme', null, null, 0, { ...programmePayload, name: 'Other Synthetic Programme' });
 const otherProgrammeId = id(otherProgrammeCreated.payload?.record_id);
+const otherProgrammeEmployerCreated = await save(owner.id, workspaceId, 'employer', otherProgrammeId, null, 0, {
+  ...employerPayload, employerKey: 'EMP-OTHER-PROGRAMME', displayName: 'Inaccessible Programme Employer',
+});
+const otherProgrammeEmployerId = id(otherProgrammeEmployerCreated.payload?.record_id);
 check('CROSS_PROGRAMME_ADVISER_INTAKE_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', otherProgrammeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-003', caseReference: 'CASE-ES-003' })).status >= 400);
 check('AUTHENTICATED_ADVISER_INTAKE_RPC_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-004', caseReference: 'CASE-ES-004' }, randomUUID(), adviser.token)).status >= 400);
 
@@ -226,7 +230,10 @@ check('UNASSIGNED_MEMBER_READS_NO_PARTICIPANTS', (await read(otherMember.token, 
 check('OUTSIDER_READS_NO_PARTICIPANTS', (await read(outsider.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
 const ownerParticipants = await read(owner.token, 'programme_hub_participants', workspaceId);
 check('OWNER_READS_PROGRAMME_WIDE_PARTICIPANTS', hasExactRecordIds(ownerParticipants.rows, [participantId, unassignedId, adviserIntakeId]));
-check('ADVISER_READS_PROGRAMME_EMPLOYERS', (await read(adviser.token, 'programme_hub_employers', workspaceId)).rows.length === 1);
+const adviserEmployers = await read(adviser.token, 'programme_hub_employers', workspaceId);
+check('ADVISER_READS_PROGRAMME_EMPLOYERS',
+  hasExactRecordIds(adviserEmployers.rows, [employerId, otherEmployerId]) &&
+  !adviserEmployers.rows.some((row) => row.id === otherProgrammeEmployerId));
 check('NON_ADVISER_READS_NO_EMPLOYERS', (await read(otherMember.token, 'programme_hub_employers', workspaceId)).rows.length === 0);
 
 const noteRequestId = randomUUID();
