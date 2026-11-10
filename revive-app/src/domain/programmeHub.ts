@@ -5,6 +5,7 @@ export type ProgrammeHubOperation =
   | 'contact'
   | 'vacancy'
   | 'participant'
+  | 'participant_intake'
   | 'participant_adviser'
   | 'participant_note'
   | 'participant_contact';

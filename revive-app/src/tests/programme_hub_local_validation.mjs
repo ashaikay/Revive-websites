@@ -46,16 +46,24 @@ async function workspace(owner, label) {
   return id(workspaceIdFromCreateResponse(created));
 }
 const save = (actorId, workspaceId, operation, programmeId, recordId, expectedVersion, payload, requestId = randomUUID(), token = serviceKey) =>
-  rpc(token, 'save_rev_programme_hub_record', {
-    target_operation: operation,
-    target_workspace_id: workspaceId,
-    initiating_user_id: actorId,
-    target_request_id: requestId,
-    target_programme_id: programmeId,
-    target_record_id: recordId,
-    expected_version: expectedVersion,
-    target_payload: payload,
-  });
+  operation === 'participant_intake'
+    ? rpc(token, 'save_rev_programme_hub_es_participant_intake', {
+        target_workspace_id: workspaceId,
+        initiating_user_id: actorId,
+        target_request_id: requestId,
+        target_programme_id: programmeId,
+        target_payload: payload,
+      })
+    : rpc(token, 'save_rev_programme_hub_record', {
+        target_operation: operation,
+        target_workspace_id: workspaceId,
+        initiating_user_id: actorId,
+        target_request_id: requestId,
+        target_programme_id: programmeId,
+        target_record_id: recordId,
+        expected_version: expectedVersion,
+        target_payload: payload,
+      });
 const saveNote = (actorId, workspaceId, programmeId, participantId, body, requestId = randomUUID(), token = serviceKey) =>
   rpc(token, 'save_rev_programme_hub_participant_note', {
     target_workspace_id: workspaceId,
@@ -66,6 +74,9 @@ const saveNote = (actorId, workspaceId, programmeId, participantId, body, reques
     note_body: body,
   });
 const read = (token, table, workspaceId) => request(token, 'GET', `/rest/v1/${table}?workspace_id=eq.${workspaceId}&select=*`);
+const hasExactRecordIds = (rows, expectedIds) =>
+  rows.length === expectedIds.length &&
+  rows.map((row) => row.id).sort().join(',') === [...expectedIds].sort().join(',');
 
 const owner = await identity('owner');
 const adviser = await identity('adviser');
@@ -129,12 +140,33 @@ const unassignedCreated = await save(owner.id, workspaceId, 'participant', progr
 const unassignedId = id(unassignedCreated.payload?.record_id);
 check('ADVISER_CANNOT_CREATE_PARTICIPANT', (await save(adviser.id, workspaceId, 'participant', programmeId, null, 0, { ...participantPayload, participantKey: 'PART-003', caseReference: 'CASE-003' })).status >= 400);
 
+const adviserIntakePayload = { ...participantPayload, participantKey: 'PART-ES-001', caseReference: 'CASE-ES-001', preferredName: 'Jordan' };
+const adviserIntakeRequestId = randomUUID();
+const adviserIntake = await Promise.all([
+  save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, adviserIntakePayload, adviserIntakeRequestId),
+  save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, adviserIntakePayload, adviserIntakeRequestId),
+]);
+check('ACTIVE_ADVISER_INTAKE_EXACT_REPLAY', adviserIntake.every((value) => value.status === 200) && adviserIntake[0].payload?.record_id === adviserIntake[1].payload?.record_id);
+const adviserIntakeId = id(adviserIntake[0].payload?.record_id);
+const intakeParticipants = await request(serviceKey, 'GET', `/rest/v1/programme_hub_participants?workspace_id=eq.${workspaceId}&id=eq.${adviserIntakeId}&select=id,created_by_user_id`);
+const intakeAssignments = await request(serviceKey, 'GET', `/rest/v1/programme_hub_participant_advisers?workspace_id=eq.${workspaceId}&participant_id=eq.${adviserIntakeId}&select=participant_id,adviser_user_id,active`);
+check('ACTIVE_ADVISER_INTAKE_ATOMIC_SELF_ASSIGNMENT', intakeParticipants.rows.length === 1 && intakeParticipants.rows[0].created_by_user_id === adviser.id && intakeAssignments.rows.length === 1 && intakeAssignments.rows[0].adviser_user_id === adviser.id && intakeAssignments.rows[0].active === true);
+check('CHANGED_ADVISER_INTAKE_REPLAY_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, { ...adviserIntakePayload, preferredName: 'Changed' }, adviserIntakeRequestId)).status >= 400);
+check('DUPLICATE_ADVISER_INTAKE_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, adviserIntakePayload)).status >= 400);
+check('NON_ADVISER_INTAKE_DENIED', (await save(otherMember.id, workspaceId, 'participant_intake', programmeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-002', caseReference: 'CASE-ES-002' })).status >= 400);
+const otherProgrammeCreated = await save(owner.id, workspaceId, 'programme', null, null, 0, { ...programmePayload, name: 'Other Synthetic Programme' });
+const otherProgrammeId = id(otherProgrammeCreated.payload?.record_id);
+check('CROSS_PROGRAMME_ADVISER_INTAKE_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', otherProgrammeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-003', caseReference: 'CASE-ES-003' })).status >= 400);
+check('AUTHENTICATED_ADVISER_INTAKE_RPC_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-004', caseReference: 'CASE-ES-004' }, randomUUID(), adviser.token)).status >= 400);
+
 const assignmentCreated = await save(owner.id, workspaceId, 'participant_adviser', programmeId, null, 0, { participantId, adviserUserId: adviser.id, active: true });
 check('OWNER_ASSIGNS_CASELOAD', assignmentCreated.status === 200);
-check('ASSIGNED_ADVISER_READS_PARTICIPANT', (await read(adviser.token, 'programme_hub_participants', workspaceId)).rows.length === 1);
+const adviserParticipants = await read(adviser.token, 'programme_hub_participants', workspaceId);
+check('ASSIGNED_ADVISER_READS_PARTICIPANT', hasExactRecordIds(adviserParticipants.rows, [participantId, adviserIntakeId]));
 check('UNASSIGNED_MEMBER_READS_NO_PARTICIPANTS', (await read(otherMember.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
 check('OUTSIDER_READS_NO_PARTICIPANTS', (await read(outsider.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
-check('OWNER_READS_PROGRAMME_WIDE_PARTICIPANTS', (await read(owner.token, 'programme_hub_participants', workspaceId)).rows.length === 2);
+const ownerParticipants = await read(owner.token, 'programme_hub_participants', workspaceId);
+check('OWNER_READS_PROGRAMME_WIDE_PARTICIPANTS', hasExactRecordIds(ownerParticipants.rows, [participantId, unassignedId, adviserIntakeId]));
 check('ADVISER_READS_PROGRAMME_EMPLOYERS', (await read(adviser.token, 'programme_hub_employers', workspaceId)).rows.length === 1);
 check('NON_ADVISER_READS_NO_EMPLOYERS', (await read(otherMember.token, 'programme_hub_employers', workspaceId)).rows.length === 0);
 
@@ -231,6 +263,7 @@ check('AUDIT_HISTORY_RECORDED', audits.status === 200 && audits.rows.length >= 8
 
 await request(serviceKey, 'PATCH', `/rest/v1/workspace_members?workspace_id=eq.${workspaceId}&user_id=eq.${adviser.id}`, { status: 'suspended' });
 check('SUSPENDED_ADVISER_WRITE_DENIED', (await save(adviser.id, workspaceId, 'employer', programmeId, null, 0, { ...employerPayload, employerKey: 'EMP-003' })).status >= 400);
+check('SUSPENDED_ADVISER_INTAKE_REPLAY_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, adviserIntakePayload, adviserIntakeRequestId)).status >= 400);
 check('SUSPENDED_ADVISER_READ_DENIED', (await read(adviser.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
 check('CONTACT_SUSPENDED_ADVISER_READ_DENIED', (await read(adviser.token, 'programme_hub_participant_contacts', workspaceId)).rows.length === 0);
 check('CONTACT_SUSPENDED_ADVISER_REPLAY_DENIED', (await saveParticipantContact(adviser.id, workspaceId, programmeId, null, 0, contactPayload, contactRequestId)).status >= 400);
