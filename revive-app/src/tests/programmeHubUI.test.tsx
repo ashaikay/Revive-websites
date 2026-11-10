@@ -1564,3 +1564,38 @@ it('requires confirmed ES unassignment before offering a replacement and preserv
   expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
   expect(screen.queryByRole('group',{name:'Confirm ES unassignment'})).toBeNull();
 });
+
+it('removes and restores programme ES access without deleting caseload history', async () => {
+  setRows('owner', true);
+  mocks.rows.workspace_members.push({workspace_id:workspaceId,user_id:adviserId,role:'member',status:'active'});
+  mocks.rows.programme_hub_advisers=[{id:savedId,workspace_id:workspaceId,programme_id:programmeId,user_id:adviserId,active:true,version:1}];
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId}/>, 'My team');
+  const specialistList=screen.getByLabelText('Programme Employment Specialists');
+  fireEvent.click(within(specialistList).getByRole('button',{name:'Remove from programme'}));
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  const confirmation=screen.getByRole('group',{name:'Confirm Employment Specialist removal'});
+  expect(confirmation).toHaveTextContent('Existing records and caseload links remain saved');
+  mocks.invoke.mockImplementationOnce(async (_name:string,{body}:{body:Record<string,unknown>})=>{
+    expect(body).toMatchObject({operation:'adviser',recordId:savedId,expectedVersion:1,payload:{userId:adviserId,active:false}});
+    const adviser=mocks.rows.programme_hub_advisers[0] as Record<string,unknown>;
+    adviser.active=false;adviser.version=2;
+    return {data:{operation:'adviser',recordId:savedId,workspaceId,programmeId,version:2},error:null};
+  });
+  fireEvent.click(within(confirmation).getByRole('button',{name:'Confirm removal'}));
+  expect(await screen.findByText(/Employment Specialist removed from this programme/)).toBeVisible();
+  expect(mocks.rows.programme_hub_advisers).toHaveLength(1);
+  expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
+
+  expect(screen.getByText('Add ES to programme (0)',{selector:'summary'})).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Organisation member to add as Employment Specialist'),{target:{value:adviserId}});
+  mocks.invoke.mockImplementationOnce(async (_name:string,{body}:{body:Record<string,unknown>})=>{
+    expect(body).toMatchObject({operation:'adviser',recordId:savedId,expectedVersion:2,payload:{userId:adviserId,active:true}});
+    const adviser=mocks.rows.programme_hub_advisers[0] as Record<string,unknown>;
+    adviser.active=true;adviser.version=3;
+    return {data:{operation:'adviser',recordId:savedId,workspaceId,programmeId,version:3},error:null};
+  });
+  fireEvent.click(screen.getByRole('button',{name:'Add Employment Specialist'}));
+  expect(await screen.findByText('Employment Specialist restored to this programme.')).toBeVisible();
+  expect(mocks.rows.programme_hub_advisers).toHaveLength(1);
+  expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
+});

@@ -256,6 +256,17 @@ await request(serviceKey, 'PATCH', `/rest/v1/programme_hub_participant_advisers?
 const contactAudits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=eq.programme_hub.participant_contact.saved&select=metadata`);
 check('CONTACT_AUDIT_EXCLUDES_CONTACT_CONTENT', contactAudits.status === 200 && contactAudits.rows.length === 3 && contactAudits.rows.every((row) => Object.keys(row.metadata).sort().join(',') === 'participant_id,programme_id,request_id,version'));
 
+const adviserRecordId = id(adviserAdded.payload?.record_id);
+const adviserRemoved = await save(owner.id, workspaceId, 'adviser', programmeId, adviserRecordId, 1, { userId: adviser.id, active: false });
+check('OWNER_REMOVES_PROGRAMME_ADVISER', adviserRemoved.status === 200 && adviserRemoved.payload?.version === 2);
+check('REMOVED_PROGRAMME_ADVISER_READ_DENIED', (await read(adviser.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
+const preservedAdviser = await request(serviceKey, 'GET', `/rest/v1/programme_hub_advisers?workspace_id=eq.${workspaceId}&id=eq.${adviserRecordId}&select=id,active,version`);
+const preservedAssignments = await request(serviceKey, 'GET', `/rest/v1/programme_hub_participant_advisers?workspace_id=eq.${workspaceId}&adviser_user_id=eq.${adviser.id}&select=id,active`);
+check('PROGRAMME_ADVISER_HISTORY_PRESERVED', preservedAdviser.rows.length === 1 && preservedAdviser.rows[0].active === false && preservedAdviser.rows[0].version === 2 && preservedAssignments.rows.length === 2);
+check('REMOVED_PROGRAMME_ADVISER_WRITE_DENIED', (await save(adviser.id, workspaceId, 'employer', programmeId, null, 0, { ...employerPayload, employerKey: 'EMP-REMOVED' })).status >= 400);
+const adviserRestored = await save(owner.id, workspaceId, 'adviser', programmeId, adviserRecordId, 2, { userId: adviser.id, active: true });
+check('OWNER_RESTORES_EXISTING_PROGRAMME_ADVISER', adviserRestored.status === 200 && adviserRestored.payload?.record_id === adviserRecordId && adviserRestored.payload?.version === 3);
+
 const contracts = await read(owner.token, 'programme_hub_contracts', workspaceId);
 check('NO_FABRICATED_PROGRAMME_CONTRACTS', contracts.status === 200 && contracts.rows.length === 0);
 const audits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=like.programme_hub.*&select=action,resource_type,metadata`);
