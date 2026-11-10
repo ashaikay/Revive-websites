@@ -287,7 +287,9 @@ const reactivated = await save(owner.id, workspaceId, 'participant', programmeId
 check('MANAGER_REACTIVATES_PARTICIPANT', reactivated.status === 200 && reactivated.payload?.version === 4);
 check('REACTIVATION_DOES_NOT_RESTORE_REMOVED_ES_ACCESS', hasExactRecordIds((await read(adviser.token, 'programme_hub_participants', workspaceId)).rows, [adviserIntakeId]));
 const lifecycleAudits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=in.(programme_hub.participant.archived,programme_hub.participant.reactivated)&select=action,resource_id`);
-check('ARCHIVE_REACTIVATE_AUDIT_HISTORY', lifecycleAudits.rows.length === 2 && lifecycleAudits.rows.every((row) => row.resource_id === participantId));
+check('ARCHIVE_REACTIVATE_AUDIT_HISTORY', lifecycleAudits.rows.length === 2 &&
+  new Set(lifecycleAudits.rows.map((row) => row.action)).size === 2 &&
+  lifecycleAudits.rows.every((row) => row.resource_id === participantId));
 
 const adviserRecordId = id(adviserAdded.payload?.record_id);
 const adviserRemoved = await save(owner.id, workspaceId, 'adviser', programmeId, adviserRecordId, 1, { userId: adviser.id, active: false });
@@ -303,7 +305,12 @@ check('OWNER_RESTORES_EXISTING_PROGRAMME_ADVISER', adviserRestored.status === 20
 const contracts = await read(owner.token, 'programme_hub_contracts', workspaceId);
 check('NO_FABRICATED_PROGRAMME_CONTRACTS', contracts.status === 200 && contracts.rows.length === 0);
 const audits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=like.programme_hub.*&select=action,resource_type,metadata`);
-check('AUDIT_HISTORY_RECORDED', audits.status === 200 && audits.rows.length >= 8 && audits.rows.every((row) => row.metadata?.request_id && row.metadata?.version));
+const lifecycleActions = new Set(['programme_hub.participant.archived', 'programme_hub.participant.reactivated']);
+const versionedRequestAudits = audits.rows.filter((row) => !lifecycleActions.has(row.action));
+check('AUDIT_HISTORY_RECORDED', audits.status === 200 &&
+  audits.rows.filter((row) => lifecycleActions.has(row.action)).length === 2 &&
+  versionedRequestAudits.length >= 8 &&
+  versionedRequestAudits.every((row) => row.metadata?.request_id && row.metadata?.version));
 
 await request(serviceKey, 'PATCH', `/rest/v1/workspace_members?workspace_id=eq.${workspaceId}&user_id=eq.${adviser.id}`, { status: 'suspended' });
 check('SUSPENDED_ADVISER_WRITE_DENIED', (await save(adviser.id, workspaceId, 'employer', programmeId, null, 0, { ...employerPayload, employerKey: 'EMP-003' })).status >= 400);
