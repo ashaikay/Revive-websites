@@ -1510,10 +1510,11 @@ it('keeps dashboard totals, rows and pages in the selected specialist, status an
   const overview=screen.getByLabelText('Caseload overview');
   const total=()=>within(within(overview).getByRole('group',{name:'Caseload totals'})).getByText('Service users').parentElement!;
   const rows=()=>within(overview).getAllByRole('button',{name:'Open Service-user record'});
-  expect(total()).toHaveTextContent(/^5Service users$/);expect(rows()).toHaveLength(5);
+  expect(screen.getByLabelText('Record status')).toHaveValue('active');
+  expect(total()).toHaveTextContent(/^4Service users$/);expect(rows()).toHaveLength(4);
   const specialist=screen.getByLabelText('View ES caseload');
   fireEvent.change(specialist,{target:{value:ownerId}});
-  expect(total()).toHaveTextContent(/^3Service users$/);expect(rows()).toHaveLength(3);
+  expect(total()).toHaveTextContent(/^2Service users$/);expect(rows()).toHaveLength(2);
   expect(within(overview).getByText('Shared: CASE-0')).toBeVisible();
   fireEvent.change(specialist,{target:{value:adviserId}});
   expect(total()).toHaveTextContent(/^2Service users$/);expect(rows()).toHaveLength(2);
@@ -1598,4 +1599,92 @@ it('removes and restores programme ES access without deleting caseload history',
   expect(await screen.findByText('Employment Specialist restored to this programme.')).toBeVisible();
   expect(mocks.rows.programme_hub_advisers).toHaveLength(1);
   expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
+});
+
+it('archives and reactivates a Service user with confirmation, preserved history and active filtering', async () => {
+  setRows('owner', true);
+  mocks.rows.programme_hub_participant_notes = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, author_user_id: ownerId, body: 'Preserved note', created_at: '2026-11-10T09:00:00Z', version: 1 }];
+  mocks.rows.programme_hub_participant_contacts = [{ id: savedId, workspace_id: workspaceId, programme_id: programmeId, participant_id: participantId, phone: '0121 555 0100', email: null, address_line_1: null, address_line_2: null, town: null, postcode: null, version: 1, created_at: '2026-11-10T09:00:00Z', updated_at: '2026-11-10T09:00:00Z', created_by_user_id: ownerId, updated_by_user_id: ownerId }];
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+  expect(screen.getByLabelText('Record status')).toHaveValue('active');
+  fireEvent.click(screen.getByRole('button', { name: 'Open Service-user record' }));
+  const record = screen.getByLabelText('Selected Service-user record');
+  expect(await within(record).findByText('Preserved note')).toBeVisible();
+  fireEvent.click(within(record).getByRole('button', { name: 'Archive Service user' }));
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  const archiveConfirmation = within(record).getByRole('group', { name: 'Confirm archive' });
+  expect(archiveConfirmation).toHaveTextContent('Notes, vocational answers, action plans and assignment history will remain');
+  mocks.invoke.mockImplementationOnce(async (_name: string, { body }: { body: Record<string, unknown> }) => {
+    expect(body).toMatchObject({
+      operation: 'participant',
+      recordId: participantId,
+      expectedVersion: 1,
+      payload: {
+        participantKey: 'participant-001',
+        preferredName: 'Alex',
+        caseReference: 'CASE-001',
+        desiredRoleKeys: ['retail'],
+        skillKeys: ['customer_service'],
+        vacancySearchGeographyKeys: ['configured-area'],
+        residencyEvidenceReference: '',
+        active: false,
+      },
+    });
+    mocks.rows.programme_hub_participants = [{ ...(mocks.rows.programme_hub_participants[0] as Record<string, unknown>), active: false, version: 2 }];
+    return { data: { operation: 'participant', recordId: participantId, workspaceId, programmeId, version: 2 }, error: null };
+  });
+  fireEvent.click(within(archiveConfirmation).getByRole('button', { name: 'Confirm archive' }));
+  expect(await screen.findByText('Service user archived.')).toBeVisible();
+  expect(screen.getByLabelText('Record status')).toHaveValue('inactive');
+  expect(within(screen.getByLabelText('Caseload overview')).getByText('Alex: CASE-001 - Archived')).toBeVisible();
+  expect(within(record).getByText(/Archived - this record and its history remain available/)).toBeVisible();
+  expect(within(record).queryByRole('button', { name: 'Edit profile' })).toBeNull();
+  expect(within(record).getByText('Preserved note')).toBeVisible();
+  expect(mocks.rows.programme_hub_participant_notes).toHaveLength(1);
+  expect(mocks.rows.programme_hub_participant_contacts).toHaveLength(1);
+  expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
+
+  fireEvent.click(within(record).getByRole('button', { name: 'Reactivate Service user' }));
+  const reactivateConfirmation = within(record).getByRole('group', { name: 'Confirm reactivation' });
+  expect(reactivateConfirmation).toHaveTextContent('removed or suspended will not regain access automatically');
+  mocks.invoke.mockImplementationOnce(async (_name: string, { body }: { body: Record<string, unknown> }) => {
+    expect(body).toMatchObject({ operation: 'participant', recordId: participantId, expectedVersion: 2, payload: { active: true } });
+    mocks.rows.programme_hub_participants = [{ ...(mocks.rows.programme_hub_participants[0] as Record<string, unknown>), active: true, version: 3 }];
+    return { data: { operation: 'participant', recordId: participantId, workspaceId, programmeId, version: 3 }, error: null };
+  });
+  fireEvent.click(within(reactivateConfirmation).getByRole('button', { name: 'Confirm reactivation' }));
+  expect(await screen.findByText('Service user reactivated.')).toBeVisible();
+  expect(screen.getByLabelText('Record status')).toHaveValue('active');
+  expect(within(record).getByRole('button', { name: 'Edit profile' })).toBeVisible();
+  expect(mocks.rows.programme_hub_participant_advisers).toHaveLength(1);
+});
+
+it('does not expose Service-user archive controls to an Employment Specialist', async () => {
+  setRows('member', true);
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={adviserId} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open Service-user record' }));
+  const record = screen.getByLabelText('Selected Service-user record');
+  expect(within(record).queryByLabelText('Service-user record status controls')).toBeNull();
+  expect(within(record).queryByRole('button', { name: /Archive Service user|Reactivate Service user/ })).toBeNull();
+});
+
+it('retries an unknown archive with the exact request and confirms the archived filter', async () => {
+  setRows('owner', true);
+  await renderHub(<ProgrammeHubModule workspaceId={workspaceId} userId={ownerId} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open Service-user record' }));
+  const record = screen.getByLabelText('Selected Service-user record');
+  fireEvent.click(within(record).getByRole('button', { name: 'Archive Service user' }));
+  mocks.invoke.mockRejectedValueOnce(new Error('network unavailable'));
+  fireEvent.click(within(record).getByRole('button', { name: 'Confirm archive' }));
+  expect(await within(record).findByText('Save status unknown.')).toBeVisible();
+  const firstRequest = (mocks.invoke.mock.calls[0][1] as { body: Record<string, unknown> }).body;
+  mocks.invoke.mockImplementationOnce(async (_name: string, { body }: { body: Record<string, unknown> }) => {
+    expect(body).toEqual(firstRequest);
+    mocks.rows.programme_hub_participants = [{ ...(mocks.rows.programme_hub_participants[0] as Record<string, unknown>), active: false, version: 2 }];
+    return { data: { operation: 'participant', recordId: participantId, workspaceId, programmeId, version: 2 }, error: null };
+  });
+  fireEvent.click(within(record).getByRole('button', { name: 'Retry same change' }));
+  expect(await screen.findByText('The retained Programme Hub change was confirmed.')).toBeVisible();
+  expect(screen.getByLabelText('Record status')).toHaveValue('inactive');
+  expect(mocks.invoke).toHaveBeenCalledTimes(2);
 });

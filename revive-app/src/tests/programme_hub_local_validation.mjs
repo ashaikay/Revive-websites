@@ -256,6 +256,39 @@ await request(serviceKey, 'PATCH', `/rest/v1/programme_hub_participant_advisers?
 const contactAudits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=eq.programme_hub.participant_contact.saved&select=metadata`);
 check('CONTACT_AUDIT_EXCLUDES_CONTACT_CONTENT', contactAudits.status === 200 && contactAudits.rows.length === 3 && contactAudits.rows.every((row) => Object.keys(row.metadata).sort().join(',') === 'participant_id,programme_id,request_id,version'));
 
+const currentParticipantPayload = { ...participantPayload, skillKeys: ['customer_service', 'stock_control'] };
+check('ES_ARCHIVE_DENIED', (await save(adviser.id, workspaceId, 'participant', programmeId, participantId, 2, { ...currentParticipantPayload, active: false })).status >= 400);
+const archiveRequestId = randomUUID();
+const archived = await save(owner.id, workspaceId, 'participant', programmeId, participantId, 2, { ...currentParticipantPayload, active: false }, archiveRequestId);
+const archivedReplay = await save(owner.id, workspaceId, 'participant', programmeId, participantId, 2, { ...currentParticipantPayload, active: false }, archiveRequestId);
+check('MANAGER_ARCHIVES_WITH_EXACT_REPLAY', archived.status === 200 && archived.payload?.version === 3 && archivedReplay.status === 200 && archivedReplay.payload?.version === 3);
+check('CHANGED_ARCHIVE_REPLAY_DENIED', (await save(owner.id, workspaceId, 'participant', programmeId, participantId, 2, currentParticipantPayload, archiveRequestId)).status >= 400);
+check('ARCHIVED_RECORD_REMAINS_READABLE_TO_ASSIGNED_ES', hasExactRecordIds((await read(adviser.token, 'programme_hub_participants', workspaceId)).rows, [participantId, adviserIntakeId]));
+check('ARCHIVED_PROFILE_WRITE_DENIED', (await save(owner.id, workspaceId, 'participant', programmeId, participantId, 3, { ...currentParticipantPayload, active: false, preferredName: 'Changed while archived' })).status >= 400);
+check('ARCHIVED_NOTE_WRITE_DENIED', (await saveNote(adviser.id, workspaceId, programmeId, participantId, 'Archived write attempt.')).status >= 400);
+check('ARCHIVED_CONTACT_WRITE_DENIED', (await saveParticipantContact(owner.id, workspaceId, programmeId, participantContactId, 3, contactPayload)).status >= 400);
+const archivedAssignmentRemoved = await save(owner.id, workspaceId, 'participant_adviser', programmeId, id(assignmentCreated.payload?.record_id), 1, {
+  participantId, adviserUserId: adviser.id, active: false,
+});
+check('ARCHIVED_ASSIGNMENT_CAN_BE_REMOVED', archivedAssignmentRemoved.status === 200 && archivedAssignmentRemoved.payload?.version === 2);
+check('ARCHIVED_ASSIGNMENT_RESTORE_DENIED', (await save(owner.id, workspaceId, 'participant_adviser', programmeId, id(assignmentCreated.payload?.record_id), 2, {
+  participantId, adviserUserId: adviser.id, active: true,
+})).status >= 400);
+const archivedParticipantRows = await request(serviceKey, 'GET', `/rest/v1/programme_hub_participants?workspace_id=eq.${workspaceId}&id=eq.${participantId}&select=id,active,version,preferred_name,skill_keys`);
+const archivedNoteRows = await request(serviceKey, 'GET', `/rest/v1/programme_hub_participant_notes?workspace_id=eq.${workspaceId}&participant_id=eq.${participantId}&select=id`);
+const archivedContactRows = await request(serviceKey, 'GET', `/rest/v1/programme_hub_participant_contacts?workspace_id=eq.${workspaceId}&participant_id=eq.${participantId}&select=id`);
+const archivedAssignmentRows = await request(serviceKey, 'GET', `/rest/v1/programme_hub_participant_advisers?workspace_id=eq.${workspaceId}&participant_id=eq.${participantId}&select=id,active`);
+check('ARCHIVE_PRESERVES_PROFILE_AND_HISTORY', archivedParticipantRows.rows.length === 1 && archivedParticipantRows.rows[0].active === false &&
+  archivedParticipantRows.rows[0].preferred_name === 'Alex' && archivedParticipantRows.rows[0].skill_keys.includes('stock_control') &&
+  archivedNoteRows.rows.length === 1 && archivedContactRows.rows.length === 1 &&
+  archivedAssignmentRows.rows.length === 1 && archivedAssignmentRows.rows[0].active === false);
+check('STALE_REACTIVATION_DENIED', (await save(owner.id, workspaceId, 'participant', programmeId, participantId, 2, currentParticipantPayload)).status >= 400);
+const reactivated = await save(owner.id, workspaceId, 'participant', programmeId, participantId, 3, currentParticipantPayload);
+check('MANAGER_REACTIVATES_PARTICIPANT', reactivated.status === 200 && reactivated.payload?.version === 4);
+check('REACTIVATION_DOES_NOT_RESTORE_REMOVED_ES_ACCESS', hasExactRecordIds((await read(adviser.token, 'programme_hub_participants', workspaceId)).rows, [adviserIntakeId]));
+const lifecycleAudits = await request(owner.token, 'GET', `/rest/v1/audit_log?workspace_id=eq.${workspaceId}&action=in.(programme_hub.participant.archived,programme_hub.participant.reactivated)&select=action,resource_id`);
+check('ARCHIVE_REACTIVATE_AUDIT_HISTORY', lifecycleAudits.rows.length === 2 && lifecycleAudits.rows.every((row) => row.resource_id === participantId));
+
 const adviserRecordId = id(adviserAdded.payload?.record_id);
 const adviserRemoved = await save(owner.id, workspaceId, 'adviser', programmeId, adviserRecordId, 1, { userId: adviser.id, active: false });
 check('OWNER_REMOVES_PROGRAMME_ADVISER', adviserRemoved.status === 200 && adviserRemoved.payload?.version === 2);

@@ -5,6 +5,7 @@ import { workspaceNavigationItems } from '@/domain/workspaceNavigation';
 const migration = readFileSync(new URL('../../supabase/migrations/20261010100000_rev_programme_hub_employer_foundation.sql', import.meta.url), 'utf8');
 const notesMigration = readFileSync(new URL('../../supabase/migrations/20261010110000_rev_programme_hub_participant_notes.sql', import.meta.url), 'utf8');
 const esIntakeMigration = readFileSync(new URL('../../supabase/migrations/20261109010000_rev_programme_es_participant_intake.sql', import.meta.url), 'utf8');
+const archiveMigration = readFileSync(new URL('../../supabase/migrations/20261110010000_rev_programme_participant_archive.sql', import.meta.url), 'utf8');
 const engagementMigration = readFileSync(new URL('../../supabase/migrations/20261011010000_rev_programme_employer_discovery_engagement.sql', import.meta.url), 'utf8');
 const architecture = readFileSync(new URL('../../../REVIVE_AI_MASTER/01_ARCHITECTURE/OUTCOMES_PROGRAMME_HUB_EMPLOYER_ENGAGEMENT_IPS.md', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
@@ -83,6 +84,20 @@ describe('Outcomes / Programme Hub contract', () => {
     expect(esIntakeMigration).toContain('return prior.result');
     expect(esIntakeMigration).toContain('from public, anon, authenticated');
     expect(esIntakeMigration).toContain('to service_role');
+  });
+
+  it('keeps archive/reactivate manager-only, history-preserving and read-only without restoring assignments', () => {
+    expect(archiveMigration).toContain('Programme manager required');
+    expect(archiveMigration).toContain('Participant status change must not alter profile');
+    expect(archiveMigration).toContain('Archived participant is read only');
+    expect(archiveMigration).toContain('programme_hub.participant.archived');
+    expect(archiveMigration).toContain('programme_hub.participant.reactivated');
+    expect(archiveMigration).toContain('Participant history deletion unavailable');
+    expect(archiveMigration).toContain('before insert or update or delete on public.programme_hub_vocational_assessments');
+    expect(archiveMigration).toContain('before insert or update or delete on public.programme_hub_action_plans');
+    expect(archiveMigration).toContain("if tg_op = 'INSERT' or (not old.active and new.active)");
+    expect(archiveMigration).not.toContain('delete from public.programme_hub_participants');
+    expect(archiveMigration).not.toContain('update public.programme_hub_participant_advisers');
   });
 
   it('keeps employer discovery, engagement history and prepared outreach tenant-scoped and idempotent', () => {

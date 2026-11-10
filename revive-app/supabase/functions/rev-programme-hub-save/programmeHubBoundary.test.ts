@@ -309,6 +309,11 @@ test('identifies a stale contact edit as a definitive version conflict', () => {
   assert.equal(failure.status, 409); assert.equal(failure.errorCode, 'participant_contact_changed');
 });
 
+test('identifies archived Service-user writes as definitive rejections', () => {
+  const failure = classifyProgrammeHubDatabaseError('participant_note', { code: 'P0001', message: 'Archived participant is read only' });
+  assert.equal(failure.status, 409); assert.equal(failure.errorCode, 'participant_archived');
+});
+
 // Exact Programme Hub origin allowlist regression.
 test('allows listed origins without widening authentication or workspace permissions', async () => {
   const deps = { ...dependencies(), allowedOrigin: 'http://localhost:5180, https://rev11.netlify.app' };
