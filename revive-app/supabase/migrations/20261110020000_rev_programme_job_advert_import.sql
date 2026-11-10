@@ -34,9 +34,9 @@ DECLARE
   result jsonb;
   saved_id uuid;
   saved_version bigint;
-  employer_id uuid;
-  employer_contact_id uuid;
-  closing_date date;
+  selected_employer_id uuid;
+  selected_employer_contact_id uuid;
+  stated_closing_date date;
   is_authorised boolean;
 BEGIN
   IF target_workspace_id IS NULL OR initiating_user_id IS NULL OR target_request_id IS NULL
@@ -155,26 +155,26 @@ BEGIN
     RAISE EXCEPTION 'Valid reviewed job advert required';
   END IF;
 
-  employer_id = (target_payload->>'employerId')::uuid;
-  employer_contact_id = NULLIF(target_payload->>'employerContactId', '')::uuid;
-  closing_date = NULLIF(target_payload->>'closingDate', '')::date;
+  selected_employer_id = (target_payload->>'employerId')::uuid;
+  selected_employer_contact_id = NULLIF(target_payload->>'employerContactId', '')::uuid;
+  stated_closing_date = NULLIF(target_payload->>'closingDate', '')::date;
 
   PERFORM 1
   FROM public.programme_hub_employers employer
   WHERE employer.workspace_id = target_workspace_id
     AND employer.programme_id = target_programme_id
-    AND employer.id = employer_id
+    AND employer.id = selected_employer_id
     AND employer.active
   FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Programme employer required'; END IF;
 
-  IF employer_contact_id IS NOT NULL THEN
+  IF selected_employer_contact_id IS NOT NULL THEN
     PERFORM 1
     FROM public.programme_hub_employer_contacts contact
     WHERE contact.workspace_id = target_workspace_id
       AND contact.programme_id = target_programme_id
-      AND contact.employer_id = employer_id
-      AND contact.id = employer_contact_id
+      AND contact.employer_id = selected_employer_id
+      AND contact.id = selected_employer_contact_id
       AND contact.active;
     IF NOT FOUND THEN RAISE EXCEPTION 'Programme employer contact required'; END IF;
   END IF;
@@ -185,13 +185,13 @@ BEGIN
     source_added_at, published_pay, published_shifts, closing_date, active,
     created_by_user_id, updated_by_user_id
   ) VALUES (
-    target_workspace_id, target_programme_id, employer_id, employer_contact_id,
+    target_workspace_id, target_programme_id, selected_employer_id, selected_employer_contact_id,
     target_payload->>'vacancyKey', target_payload->>'title',
     NULLIF(target_payload->>'workGeographyKey', ''),
     ARRAY(SELECT pg_catalog.jsonb_array_elements_text(target_payload->'requiredSkillKeys')),
     '{}'::text[], target_payload->>'sourceText', NULLIF(target_payload->>'sourceUrl', ''),
     pg_catalog.now(), NULLIF(target_payload->>'publishedPay', ''),
-    NULLIF(target_payload->>'publishedShifts', ''), closing_date, true,
+    NULLIF(target_payload->>'publishedShifts', ''), stated_closing_date, true,
     initiating_user_id, initiating_user_id
   )
   RETURNING id, version INTO saved_id, saved_version;

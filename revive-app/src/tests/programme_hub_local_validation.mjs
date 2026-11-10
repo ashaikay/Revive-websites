@@ -130,6 +130,15 @@ const contactCreated = await save(adviser.id, workspaceId, 'contact', programmeI
 });
 check('ADVISER_CREATES_EMPLOYER_CONTACT', contactCreated.status === 200);
 const contactId = id(contactCreated.payload?.record_id);
+const otherEmployerCreated = await save(adviser.id, workspaceId, 'employer', programmeId, null, 0, {
+  ...employerPayload, employerKey: 'EMP-OTHER', displayName: 'Other Synthetic Employer',
+});
+const otherEmployerId = id(otherEmployerCreated.payload?.record_id);
+const otherEmployerContactCreated = await save(adviser.id, workspaceId, 'contact', programmeId, null, 0, {
+  employerId: otherEmployerId, contactKey: 'CONTACT-OTHER', preferredName: 'Other Employer Contact',
+  roleTitle: '', businessEmail: '', businessPhone: '', suppressed: false, suppressionReasonKey: '', active: true,
+});
+const otherEmployerContactId = id(otherEmployerContactCreated.payload?.record_id);
 const vacancyCreated = await save(adviser.id, workspaceId, 'vacancy', programmeId, null, 0, {
   employerId, employerContactId: contactId, vacancyKey: 'VAC-001', title: 'Synthetic Vacancy', workGeographyKey: '',
   requiredSkillKeys: ['customer_service'], desiredSkillKeys: [], active: true,
@@ -137,7 +146,7 @@ const vacancyCreated = await save(adviser.id, workspaceId, 'vacancy', programmeI
 check('ADVISER_CREATES_VACANCY', vacancyCreated.status === 200);
 const importedAdvertPayload = {
   employerId,
-  employerContactId: '',
+  employerContactId: contactId,
   vacancyKey: 'VAC-IMPORT-001',
   title: 'Reviewed warehouse role',
   workGeographyKey: 'Birmingham',
@@ -150,19 +159,26 @@ const importedAdvertPayload = {
 };
 const importedAdvertRequestId = randomUUID();
 const adviserImport = await saveJobAdvert(adviser.id, workspaceId, programmeId, importedAdvertPayload, importedAdvertRequestId);
-check('ADVISER_IMPORTS_REVIEWED_JOB_ADVERT', adviserImport.status === 200);
+check('VALID_SELECTED_EMPLOYER_CONTACT_IMPORT_SUCCEEDS', adviserImport.status === 200);
 check('ADVISER_IMPORT_EXACT_REPLAY', (await saveJobAdvert(adviser.id, workspaceId, programmeId, importedAdvertPayload, importedAdvertRequestId)).payload?.record_id === adviserImport.payload?.record_id);
+check('OTHER_EMPLOYER_CONTACT_IMPORT_REJECTED', (await saveJobAdvert(adviser.id, workspaceId, programmeId, {
+  ...importedAdvertPayload,
+  employerContactId: otherEmployerContactId,
+  vacancyKey: 'VAC-IMPORT-FOREIGN-CONTACT',
+})).status >= 400);
 check('ADVISER_IMPORT_CHANGED_REPLAY_DENIED', (await saveJobAdvert(adviser.id, workspaceId, programmeId, { ...importedAdvertPayload, title: 'Changed role' }, importedAdvertRequestId)).status >= 400);
 check('NON_ADVISER_IMPORT_DENIED', (await saveJobAdvert(otherMember.id, workspaceId, programmeId, { ...importedAdvertPayload, vacancyKey: 'VAC-IMPORT-002' })).status >= 400);
 check('DUPLICATE_JOB_REFERENCE_DENIED', (await saveJobAdvert(owner.id, workspaceId, programmeId, importedAdvertPayload)).status === 409);
 const ownerImport = await saveJobAdvert(owner.id, workspaceId, programmeId, {
   ...importedAdvertPayload,
+  employerContactId: '',
   vacancyKey: 'VAC-IMPORT-003',
   title: 'Manager reviewed warehouse role',
   sourceUrl: '',
 });
-check('MANAGER_IMPORTS_REVIEWED_JOB_ADVERT', ownerImport.status === 200);
+check('NO_CONTACT_IMPORT_SUCCEEDS', ownerImport.status === 200);
 const importedRows = (await read(serviceKey, 'programme_hub_vacancies', workspaceId)).rows.filter((row) => row.vacancy_key.startsWith('VAC-IMPORT-'));
+check('EXACT_RETRY_CREATES_NO_DUPLICATE', importedRows.filter((row) => row.vacancy_key === importedAdvertPayload.vacancyKey).length === 1);
 check('IMPORTED_SOURCE_WORDING_PRESERVED', importedRows.length === 2 && importedRows.some((row) =>
   row.id === adviserImport.payload?.record_id
   && row.source_text === importedAdvertPayload.sourceText
