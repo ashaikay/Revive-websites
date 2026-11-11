@@ -3,28 +3,9 @@
 -- Read-only with respect to templates, assessments, answers and history.
 BEGIN;
 
-CREATE OR REPLACE FUNCTION public.rev_voc_is_matching_candidate_question(section_data jsonb, question_data jsonb)
-RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = '' AS $fn$
-  SELECT public.rev_voc_is_ordinary_question(section_data, question_data)
-    AND (
-      COALESCE(section_data->>'title','') || ' ' ||
-      COALESCE(section_data->>'description','') || ' ' ||
-      COALESCE(question_data->>'label','') || ' ' ||
-      COALESCE(question_data->>'description','')
-    ) ~* '(skills?|experience|qualifications?|training|sectors?|industr(y|ies)|career|job|role|occupation|employment[[:space:]]+(goal|aspiration|outcome)|(kind|type)[[:space:]]+of[[:space:]]+work|work[[:space:]]+(interest|preference)|work[[:space:]]+(would|do)[[:space:]]+you[[:space:]]+(like|want|prefer|explore))'
-    AND (
-      COALESCE(section_data->>'title','') || ' ' ||
-      COALESCE(section_data->>'description','') || ' ' ||
-      COALESCE(question_data->>'label','') || ' ' ||
-      COALESCE(question_data->>'description','')
-    ) !~* '(contact|phone|email|address|date[[:space:]]+of[[:space:]]+birth|dob|national[[:space:]]+insurance|emergency[[:space:]]+contact|next[[:space:]]+of[[:space:]]+kin|support|help|barrier|housing|benefit|appointment|childcare|personal[[:space:]]+detail)';
-$fn$;
-REVOKE ALL ON FUNCTION public.rev_voc_is_matching_candidate_question(jsonb,jsonb) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rev_voc_is_matching_candidate_question(jsonb,jsonb) TO service_role;
-
 CREATE OR REPLACE FUNCTION public.rev_voc_is_matching_safe_question(section_data jsonb, question_data jsonb)
 RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = '' AS $fn$
-  SELECT public.rev_voc_is_matching_candidate_question(section_data, question_data)
+  SELECT public.rev_voc_is_ordinary_question(section_data, question_data)
     AND pg_catalog.jsonb_typeof(section_data) = 'object'
     AND pg_catalog.jsonb_typeof(question_data) = 'object'
     AND question_data->>'standardField' IN
@@ -139,7 +120,7 @@ BEGIN
     ) WITH ORDINALITY AS q(question,question_order)
     JOIN public.programme_hub_vocational_assessment_answers ans
       ON ans.assessment_id=v_assessment_id AND ans.question_id=q.question->>'id'
-    WHERE public.rev_voc_is_matching_candidate_question(sec.section,q.question)
+    WHERE public.rev_voc_is_ordinary_question(sec.section,q.question)
       AND ans.answer NOT IN ('null'::jsonb,'""'::jsonb,'[]'::jsonb)
       AND COALESCE(q.question->>'standardField','') NOT IN
         ('employment_goal','preferred_sector','skills','qualifications')
