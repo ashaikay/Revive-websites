@@ -1,6 +1,7 @@
 import { isCoreVocationalQuestion } from './vocationalCore';
 import {
   defaultVocationalSections,
+  vocationalMatchingOptions,
   type VocationalFieldType,
   type VocationalProfileTemplate,
   type VocationalQuestion,
@@ -129,22 +130,25 @@ export function addVocationalQuestion(
 // Definitions only; no participant answers or saved templates are changed.
 export function addCoreVocationalQuestions(template: VocationalProfileTemplate): VocationalProfileTemplate {
   editable(template);
-  const starters: Array<[string, string, import('./vocationalProfile').VocationalStandardField | undefined]> = [
-    ['Employment goals and aspirations', 'What kind of work would you like to do?', 'employment_goal'],
-    ['Work history', 'What work or volunteering have you done?', 'work_history'],
-    ['Skills and experience', 'Which skills would you like to use at work?', 'skills'],
-    ['Education and qualifications', 'What qualifications or training have you completed?', 'qualifications'],
-    ['Preferred job sectors', 'Which job sectors interest you?', 'preferred_sector'],
-    ['Availability and working hours', 'What days and hours could you work?', 'availability'],
-    ['Travel and transport', 'How far could you travel for work?', 'travel_radius'],
-    ['Action planning and next steps', 'What is your next step towards employment?', undefined],
+  const starters: Array<{
+    title: string; label: string; standardField?: import('./vocationalProfile').VocationalStandardField;
+    type?: VocationalFieldType; options?: readonly string[];
+  }> = [
+    { title: 'Employment goals and aspirations', label: 'What employment outcome are you looking for?', standardField: 'employment_goal', type: 'single_select', options: vocationalMatchingOptions.employment_goal },
+    { title: 'Work history', label: 'What work or volunteering have you done?', standardField: 'work_history' },
+    { title: 'Skills and experience', label: 'Which skills would you like to use at work?', standardField: 'skills', type: 'multi_select', options: vocationalMatchingOptions.skills },
+    { title: 'Education and qualifications', label: 'What qualifications or training have you completed?', standardField: 'qualifications', type: 'multi_select', options: vocationalMatchingOptions.qualifications },
+    { title: 'Preferred job sectors', label: 'Which job sectors interest you?', standardField: 'preferred_sector', type: 'multi_select', options: vocationalMatchingOptions.preferred_sector },
+    { title: 'Availability and working hours', label: 'What days and hours could you work?', standardField: 'availability' },
+    { title: 'Travel and transport', label: 'How far could you travel for work?', standardField: 'travel_radius' },
+    { title: 'Action planning and next steps', label: 'What is your next step towards employment?' },
   ];
   let next = template;
-  for (const [title, label, standardField] of starters) {
+  for (const { title, label, standardField, type = 'long_text', options = [] } of starters) {
     if (next.sections.some(section => section.questions.some(question => isCoreVocationalQuestion(section, question) && (question.label === label || (standardField && question.standardField === standardField))))) continue;
     let section = next.sections.find(section => section.title.toLowerCase() === title.toLowerCase() && isCoreVocationalQuestion(section, {label, sensitive: false}));
     if (!section) { next = addVocationalSection(next, title); section = next.sections[next.sections.length - 1]; }
-    next = addVocationalQuestion(next, section.id, label, 'long_text');
+    next = addVocationalQuestion(next, section.id, label, type, [...options]);
     const sectionId = section.id;
     next = { ...next, sections: next.sections.map(section => section.id === sectionId ? {
       ...section, questions: section.questions.map((question, index) => index === section.questions.length - 1 ? { ...question, standardField } : question),

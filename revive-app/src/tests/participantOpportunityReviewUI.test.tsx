@@ -112,9 +112,12 @@ describe('Review opportunities', () => {
     const evidence = await screen.findByLabelText('Profile evidence');
     expect(evidence).toHaveTextContent('0 supported matching answers');
     expect(evidence).toHaveTextContent('This does not mean the Service user is missing skills or qualifications.');
-    expect(evidence).toHaveTextContent('1 answered question is not mapped for opportunity matching');
-    expect(evidence).toHaveTextContent('Tell us about your work experience');
-    expect(evidence).toHaveTextContent('Saved answers and the published questionnaire have not been changed.');
+    const setup = within(evidence).getByText('Matching setup needed').closest('details');
+    expect(setup).not.toHaveAttribute('open');
+    expect(setup).toHaveTextContent('1 answered employment question is not mapped for opportunity matching');
+    expect(setup).toHaveTextContent('Tell us about your work experience');
+    expect(setup).toHaveTextContent('Saved answers and the published questionnaire have not been changed.');
+    expect(setup).toHaveTextContent('Only approved employment goals, sectors, skills and qualifications currently contribute.');
   });
 
   it.each([

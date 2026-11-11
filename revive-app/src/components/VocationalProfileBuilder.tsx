@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { coreVocationalQuestionCount } from '../domain/vocationalCore';
 import { supabaseClient } from '@/data/supabaseClient';
 import { createVocationalTemplate, addVocationalSection, addVocationalQuestion, addCoreVocationalQuestions } from '../domain/vocationalTemplateBuilder';
-import { validateVocationalTemplate, vocationalStandardFields, isRestrictedVocationalQuestion, type VocationalStandardField, type VocationalFieldType, type VocationalProfileTemplate, type VocationalQuestion } from '../domain/vocationalProfile';
+import {
+  isRestrictedVocationalQuestion, isVocationalMatchingCandidate, isVocationalMatchingField,
+  validateVocationalTemplate, vocationalMatchingFieldLabels, vocationalMatchingFields,
+  type VocationalStandardField, type VocationalFieldType, type VocationalProfileTemplate, type VocationalQuestion,
+} from '../domain/vocationalProfile';
 
 const types: { value: VocationalFieldType; label: string }[] = [
   { value: 'short_text', label: 'Short text' },
@@ -342,6 +346,10 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   const selected = template.sections.find(s => s.id === activeId) ?? template.sections[0];
   const coreQuestions = coreVocationalQuestionCount(template.sections);
   const totalQuestions = template.sections.reduce((sum, s) => sum + s.questions.length, 0);
+  const matchingCandidates = template.sections.flatMap(section => section.questions
+    .filter(question => isVocationalMatchingCandidate(section, question))
+    .map(question => ({ section, question })));
+  const matchingSetupNeeded = matchingCandidates.filter(({ question }) => !isVocationalMatchingField(question.standardField));
   const errors = validateVocationalTemplate(template);
 
   return (
@@ -391,6 +399,14 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         <input className={field} value={template.title} disabled={availabilityBusy || availabilityUncertain || template.status === 'published' || busy || Boolean(pending) || recoveryBlocked} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
       </label>
       {coreQuestions === 0 && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This questionnaire has no core employment questions. Employment Specialists cannot complete a core profile from it. {template.status === 'published' ? 'Choose Edit questionnaire to review suggested questions, then Save and make available.' : 'Add core employment questions before publishing. Optional or restricted support questions do not count as core questions.'}</p>}
+      <div className={`rounded-lg border p-3 text-sm ${matchingSetupNeeded.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-green-200 bg-green-50 text-green-900'}`} aria-label="Opportunity matching setup">
+        <p className="font-semibold">Opportunity matching setup</p>
+        {matchingSetupNeeded.length
+          ? <p>{matchingSetupNeeded.length} eligible employment {matchingSetupNeeded.length === 1 ? 'question needs' : 'questions need'} a matching field. {template.status === 'published' ? 'Choose Edit questionnaire to create a revision, then map those questions and make the revision available.' : 'Open each relevant section and choose an opportunity matching field.'}</p>
+          : <p>{matchingCandidates.length ? 'Eligible employment questions are mapped.' : 'No eligible employment-evidence questions have been identified yet.'}</p>}
+        <p className="mt-1">Matching uses only approved employment goals, sectors, skills and qualifications. Custom or free-text wording contributes only when it exactly matches a supported term; other wording remains saved but is not used as evidence.</p>
+        <p className="mt-1">Published versions and participant answers are never changed by editing. Changes use a new questionnaire revision.</p>
+      </div>
       {errors.length > 0 && <div role="status" className="text-sm text-amber-700">{errors.slice(0, 3).map((message, i) => <p key={i}>{message}</p>)}</div>}
       {preview || template.status === 'published' ? (
         <div className="space-y-4"><h3 className="text-lg font-semibold">{template.title || 'Untitled profile'} - Participant preview</h3><p className="text-sm text-slate-500">Preview only. Answers are not recorded.</p>
@@ -436,25 +452,36 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
                 <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={template.sections[0]?.id === selected.id} onClick={() => { const i = template.sections.findIndex(s => s.id === selected.id); const list = [...template.sections]; [list[i - 1], list[i]] = [list[i], list[i - 1]]; changeSections(list); }}>Move up</button><button type="button" className={button} disabled={template.sections[template.sections.length - 1]?.id === selected.id} onClick={() => { const i = template.sections.findIndex(s => s.id === selected.id); const list = [...template.sections]; [list[i + 1], list[i]] = [list[i], list[i + 1]]; changeSections(list); }}>Move down</button><button type="button" className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700" onClick={() => { if (!window.confirm(`Delete section "${selected.title}" and its questions?`)) return; const list = template.sections.filter(s => s.id !== selected.id); changeSections(list); setActiveId(list[0]?.id ?? ''); }}>Delete section</button></div>
               </div>
               <div className="space-y-3 border-t border-slate-200 pt-4"><h3 className="font-semibold">Questions in this section</h3>{selected.questions.length === 0 && <p className="text-sm text-slate-500">No questions yet. Add the first one below.</p>}
-                {selected.questions.map(q => <div key={q.id} className="space-y-2 rounded-lg border border-slate-200 p-3"><input aria-label="Question wording" className={field} value={q.label} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, label: e.target.value } : item) } : s))} /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-slate-600">{types.find(t => t.value === q.type)?.label}</span><label className="text-xs"><input type="checkbox" checked={q.required} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, required: e.target.checked } : item) } : s))} /> Required</label><button type="button" className="text-xs text-red-700" onClick={() => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.filter(item => item.id !== q.id).map((item, order) => ({ ...item, order })) } : s))}>Remove question</button></div>
-                 <label className="block space-y-1 text-xs">Job-matching field (optional)
-                   <select className={field} aria-label={`Job-matching field for ${q.label}`} value={q.standardField ?? ''}
-                     disabled={isRestrictedVocationalQuestion(selected.title, q)}
-                     onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, standardField: (e.target.value || undefined) as VocationalStandardField | undefined } : item) } : s))}>
-                     <option value="">Not used for job matching</option>
-                     {vocationalStandardFields.map(value => <option key={value} value={value}>{value.replace(/_/g, ' ')}</option>)}
-                   </select>
-                   {isRestrictedVocationalQuestion(selected.title, q) && <span className="text-amber-800">Restricted content cannot be mapped.</span>}
-                 </label></div>)}
+                {selected.questions.map(q => {
+                  const matchingCandidate = isVocationalMatchingCandidate(selected, q);
+                  const restricted = isRestrictedVocationalQuestion(selected.title, q);
+                  const showMapping = matchingCandidate || q.standardField !== undefined;
+                  return <div key={q.id} className="space-y-2 rounded-lg border border-slate-200 p-3"><input aria-label="Question wording" className={field} value={q.label} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, label: e.target.value } : item) } : s))} /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-slate-600">{types.find(t => t.value === q.type)?.label}</span><label className="text-xs"><input type="checkbox" checked={q.required} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, required: e.target.checked } : item) } : s))} /> Required</label><button type="button" className="text-xs text-red-700" onClick={() => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.filter(item => item.id !== q.id).map((item, order) => ({ ...item, order })) } : s))}>Remove question</button></div>
+                   {matchingCandidate && <p className="text-xs font-medium text-green-800">Eligible for opportunity matching</p>}
+                   {showMapping && <label className="block space-y-1 text-xs">Opportunity matching field (optional)
+                     <select className={field} aria-label={`Opportunity matching field for ${q.label}`} value={q.standardField ?? ''}
+                       disabled={restricted}
+                       onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, standardField: (e.target.value || undefined) as VocationalStandardField | undefined } : item) } : s))}>
+                       <option value="">Not used for opportunity matching</option>
+                       {vocationalMatchingFields.map(value => <option key={value} value={value}>{vocationalMatchingFieldLabels[value]}</option>)}
+                       {q.standardField && !isVocationalMatchingField(q.standardField) && <option value={q.standardField}>{q.standardField.replace(/_/g, ' ')} (not currently supported)</option>}
+                     </select>
+                     {restricted && <span className="text-amber-800">Restricted content cannot be mapped.</span>}
+                     {matchingCandidate && !q.standardField && <span className="text-amber-800">Choose a field in this revision if this answer should support opportunity matching.</span>}
+                   </label>}
+                   {!showMapping && <p className="text-xs text-slate-600">Not an eligible employment-evidence question for opportunity matching.</p>}
+                  </div>;
+                })}
                </div>
               <div className="space-y-3 rounded-lg bg-slate-50 p-4"><h3 className="font-semibold">Add question</h3><label className="block space-y-1 text-sm">Question wording<input className={field} value={questionLabel} onChange={e => setQuestionLabel(e.target.value)} placeholder="e.g. What type of work interests you?" /></label><label className="block space-y-1 text-sm">Answer type<select className={field} value={questionType} onChange={e => setQuestionType(e.target.value as VocationalFieldType)}>{types.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></label>
                 {(questionType === 'single_select' || questionType === 'multi_select') && <label className="block space-y-1 text-sm">Options (one per line)<textarea className={field} rows={4} value={optionsText} onChange={e => setOptionsText(e.target.value)} placeholder={'Construction\nRetail\nHospitality'} /></label>}
                 <label className="block text-sm"><input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)} /> Required question</label>
-                 <label className="block space-y-1 text-sm">Job-matching field (optional)
+                 <label className="block space-y-1 text-sm">Opportunity matching field (optional)
                    <select className={field} value={standardField} disabled={isRestrictedVocationalQuestion(selected.title, { label: questionLabel, sensitive: false })} onChange={e => setStandardField(e.target.value as VocationalStandardField | '')}>
-                     <option value="">Not used for job matching</option>
-                     {vocationalStandardFields.map(value => <option key={value} value={value}>{value.replace(/_/g, ' ')}</option>)}
+                     <option value="">Not used for opportunity matching</option>
+                     {vocationalMatchingFields.map(value => <option key={value} value={value}>{vocationalMatchingFieldLabels[value]}</option>)}
                    </select>
+                   <span className="text-xs text-slate-600">Only approved employment goals, sectors, skills and qualifications currently support matching.</span>
                  </label>
                 <button type="button" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => {
                   if (!questionLabel.trim()) { setError('Enter the question wording'); return; }

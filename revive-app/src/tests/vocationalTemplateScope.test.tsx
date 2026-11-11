@@ -138,6 +138,26 @@ it('creates a reviewed revision with core questions while preserving the publish
   expect(await screen.findByText('Template published.')).toBeVisible();
   expect(screen.getByLabelText('Questionnaire action feedback')).toHaveFocus();
 });
+it('maps eligible employment questions through a new questionnaire revision', async()=>{
+  mocks.published=true;
+  mocks.rpc.mockImplementation(async(name)=>({data:name==='rev_vocational_create_revision'?{id:'revision',version:2,status:'draft'}:
+    {id:'revision',version:3,status:'draft'},error:null}));
+  render(<VocationalProfileBuilder {...props}/>);
+  await screen.findByLabelText('Questionnaire name');
+  expect(screen.getByLabelText('Opportunity matching setup')).toHaveTextContent('Choose Edit questionnaire to create a revision');
+  fireEvent.click(screen.getByRole('button',{name:'Edit questionnaire'}));
+  const mapping=await screen.findByLabelText('Opportunity matching field for What work interests you?');
+  expect(screen.getByText('Eligible for opportunity matching')).toBeVisible();
+  expect(mapping).toHaveValue('');
+  fireEvent.change(mapping,{target:{value:'skills'}});
+  expect(screen.getByLabelText('Opportunity matching setup')).toHaveTextContent('Eligible employment questions are mapped');
+  fireEvent.click(advanced('Save draft'));
+  await screen.findByText('Draft saved.');
+  const saved=mocks.rpc.mock.calls.find(([name])=>name==='save_rev_vocational_template')![1];
+  expect(saved.target_template_id).toBe('revision');
+  expect(saved.target_sections[0].questions[0].standardField).toBe('skills');
+  expect(mocks.rpc.mock.calls[0][0]).toBe('rev_vocational_create_revision');
+});
 it('creates a separate unsaved questionnaire after publishing without changing the existing one',async()=>{
   mocks.published=true;render(<VocationalProfileBuilder {...props}/>);
   await screen.findByLabelText('Questionnaire name');

@@ -47,6 +47,8 @@ SELECT t.id,w.id,p.id,'Earlier questionnaire','draft',1,
      {"id":"skills","sectionId":"skills","label":"Skills","type":"multi_select","standardField":"skills","options":["forklift","Working at heights","Driving"],"required":true,"sensitive":false},
      {"id":"text_skill","sectionId":"skills","label":"Other supported skills","type":"short_text","standardField":"skills","required":false,"sensitive":false},
      {"id":"unmapped","sectionId":"skills","label":"Other employment experience","type":"short_text","required":false,"sensitive":false},
+     {"id":"contact","sectionId":"skills","label":"How should an employer contact you?","type":"short_text","required":false,"sensitive":false},
+     {"id":"support","sectionId":"skills","label":"What employment support would help?","type":"short_text","required":false,"sensitive":false},
      {"id":"restricted","sectionId":"skills","label":"Restricted skills","type":"multi_select","standardField":"skills","options":["Driving"],"required":false,"sensitive":true}]}]'::jsonb,
   o.id,o.id,NULL
 FROM rev_opp_ids t,rev_opp_ids w,rev_opp_ids p,rev_opp_ids o
@@ -79,6 +81,8 @@ INSERT INTO public.programme_hub_vocational_assessment_answers(assessment_id,que
 SELECT id,'skills','["forklift","Working at heights"]'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'text_skill','"Teamwork"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'unmapped','"case-note-secret"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
+UNION ALL SELECT id,'contact','"personal-contact-secret"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
+UNION ALL SELECT id,'support','"support-note-secret"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'restricted','["Driving"]'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'skills','["Teamwork"]'::jsonb FROM rev_opp_ids WHERE key='p_progress_old'
 UNION ALL SELECT id,'skills','["Forklift"]'::jsonb FROM rev_opp_ids WHERE key='p_progress_current';
@@ -140,6 +144,8 @@ BEGIN
     OR (result->'profileEvidence')::text LIKE '%Working at heights%'
     OR (result->'profileEvidence')::text LIKE '%Driving%'
     OR (result->'profileEvidence')::text LIKE '%case-note-secret%'
+    OR (result->'profileEvidence')::text LIKE '%personal-contact-secret%'
+    OR (result->'profileEvidence')::text LIKE '%support-note-secret%'
     OR result->'profileEvidence'->'summary' <> public.rev_voc_matching_summary(ws,prog,ready_id)->'summary' THEN
     RAISE EXCEPTION 'FAIL ready profile evidence: %',result;
   END IF;
