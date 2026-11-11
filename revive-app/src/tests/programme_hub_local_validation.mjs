@@ -73,6 +73,14 @@ const saveNote = (actorId, workspaceId, programmeId, participantId, body, reques
     target_participant_id: participantId,
     note_body: body,
   });
+const saveJobAdvert = (actorId, workspaceId, programmeId, payload, requestId = randomUUID(), token = serviceKey) =>
+  rpc(token, 'save_rev_programme_hub_job_advert_import', {
+    target_workspace_id: workspaceId,
+    initiating_user_id: actorId,
+    target_request_id: requestId,
+    target_programme_id: programmeId,
+    target_payload: payload,
+  });
 const read = (token, table, workspaceId) => request(token, 'GET', `/rest/v1/${table}?workspace_id=eq.${workspaceId}&select=*`);
 const hasExactRecordIds = (rows, expectedIds) =>
   rows.length === expectedIds.length &&
@@ -122,11 +130,62 @@ const contactCreated = await save(adviser.id, workspaceId, 'contact', programmeI
 });
 check('ADVISER_CREATES_EMPLOYER_CONTACT', contactCreated.status === 200);
 const contactId = id(contactCreated.payload?.record_id);
+const otherEmployerCreated = await save(adviser.id, workspaceId, 'employer', programmeId, null, 0, {
+  ...employerPayload, employerKey: 'EMP-OTHER', displayName: 'Other Synthetic Employer',
+});
+const otherEmployerId = id(otherEmployerCreated.payload?.record_id);
+const otherEmployerContactCreated = await save(adviser.id, workspaceId, 'contact', programmeId, null, 0, {
+  employerId: otherEmployerId, contactKey: 'CONTACT-OTHER', preferredName: 'Other Employer Contact',
+  roleTitle: '', businessEmail: '', businessPhone: '', suppressed: false, suppressionReasonKey: '', active: true,
+});
+const otherEmployerContactId = id(otherEmployerContactCreated.payload?.record_id);
 const vacancyCreated = await save(adviser.id, workspaceId, 'vacancy', programmeId, null, 0, {
   employerId, employerContactId: contactId, vacancyKey: 'VAC-001', title: 'Synthetic Vacancy', workGeographyKey: '',
   requiredSkillKeys: ['customer_service'], desiredSkillKeys: [], active: true,
 });
 check('ADVISER_CREATES_VACANCY', vacancyCreated.status === 200);
+const importedAdvertPayload = {
+  employerId,
+  employerContactId: contactId,
+  vacancyKey: 'VAC-IMPORT-001',
+  title: 'Reviewed warehouse role',
+  workGeographyKey: 'Birmingham',
+  publishedPay: '£12.50 per hour',
+  publishedShifts: '',
+  requiredSkillKeys: ['forklift certificate'],
+  closingDate: '2026-12-01',
+  sourceText: 'Reviewed warehouse role in Birmingham. Pay £12.50 per hour. Forklift certificate required.',
+  sourceUrl: 'https://jobs.example.test/vac-import-001',
+};
+const importedAdvertRequestId = randomUUID();
+const adviserImport = await saveJobAdvert(adviser.id, workspaceId, programmeId, importedAdvertPayload, importedAdvertRequestId);
+check('VALID_SELECTED_EMPLOYER_CONTACT_IMPORT_SUCCEEDS', adviserImport.status === 200);
+check('ADVISER_IMPORT_EXACT_REPLAY', (await saveJobAdvert(adviser.id, workspaceId, programmeId, importedAdvertPayload, importedAdvertRequestId)).payload?.record_id === adviserImport.payload?.record_id);
+check('OTHER_EMPLOYER_CONTACT_IMPORT_REJECTED', (await saveJobAdvert(adviser.id, workspaceId, programmeId, {
+  ...importedAdvertPayload,
+  employerContactId: otherEmployerContactId,
+  vacancyKey: 'VAC-IMPORT-FOREIGN-CONTACT',
+})).status >= 400);
+check('ADVISER_IMPORT_CHANGED_REPLAY_DENIED', (await saveJobAdvert(adviser.id, workspaceId, programmeId, { ...importedAdvertPayload, title: 'Changed role' }, importedAdvertRequestId)).status >= 400);
+check('NON_ADVISER_IMPORT_DENIED', (await saveJobAdvert(otherMember.id, workspaceId, programmeId, { ...importedAdvertPayload, vacancyKey: 'VAC-IMPORT-002' })).status >= 400);
+check('DUPLICATE_JOB_REFERENCE_DENIED', (await saveJobAdvert(owner.id, workspaceId, programmeId, importedAdvertPayload)).status === 409);
+const ownerImport = await saveJobAdvert(owner.id, workspaceId, programmeId, {
+  ...importedAdvertPayload,
+  employerContactId: '',
+  vacancyKey: 'VAC-IMPORT-003',
+  title: 'Manager reviewed warehouse role',
+  sourceUrl: '',
+});
+check('NO_CONTACT_IMPORT_SUCCEEDS', ownerImport.status === 200);
+const importedRows = (await read(serviceKey, 'programme_hub_vacancies', workspaceId)).rows.filter((row) => row.vacancy_key.startsWith('VAC-IMPORT-'));
+check('EXACT_RETRY_CREATES_NO_DUPLICATE', importedRows.filter((row) => row.vacancy_key === importedAdvertPayload.vacancyKey).length === 1);
+check('IMPORTED_SOURCE_WORDING_PRESERVED', importedRows.length === 2 && importedRows.some((row) =>
+  row.id === adviserImport.payload?.record_id
+  && row.source_text === importedAdvertPayload.sourceText
+  && row.source_url === importedAdvertPayload.sourceUrl
+  && row.source_added_at
+  && row.published_shifts === null
+));
 
 const participantPayload = {
   participantKey: 'PART-001', preferredName: 'Alex', caseReference: 'CASE-001',
@@ -156,6 +215,10 @@ check('DUPLICATE_ADVISER_INTAKE_DENIED', (await save(adviser.id, workspaceId, 'p
 check('NON_ADVISER_INTAKE_DENIED', (await save(otherMember.id, workspaceId, 'participant_intake', programmeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-002', caseReference: 'CASE-ES-002' })).status >= 400);
 const otherProgrammeCreated = await save(owner.id, workspaceId, 'programme', null, null, 0, { ...programmePayload, name: 'Other Synthetic Programme' });
 const otherProgrammeId = id(otherProgrammeCreated.payload?.record_id);
+const otherProgrammeEmployerCreated = await save(owner.id, workspaceId, 'employer', otherProgrammeId, null, 0, {
+  ...employerPayload, employerKey: 'EMP-OTHER-PROGRAMME', displayName: 'Inaccessible Programme Employer',
+});
+const otherProgrammeEmployerId = id(otherProgrammeEmployerCreated.payload?.record_id);
 check('CROSS_PROGRAMME_ADVISER_INTAKE_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', otherProgrammeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-003', caseReference: 'CASE-ES-003' })).status >= 400);
 check('AUTHENTICATED_ADVISER_INTAKE_RPC_DENIED', (await save(adviser.id, workspaceId, 'participant_intake', programmeId, null, 0, { ...adviserIntakePayload, participantKey: 'PART-ES-004', caseReference: 'CASE-ES-004' }, randomUUID(), adviser.token)).status >= 400);
 
@@ -167,7 +230,10 @@ check('UNASSIGNED_MEMBER_READS_NO_PARTICIPANTS', (await read(otherMember.token, 
 check('OUTSIDER_READS_NO_PARTICIPANTS', (await read(outsider.token, 'programme_hub_participants', workspaceId)).rows.length === 0);
 const ownerParticipants = await read(owner.token, 'programme_hub_participants', workspaceId);
 check('OWNER_READS_PROGRAMME_WIDE_PARTICIPANTS', hasExactRecordIds(ownerParticipants.rows, [participantId, unassignedId, adviserIntakeId]));
-check('ADVISER_READS_PROGRAMME_EMPLOYERS', (await read(adviser.token, 'programme_hub_employers', workspaceId)).rows.length === 1);
+const adviserEmployers = await read(adviser.token, 'programme_hub_employers', workspaceId);
+check('ADVISER_READS_PROGRAMME_EMPLOYERS',
+  hasExactRecordIds(adviserEmployers.rows, [employerId, otherEmployerId]) &&
+  !adviserEmployers.rows.some((row) => row.id === otherProgrammeEmployerId));
 check('NON_ADVISER_READS_NO_EMPLOYERS', (await read(otherMember.token, 'programme_hub_employers', workspaceId)).rows.length === 0);
 
 const noteRequestId = randomUUID();
