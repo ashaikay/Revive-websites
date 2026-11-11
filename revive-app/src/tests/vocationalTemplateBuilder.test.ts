@@ -94,6 +94,8 @@ it('identifies employment-evidence questions without treating personal, contact 
   const section = { title: 'Employment profile', description: undefined };
   const question = (label: string) => ({ label, description: undefined, sensitive: false });
   expect(isVocationalMatchingCandidate(section, question('Which skills would you like to use at work?'))).toBe(true);
+  expect(isVocationalMatchingCandidate(section, question('Other supported skills'))).toBe(true);
+  expect(isVocationalMatchingCandidate(section, question('Which skills would you like to learn?'))).toBe(false);
   expect(isVocationalMatchingCandidate(section, question('Which job sectors interest you?'))).toBe(true);
   expect(isVocationalMatchingCandidate(section, question('How should an employer contact you?'))).toBe(false);
   expect(isVocationalMatchingCandidate(section, question('What employment support would help?'))).toBe(false);

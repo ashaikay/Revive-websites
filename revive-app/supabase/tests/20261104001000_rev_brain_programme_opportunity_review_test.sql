@@ -46,6 +46,7 @@ SELECT t.id,w.id,p.id,'Earlier questionnaire','draft',1,
   '[{"id":"skills","title":"Skills","questions":[
      {"id":"skills","sectionId":"skills","label":"Skills","type":"multi_select","standardField":"skills","options":["forklift","Working at heights","Driving"],"required":true,"sensitive":false},
      {"id":"text_skill","sectionId":"skills","label":"Other supported skills","type":"short_text","standardField":"skills","required":false,"sensitive":false},
+     {"id":"learning_skill","sectionId":"skills","label":"Which skills would you like to learn?","type":"short_text","standardField":"skills","required":false,"sensitive":false},
      {"id":"unmapped","sectionId":"skills","label":"Other employment experience","type":"short_text","required":false,"sensitive":false},
      {"id":"contact","sectionId":"skills","label":"How should an employer contact you?","type":"short_text","required":false,"sensitive":false},
      {"id":"support","sectionId":"skills","label":"What employment support would help?","type":"short_text","required":false,"sensitive":false},
@@ -80,6 +81,7 @@ WHERE a.key='p_progress_current' AND w.key='workspace' AND p.key='programme' AND
 INSERT INTO public.programme_hub_vocational_assessment_answers(assessment_id,question_id,answer)
 SELECT id,'skills','["forklift","Working at heights"]'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'text_skill','"Teamwork"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
+UNION ALL SELECT id,'learning_skill','"Driving"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'unmapped','"case-note-secret"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'contact','"personal-contact-secret"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'support','"support-note-secret"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'

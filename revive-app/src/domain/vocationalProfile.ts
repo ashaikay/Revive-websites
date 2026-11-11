@@ -74,7 +74,8 @@ export function isRestrictedVocationalQuestion(sectionTitle: string, question: P
 }
 
 const matchingCandidateTerms = /\b(skills?|experience|qualifications?|certificates?|licen[cs]es?|training|sectors?|industr(?:y|ies)|career|job|role|occupation)\b|employment\s+(?:goal|aspiration|outcome)|(?:kind|type)\s+of\s+work|work\s+(?:interest|preference)|work\s+(?:would|do)\s+you\s+(?:like|want|prefer|explore)/i;
-const nonMatchingQuestionTerms = /\b(contact|phone|email|address|date of birth|dob|national insurance|emergency contact|next of kin|support|help|barrier|housing|benefit|appointment|childcare|personal detail)/i;
+const nonMatchingQuestionTerms = /\b(contact|phone|email|address|date of birth|dob|national insurance|emergency contact|next of kin|support|help|barrier|housing|benefit|appointment|childcare|personal details?)\b/i;
+const learningIntentTerms = /\b(learn|develop|improve|gain|work towards|would like to learn|want to learn|training need)\b/i;
 export function isVocationalMatchingCandidate(
   section: Pick<VocationalSection, 'title' | 'description'>,
   question: Pick<VocationalQuestion, 'label' | 'description' | 'sensitive'>
@@ -83,6 +84,7 @@ export function isVocationalMatchingCandidate(
   const questionText = `${question.label} ${question.description ?? ''}`;
   return !isRestrictedVocationalQuestion(sectionText, question)
     && !nonMatchingQuestionTerms.test(`${sectionText} ${questionText}`)
+    && !learningIntentTerms.test(questionText)
     && matchingCandidateTerms.test(`${sectionText} ${questionText}`);
 }
 
@@ -90,7 +92,6 @@ export function isVocationalMatchingField(value: VocationalStandardField | undef
   return vocationalMatchingFields.some((field) => field === value);
 }
 
-const learningIntentTerms = /\b(learn|develop|improve|gain|work towards|would like to learn|want to learn|training need)\b/i;
 export function suggestVocationalMatchingField(
   section: Pick<VocationalSection, 'title' | 'description'>,
   question: Pick<VocationalQuestion, 'label' | 'description' | 'sensitive'>
