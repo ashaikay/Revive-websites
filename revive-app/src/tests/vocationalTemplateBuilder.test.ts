@@ -9,7 +9,7 @@ import {
 import { coreVocationalQuestionCount } from '../domain/vocationalCore';
 import {
   isVocationalMatchingCandidate, isVocationalMatchingField, validateVocationalTemplate,
-  vocationalMatchingFields, vocationalMatchingOptions,
+  suggestVocationalMatchingField, vocationalMatchingFields, vocationalMatchingOptions,
 } from '../domain/vocationalProfile';
 
 describe('REV vocational template builder', () => {
@@ -98,6 +98,18 @@ it('identifies employment-evidence questions without treating personal, contact 
   expect(isVocationalMatchingCandidate(section, question('How should an employer contact you?'))).toBe(false);
   expect(isVocationalMatchingCandidate(section, question('What employment support would help?'))).toBe(false);
   expect(isVocationalMatchingCandidate({ title: 'Personal details' }, question('Preferred job role'))).toBe(false);
+});
+it('suggests only clear existing evidence and preference mappings', () => {
+  const section = { title: 'Employment profile', description: undefined };
+  const question = (label: string) => ({ label, description: undefined, sensitive: false });
+  expect(suggestVocationalMatchingField(section, question('Which existing skills do you have?'))).toBe('skills');
+  expect(suggestVocationalMatchingField(section, question('Which certificates or licences do you hold?'))).toBe('qualifications');
+  expect(suggestVocationalMatchingField(section, question('What are your preferred job roles?'))).toBe('employment_goal');
+  expect(suggestVocationalMatchingField(section, question('Which sectors are you interested in?'))).toBe('preferred_sector');
+  expect(suggestVocationalMatchingField(section, question('Which skills would you like to learn?'))).toBeNull();
+  expect(suggestVocationalMatchingField(section, question('What work interests you?'))).toBeNull();
+  expect(suggestVocationalMatchingField(section, question('What employment support would help?'))).toBeNull();
+  expect(suggestVocationalMatchingField(section, question('How should an employer contact you?'))).toBeNull();
 });
 it('adds core definitions to an optional-only draft without changing optional questions', () => {
   const template = createVocationalTemplate('workspace','manager');

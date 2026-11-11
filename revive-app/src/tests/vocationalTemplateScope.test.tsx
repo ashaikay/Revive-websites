@@ -4,7 +4,10 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import VocationalProfileBuilder from '@/components/VocationalProfileBuilder';
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn(), published: false, supportOnly: false, version: 1, queryIds: [] as string[] }));
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(), published: false, supportOnly: false, version: 1, queryIds: [] as string[],
+  questions: null as null | Array<Record<string, unknown>>,
+}));
 vi.mock('@/data/supabaseClient', () => ({ supabaseClient: {
   rpc: (...args: unknown[]) => mocks.rpc(...args),
   from: () => {
@@ -16,7 +19,7 @@ vi.mock('@/data/supabaseClient', () => ({ supabaseClient: {
       then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [{
         id: requestedId || `template-${programme}`, programme_id: programme, title: `Template ${programme}`,
         status: mocks.published ? 'published' : 'draft', version: mocks.version,
-        sections: [{ id: 'section', title: mocks.supportOnly ? 'Criminal Justice and Resettlement Support' : 'Employment goals', questions: [{id:'question',sectionId:'section',label:'What work interests you?',type:'long_text',required:false,sensitive:false,order:0}] }],
+        sections: [{ id: 'section', title: mocks.supportOnly ? 'Criminal Justice and Resettlement Support' : 'Employment goals', questions: mocks.questions ?? [{id:'question',sectionId:'section',label:'What work interests you?',type:'long_text',required:false,sensitive:false,order:0}] }],
       }], error: null }).then(resolve),
     };
     return query;
@@ -35,7 +38,7 @@ function deferred() {
   return { promise, resolve };
 }
 beforeEach(() => {
-  mocks.rpc.mockReset(); mocks.published = false; mocks.supportOnly = false; mocks.version = 1; mocks.queryIds = []; window.sessionStorage.clear();
+  mocks.rpc.mockReset(); mocks.published = false; mocks.supportOnly = false; mocks.version = 1; mocks.queryIds = []; mocks.questions = null; window.sessionStorage.clear();
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -144,19 +147,56 @@ it('maps eligible employment questions through a new questionnaire revision', as
     {id:'revision',version:3,status:'draft'},error:null}));
   render(<VocationalProfileBuilder {...props}/>);
   await screen.findByLabelText('Questionnaire name');
-  expect(screen.getByLabelText('Opportunity matching setup')).toHaveTextContent('Choose Edit questionnaire to create a revision');
+  expect(screen.getByLabelText('Set up job matching')).toHaveTextContent('Choose Edit questionnaire to create a revision');
   fireEvent.click(screen.getByRole('button',{name:'Edit questionnaire'}));
-  const mapping=await screen.findByLabelText('Opportunity matching field for What work interests you?');
-  expect(screen.getByText('Eligible for opportunity matching')).toBeVisible();
+  expect(await screen.findByLabelText('Set up job matching')).toHaveTextContent('No confident suggestions were found');
+  fireEvent.click(screen.getByText('More options',{selector:'summary'}));
+  const mapping=screen.getByLabelText('Opportunity matching field for What work interests you?');
   expect(mapping).toHaveValue('');
   fireEvent.change(mapping,{target:{value:'skills'}});
-  expect(screen.getByLabelText('Opportunity matching setup')).toHaveTextContent('Eligible employment questions are mapped');
+  expect(screen.getByLabelText('Set up job matching')).toHaveTextContent('Job matching fields are set up');
+  expect(screen.getByText('Supported terms for this text question')).toBeInTheDocument();
+  expect(screen.getByLabelText('Advanced job matching controls')).toHaveTextContent('Unsupported wording stays saved but is not used as matching evidence');
   fireEvent.click(advanced('Save draft'));
   await screen.findByText('Draft saved.');
   const saved=mocks.rpc.mock.calls.find(([name])=>name==='save_rev_vocational_template')![1];
   expect(saved.target_template_id).toBe('revision');
   expect(saved.target_sections[0].questions[0].standardField).toBe('skills');
   expect(mocks.rpc.mock.calls[0][0]).toBe('rev_vocational_create_revision');
+});
+it('offers only unambiguous suggested mappings and applies them to the unsaved draft after review', async()=>{
+  mocks.questions=[
+    {id:'skills',sectionId:'section',label:'Which existing skills do you have?',type:'long_text',required:false,sensitive:false,order:0},
+    {id:'qualifications',sectionId:'section',label:'Which certificates or licences do you hold?',type:'long_text',required:false,sensitive:false,order:1},
+    {id:'roles',sectionId:'section',label:'What are your preferred job roles?',type:'long_text',required:false,sensitive:false,order:2},
+    {id:'sectors',sectionId:'section',label:'Which sectors are you interested in?',type:'long_text',required:false,sensitive:false,order:3},
+    {id:'learning',sectionId:'section',label:'Which skills would you like to learn?',type:'long_text',required:false,sensitive:false,order:4},
+    {id:'support',sectionId:'section',label:'What employment support would help?',type:'long_text',required:false,sensitive:false,order:5},
+    {id:'contact',sectionId:'section',label:'How should an employer contact you?',type:'short_text',required:false,sensitive:false,order:6},
+    {id:'restricted',sectionId:'section',label:'Restricted skills',type:'long_text',required:false,sensitive:true,order:7},
+  ];
+  mocks.rpc.mockResolvedValue({data:{id:'template-alice',version:2,status:'draft'},error:null});
+  render(<VocationalProfileBuilder {...props}/>);
+  await screen.findByLabelText('Questionnaire name');
+  const setup=screen.getByLabelText('Set up job matching');
+  expect(setup).toHaveTextContent('Which existing skills do you have? → Skills');
+  expect(setup).toHaveTextContent('Which certificates or licences do you hold? → Qualifications');
+  expect(setup).toHaveTextContent('What are your preferred job roles? → Employment goals');
+  expect(setup).toHaveTextContent('Which sectors are you interested in? → Preferred sectors');
+  expect(setup).not.toHaveTextContent('Which skills would you like to learn? →');
+  expect(setup).not.toHaveTextContent('employment support');
+  expect(setup).not.toHaveTextContent('employer contact');
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Apply suggested mappings'}));
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  fireEvent.click(advanced('Save draft'));
+  await screen.findByText('Draft saved.');
+  const saved=mocks.rpc.mock.calls[0][1].target_sections[0].questions;
+  expect(saved.map((question:{id:string;standardField?:string})=>[question.id,question.standardField])).toEqual([
+    ['skills','skills'],['qualifications','qualifications'],['roles','employment_goal'],['sectors','preferred_sector'],
+    ['learning',undefined],['support',undefined],['contact',undefined],['restricted',undefined],
+  ]);
+  expect(saved.every((question:{type:string})=>['long_text','short_text'].includes(question.type))).toBe(true);
 });
 it('creates a separate unsaved questionnaire after publishing without changing the existing one',async()=>{
   mocks.published=true;render(<VocationalProfileBuilder {...props}/>);

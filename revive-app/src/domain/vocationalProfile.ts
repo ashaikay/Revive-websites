@@ -73,7 +73,7 @@ export function isRestrictedVocationalQuestion(sectionTitle: string, question: P
   return question.sensitive || restrictedVocationalTerms.test(sectionTitle) || restrictedVocationalTerms.test(question.label);
 }
 
-const matchingCandidateTerms = /\b(skills?|experience|qualifications?|training|sectors?|industr(?:y|ies)|career|job|role|occupation)\b|employment\s+(?:goal|aspiration|outcome)|(?:kind|type)\s+of\s+work|work\s+(?:interest|preference)|work\s+(?:would|do)\s+you\s+(?:like|want|prefer|explore)/i;
+const matchingCandidateTerms = /\b(skills?|experience|qualifications?|certificates?|licen[cs]es?|training|sectors?|industr(?:y|ies)|career|job|role|occupation)\b|employment\s+(?:goal|aspiration|outcome)|(?:kind|type)\s+of\s+work|work\s+(?:interest|preference)|work\s+(?:would|do)\s+you\s+(?:like|want|prefer|explore)/i;
 const nonMatchingQuestionTerms = /\b(contact|phone|email|address|date of birth|dob|national insurance|emergency contact|next of kin|support|help|barrier|housing|benefit|appointment|childcare|personal detail)/i;
 export function isVocationalMatchingCandidate(
   section: Pick<VocationalSection, 'title' | 'description'>,
@@ -88,6 +88,21 @@ export function isVocationalMatchingCandidate(
 
 export function isVocationalMatchingField(value: VocationalStandardField | undefined): value is VocationalMatchingField {
   return vocationalMatchingFields.some((field) => field === value);
+}
+
+const learningIntentTerms = /\b(learn|develop|improve|gain|work towards|would like to learn|want to learn|training need)\b/i;
+export function suggestVocationalMatchingField(
+  section: Pick<VocationalSection, 'title' | 'description'>,
+  question: Pick<VocationalQuestion, 'label' | 'description' | 'sensitive'>
+): VocationalMatchingField | null {
+  if (!isVocationalMatchingCandidate(section, question)) return null;
+  const text = `${section.title} ${section.description ?? ''} ${question.label} ${question.description ?? ''}`;
+  if (learningIntentTerms.test(text)) return null;
+  if (/\b(existing|current|held|have|has)\b.{0,30}\bskills?\b|\bskills?\b.{0,30}\b(existing|current|held|have|has|use at work)\b/i.test(text)) return 'skills';
+  if (/\b(certificates?|qualifications?|licen[cs]es?)\b.{0,35}\b(held|hold|have|has|completed|gained|awarded)\b|\b(held|hold|have|has|completed|gained|awarded)\b.{0,35}\b(certificates?|qualifications?|licen[cs]es?)\b/i.test(text)) return 'qualifications';
+  if (/\b(desired|preferred)\b.{0,25}\b(roles?|jobs?|occupations?)\b|\b(roles?|jobs?|occupations?)\b.{0,25}\b(want|looking for|prefer)\b/i.test(text)) return 'employment_goal';
+  if (/\b(sectors?|industr(?:y|ies))\b.{0,30}\b(interest|interested|prefer|preferred|want to work)\b|\b(interested|preferred)\b.{0,30}\b(sectors?|industr(?:y|ies))\b/i.test(text)) return 'preferred_sector';
+  return null;
 }
 
 export interface VocationalQuestion {
