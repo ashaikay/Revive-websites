@@ -40,11 +40,13 @@ SELECT w.id,p.id,s.id,a.id,o.id,o.id
 FROM rev_opp_ids w,rev_opp_ids p,rev_opp_ids s,rev_opp_ids a,rev_opp_ids o
 WHERE w.key='workspace' AND p.key='programme' AND s.key IN ('p_ready','p_progress') AND a.key='adviser' AND o.key='owner';
 
--- One ordinary allowlisted skills question and one restricted question that must never be used.
+-- Ordinary mapped select/text answers, one unmapped ordinary answer and one restricted answer.
 INSERT INTO public.programme_hub_vocational_templates(id,workspace_id,programme_id,title,status,version,sections,created_by_user_id,updated_by_user_id,published_at)
 SELECT t.id,w.id,p.id,'Earlier questionnaire','draft',1,
   '[{"id":"skills","title":"Skills","questions":[
-     {"id":"skills","sectionId":"skills","label":"Skills","type":"multi_select","standardField":"skills","options":["Forklift","Teamwork","Driving"],"required":true,"sensitive":false},
+     {"id":"skills","sectionId":"skills","label":"Skills","type":"multi_select","standardField":"skills","options":["forklift","Working at heights","Driving"],"required":true,"sensitive":false},
+     {"id":"text_skill","sectionId":"skills","label":"Other supported skills","type":"short_text","standardField":"skills","required":false,"sensitive":false},
+     {"id":"unmapped","sectionId":"skills","label":"Other employment experience","type":"short_text","required":false,"sensitive":false},
      {"id":"restricted","sectionId":"skills","label":"Restricted skills","type":"multi_select","standardField":"skills","options":["Driving"],"required":false,"sensitive":true}]}]'::jsonb,
   o.id,o.id,NULL
 FROM rev_opp_ids t,rev_opp_ids w,rev_opp_ids p,rev_opp_ids o
@@ -74,7 +76,9 @@ SELECT a.id,w.id,p.id,s.id,v.id,'draft',o.id,o.id
 FROM rev_opp_ids a,rev_opp_ids w,rev_opp_ids p,rev_opp_ids s,rev_opp_ids v,rev_opp_ids o
 WHERE a.key='p_progress_current' AND w.key='workspace' AND p.key='programme' AND s.key='p_progress' AND v.key='current_snapshot' AND o.key='owner';
 INSERT INTO public.programme_hub_vocational_assessment_answers(assessment_id,question_id,answer)
-SELECT id,'skills','["Forklift"]'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
+SELECT id,'skills','["forklift","Working at heights"]'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
+UNION ALL SELECT id,'text_skill','"Teamwork"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
+UNION ALL SELECT id,'unmapped','"case-note-secret"'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'restricted','["Driving"]'::jsonb FROM rev_opp_ids WHERE key='p_ready_current'
 UNION ALL SELECT id,'skills','["Teamwork"]'::jsonb FROM rev_opp_ids WHERE key='p_progress_old'
 UNION ALL SELECT id,'skills','["Forklift"]'::jsonb FROM rev_opp_ids WHERE key='p_progress_current';
@@ -129,11 +133,17 @@ BEGIN
   IF result->>'status' <> 'ready'
     OR result->'profileEvidence'->>'assessmentId' <> (SELECT id::text FROM rev_opp_ids WHERE key='p_ready_current')
     OR result->'profileEvidence'->>'templateVersionId' <> (SELECT id::text FROM rev_opp_ids WHERE key='current_snapshot')
-    OR result->'profileEvidence'->'summary'->'skills' <> '["Forklift"]'::jsonb
+    OR result->'profileEvidence'->'summary'->'skills' <> '["Forklift","Teamwork"]'::jsonb
+    OR (result->'profileEvidence'->>'mappedQuestionCount')::integer <> 2
+    OR result->'profileEvidence'->'unmappedQuestions'
+      <> '[{"label":"Other employment experience","questionId":"unmapped"}]'::jsonb
+    OR result::text LIKE '%Working at heights%'
+    OR result::text LIKE '%Driving%'
+    OR result::text LIKE '%case-note-secret%'
     OR result->'profileEvidence'->'summary' <> public.rev_voc_matching_summary(ws,prog,ready_id)->'summary' THEN
     RAISE EXCEPTION 'FAIL ready profile evidence: %',result;
   END IF;
-  RAISE NOTICE 'PASS assigned ES gets current-questionnaire evidence without the restricted answer';
+  RAISE NOTICE 'PASS supported ordinary answers contribute independently and unmapped labels exclude answer values';
 
   IF pg_catalog.jsonb_array_length(result->'opportunities') <> 1 OR (result->>'opportunityCount')::int <> 1
     OR (result->>'truncated')::boolean THEN

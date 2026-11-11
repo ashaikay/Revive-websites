@@ -78,7 +78,13 @@ export function ParticipantOpportunityReview({ workspaceId, userId, programmeId,
       {review && review.status === 'ready' && <>
         <div className="rounded-lg border border-neutral-200 p-3" aria-label="Profile evidence">
           <h4 className="font-semibold">Profile evidence</h4>
-          <p className="text-sm text-neutral-700">From the completed current questionnaire only ({review.profileEvidence.mappedQuestionCount} matching {review.profileEvidence.mappedQuestionCount === 1 ? 'answer' : 'answers'}). Restricted answers, sensitive information and case notes are not used.</p>
+          <p className="text-sm text-neutral-700">From the completed current questionnaire only ({review.profileEvidence.mappedQuestionCount} supported matching {review.profileEvidence.mappedQuestionCount === 1 ? 'answer' : 'answers'}). Restricted answers, sensitive information and case notes are not used.</p>
+          {review.profileEvidence.mappedQuestionCount === 0 && <p className="mt-2 text-sm text-amber-900">No supported matching answers were found. This does not mean the Service user is missing skills or qualifications.</p>}
+          {review.profileEvidence.unmappedQuestions.length > 0 && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm text-amber-950">
+            <p className="font-medium">{review.profileEvidence.unmappedQuestions.length} answered {review.profileEvidence.unmappedQuestions.length === 1 ? 'question is' : 'questions are'} not mapped for opportunity matching:</p>
+            <ul className="list-disc pl-5">{review.profileEvidence.unmappedQuestions.map((question) => <li key={question.questionId}>{question.label}</li>)}</ul>
+            <p>Saved answers and the published questionnaire have not been changed. A manager can add mappings in a new questionnaire version.</p>
+          </div>}
           <dl className="mt-2 grid gap-1 text-sm md:grid-cols-2">{profileRows.map(([field, label]) => <div key={field}><dt className="inline font-medium">{label}: </dt>
             <dd className="inline">{review.profileEvidence.summary[field].length ? review.profileEvidence.summary[field].join(', ') : 'Not recorded'}</dd></div>)}</dl>
         </div>
