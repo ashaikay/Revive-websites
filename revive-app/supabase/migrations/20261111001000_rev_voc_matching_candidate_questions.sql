@@ -10,7 +10,7 @@ RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = '' AS $fn$
       COALESCE(section_data->>'description','') || ' ' ||
       COALESCE(question_data->>'label','') || ' ' ||
       COALESCE(question_data->>'description','')
-    ) ~* '(skills?|experience|qualifications?|certificates?|licen[cs]es?|training|sectors?|industr(y|ies)|career|job|role|occupation|employment[[:space:]]+(goal|aspiration|outcome)|(kind|type)[[:space:]]+of[[:space:]]+work|work[[:space:]]+(interest|preference)|work[[:space:]]+(would|do)[[:space:]]+you[[:space:]]+(like|want|prefer|explore))'
+    ) ~* '(skills?|experience|qualifications?|training|sectors?|industr(y|ies)|career|job|role|occupation|employment[[:space:]]+(goal|aspiration|outcome)|(kind|type)[[:space:]]+of[[:space:]]+work|work[[:space:]]+(interest|preference)|work[[:space:]]+(would|do)[[:space:]]+you[[:space:]]+(like|want|prefer|explore))'
     AND (
       COALESCE(section_data->>'title','') || ' ' ||
       COALESCE(section_data->>'description','') || ' ' ||
