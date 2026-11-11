@@ -137,9 +137,9 @@ BEGIN
     OR (result->'profileEvidence'->>'mappedQuestionCount')::integer <> 2
     OR result->'profileEvidence'->'unmappedQuestions'
       <> '[{"label":"Other employment experience","questionId":"unmapped"}]'::jsonb
-    OR result::text LIKE '%Working at heights%'
-    OR result::text LIKE '%Driving%'
-    OR result::text LIKE '%case-note-secret%'
+    OR (result->'profileEvidence')::text LIKE '%Working at heights%'
+    OR (result->'profileEvidence')::text LIKE '%Driving%'
+    OR (result->'profileEvidence')::text LIKE '%case-note-secret%'
     OR result->'profileEvidence'->'summary' <> public.rev_voc_matching_summary(ws,prog,ready_id)->'summary' THEN
     RAISE EXCEPTION 'FAIL ready profile evidence: %',result;
   END IF;
