@@ -28,11 +28,92 @@ export const vocationalStandardFields: readonly VocationalStandardField[] = [
   'work_history', 'availability', 'travel_radius', 'employment_status',
 ] as const;
 
+export const vocationalMatchingFields = [
+  'employment_goal', 'preferred_sector', 'skills', 'qualifications',
+] as const satisfies readonly VocationalStandardField[];
+
+export type VocationalMatchingField = typeof vocationalMatchingFields[number];
+
+export const vocationalMatchingFieldLabels: Record<VocationalMatchingField, string> = {
+  employment_goal: 'Employment goals',
+  preferred_sector: 'Preferred sectors',
+  skills: 'Skills',
+  qualifications: 'Qualifications',
+};
+
+export const vocationalMatchingOptions: Record<VocationalMatchingField, readonly string[]> = {
+  employment_goal: [
+    'Full-time employment', 'Part-time employment', 'Apprenticeship',
+    'Traineeship', 'Self-employment', 'Work experience',
+  ],
+  preferred_sector: [
+    'Construction', 'Retail', 'Warehousing', 'Logistics', 'Hospitality',
+    'Health and social care', 'Administration', 'Customer service',
+    'Manufacturing', 'Transport', 'Cleaning', 'Security', 'IT', 'Education',
+    'Rail', 'Postal services', 'Traffic management',
+  ],
+  skills: [
+    'Customer service', 'Communication', 'Teamwork', 'Time management',
+    'IT skills', 'Microsoft Office', 'Forklift', 'Warehouse operations',
+    'Stock control', 'Driving', 'Food preparation', 'Cleaning',
+    'Construction labouring', 'Traffic management', 'Administration',
+    'Cash handling', 'Sales', 'Manual handling',
+  ],
+  qualifications: [
+    'CSCS card', 'Driving licence', 'Forklift licence', 'First aid',
+    'Food hygiene', 'GCSE English', 'GCSE Maths', 'Functional Skills English',
+    'Functional Skills Maths', 'SIA licence', 'NVQ Level 2', 'NVQ Level 3',
+  ],
+};
+
 // Defence in depth for draft editing. The server must independently enforce
 // the same restrictions before persisting templates or creating match summaries.
 const restrictedVocationalTerms = /conviction|sentenc|offen[cs]e|prison|probation|criminal|health|disabilit|medical|diagnos|medicat|safeguard|ethnic|religio|sexual|contact|address|date of birth|dob|national insurance|housing|benefit|support need|barrier/i;
 export function isRestrictedVocationalQuestion(sectionTitle: string, question: Pick<VocationalQuestion, 'label' | 'sensitive'>): boolean {
   return question.sensitive || restrictedVocationalTerms.test(sectionTitle) || restrictedVocationalTerms.test(question.label);
+}
+
+const matchingCandidateTerms = /\b(skills?|experience|qualifications?|certificates?|licen[cs]es?|training|sectors?|industr(?:y|ies)|career|job|role|occupation)\b|employment\s+(?:goal|aspiration|outcome)|(?:kind|type)\s+of\s+work|work\s+(?:interest|preference)|work\s+(?:would|do)\s+you\s+(?:like|want|prefer|explore)/i;
+const nonMatchingQuestionTerms = /\b(contact|phone|email|address|date of birth|dob|national insurance|emergency contact|next of kin|support|help|barrier|housing|benefit|appointment|childcare|personal details?)\b/i;
+const learningIntentTerms = /\b(learn|develop|improve|gain|work towards|would like to learn|want to learn|training need)\b/i;
+const employmentStatusTerms = /\b(employment|work|job)\s+status\b|\bcurrently\s+(employed|unemployed|working|not working)\b/i;
+export function isVocationalEvidenceMappingProhibited(
+  section: Pick<VocationalSection, 'title' | 'description'>,
+  question: Pick<VocationalQuestion, 'label' | 'description' | 'sensitive'>
+): boolean {
+  const sectionText = `${section.title} ${section.description ?? ''}`;
+  const questionText = `${question.label} ${question.description ?? ''}`;
+  return isRestrictedVocationalQuestion(sectionText, question)
+    || nonMatchingQuestionTerms.test(`${sectionText} ${questionText}`)
+    || learningIntentTerms.test(questionText)
+    || employmentStatusTerms.test(questionText);
+}
+export function isVocationalMatchingCandidate(
+  section: Pick<VocationalSection, 'title' | 'description'>,
+  question: Pick<VocationalQuestion, 'label' | 'description' | 'sensitive'>
+): boolean {
+  const sectionText = `${section.title} ${section.description ?? ''}`;
+  const questionText = `${question.label} ${question.description ?? ''}`;
+  return !isVocationalEvidenceMappingProhibited(section, question)
+    && matchingCandidateTerms.test(`${sectionText} ${questionText}`);
+}
+
+export function isVocationalMatchingField(value: VocationalStandardField | undefined): value is VocationalMatchingField {
+  return vocationalMatchingFields.some((field) => field === value);
+}
+
+export function suggestVocationalMatchingField(
+  section: Pick<VocationalSection, 'title' | 'description'>,
+  question: Pick<VocationalQuestion, 'label' | 'description' | 'sensitive'>
+): VocationalMatchingField | null {
+  if (!isVocationalMatchingCandidate(section, question)) return null;
+  const text = `${section.title} ${section.description ?? ''} ${question.label} ${question.description ?? ''}`;
+  if (learningIntentTerms.test(text)) return null;
+  if (/\b(existing|current|held|have|has)\b.{0,30}\bskills?\b|\bskills?\b.{0,30}\b(existing|current|held|have|has|use at work)\b/i.test(text)) return 'skills';
+  if (/\b(certificates?|qualifications?|licen[cs]es?)\b.{0,35}\b(held|hold|have|has|completed|gained|awarded)\b|\b(held|hold|have|has|completed|gained|awarded)\b.{0,35}\b(certificates?|qualifications?|licen[cs]es?)\b/i.test(text)) return 'qualifications';
+  if (/\b(desired|preferred)\b.{0,25}\b(roles?|jobs?|occupations?)\b|\b(roles?|jobs?|occupations?)\b.{0,25}\b(want|looking for|prefer)\b/i.test(text)) return 'employment_goal';
+  if (/\b(sectors?|industr(?:y|ies))\b.{0,30}\b(interest|interested|prefer|preferred|want to work)\b|\b(interested|preferred)\b.{0,30}\b(sectors?|industr(?:y|ies))\b/i.test(text)) return 'preferred_sector';
+  return null;
 }
 
 export interface VocationalQuestion {

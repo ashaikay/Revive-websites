@@ -19,7 +19,7 @@ const vacancy = (overrides: Partial<ProgrammeVacancyOpportunity> = {}): Programm
 });
 const response = (overrides: Record<string, unknown> = {}) => ({
   status: 'ready',
-  profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: 'v2', assessmentId: 'a2', mappedQuestionCount: 3, summary },
+  profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: 'v2', assessmentId: 'a2', mappedQuestionCount: 3, unmappedQuestions: [], summary },
   opportunities: [vacancy()], opportunityCount: 1, truncated: false, ...overrides,
 });
 const open = () => fireEvent.click(screen.getByRole('button', { name: 'Review opportunities' }));
@@ -63,10 +63,11 @@ describe('opportunity review response', () => {
     expect(() => parseProgrammeOpportunityReview(response({ status: 'assessment_in_progress' }))).toThrow('could not be verified');
     expect(() => parseProgrammeOpportunityReview(response({ status: 'unknown' }))).toThrow('could not be verified');
     expect(() => parseProgrammeOpportunityReview(response({ opportunities: [{ ...vacancy(), requiredSkills: null }] }))).toThrow('could not be verified');
+    expect(() => parseProgrammeOpportunityReview(response({ profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: 'v2', assessmentId: 'a2', mappedQuestionCount: 3, unmappedQuestions: [{ questionId: 'q1', label: null }], summary } }))).toThrow('could not be verified');
   });
 
   it('keeps only the allowlisted profile fields', () => {
-    const parsed = parseProgrammeOpportunityReview(response({ profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: 'v2', assessmentId: 'a2', mappedQuestionCount: 3, summary: { ...summary, healthNotes: ['restricted'] } } }));
+    const parsed = parseProgrammeOpportunityReview(response({ profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: 'v2', assessmentId: 'a2', mappedQuestionCount: 3, unmappedQuestions: [], summary: { ...summary, healthNotes: ['restricted'] } } }));
     expect(Object.keys(parsed.profileEvidence.summary).sort()).toEqual(['employmentGoals', 'preferredLocations', 'preferredSectors', 'qualifications', 'skills']);
   });
 });
@@ -97,12 +98,34 @@ describe('Review opportunities', () => {
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
   });
 
+  it('shows unmapped ordinary questions without treating absent evidence as absent skills', async () => {
+    mocks.rpc.mockResolvedValue({ data: response({
+      profileEvidence: {
+        source: 'current_vocational_questionnaire', templateVersionId: 'v2', assessmentId: 'a2',
+        mappedQuestionCount: 0,
+        unmappedQuestions: [{ questionId: 'experience', label: 'Tell us about your work experience' }],
+        summary: emptySummary,
+      },
+    }), error: null });
+    render(<ParticipantOpportunityReview {...props} />);
+    open();
+    const evidence = await screen.findByLabelText('Profile evidence');
+    expect(evidence).toHaveTextContent('0 supported matching answers');
+    expect(evidence).toHaveTextContent('This does not mean the Service user is missing skills or qualifications.');
+    const setup = within(evidence).getByText('Matching setup needed').closest('details');
+    expect(setup).not.toHaveAttribute('open');
+    expect(setup).toHaveTextContent('1 answered employment question is not mapped for opportunity matching');
+    expect(setup).toHaveTextContent('Tell us about your work experience');
+    expect(setup).toHaveTextContent('Saved answers and the published questionnaire have not been changed.');
+    expect(setup).toHaveTextContent('Only approved employment goals, sectors, skills and qualifications currently contribute.');
+  });
+
   it.each([
     ['assessment_in_progress', 'current questionnaire is still in progress'],
     ['reassessment_required', 'Answers to earlier questionnaires are not used'],
     ['no_published_questionnaire', 'no published vocational questionnaire'],
   ])('shows not ready for %s without listing jobs', async (status, text) => {
-    mocks.rpc.mockResolvedValue({ data: response({ status, opportunities: [], opportunityCount: 0, profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: null, assessmentId: null, mappedQuestionCount: 0, summary: emptySummary } }), error: null });
+    mocks.rpc.mockResolvedValue({ data: response({ status, opportunities: [], opportunityCount: 0, profileEvidence: { source: 'current_vocational_questionnaire', templateVersionId: null, assessmentId: null, mappedQuestionCount: 0, unmappedQuestions: [], summary: emptySummary } }), error: null });
     render(<ParticipantOpportunityReview {...props} />);
     open();
     expect(await screen.findByText(new RegExp(text))).toHaveTextContent(/^Not ready/);

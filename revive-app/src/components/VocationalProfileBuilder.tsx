@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { coreVocationalQuestionCount } from '../domain/vocationalCore';
 import { supabaseClient } from '@/data/supabaseClient';
 import { createVocationalTemplate, addVocationalSection, addVocationalQuestion, addCoreVocationalQuestions } from '../domain/vocationalTemplateBuilder';
-import { validateVocationalTemplate, vocationalStandardFields, isRestrictedVocationalQuestion, type VocationalStandardField, type VocationalFieldType, type VocationalProfileTemplate, type VocationalQuestion } from '../domain/vocationalProfile';
+import {
+  isVocationalEvidenceMappingProhibited, isVocationalMatchingCandidate, isVocationalMatchingField,
+  suggestVocationalMatchingField, validateVocationalTemplate, vocationalMatchingFieldLabels,
+  vocationalMatchingFields, vocationalMatchingOptions,
+  type VocationalStandardField, type VocationalFieldType, type VocationalProfileTemplate, type VocationalQuestion,
+} from '../domain/vocationalProfile';
 
 const types: { value: VocationalFieldType; label: string }[] = [
   { value: 'short_text', label: 'Short text' },
@@ -44,7 +49,6 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   const [questionType, setQuestionType] = useState<VocationalFieldType>('short_text');
   const [optionsText, setOptionsText] = useState('');
   const [required, setRequired] = useState(false);
-  const [standardField, setStandardField] = useState<VocationalStandardField | ''>('');
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -118,7 +122,7 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
     setAvailabilityBusy(false); setAvailabilityUncertain(false); availabilityLock.current = false;
     setTemplate(null); savedId.current = null; setActiveId(''); setPreview(false);
     setNewSection(''); setQuestionLabel(''); setOptionsText('');
-    setQuestionType('short_text'); setRequired(false); setStandardField('');
+    setQuestionType('short_text'); setRequired(false);
     try {
       const raw = window.sessionStorage.getItem(pendingKey);
       if (raw) {
@@ -342,6 +346,23 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   const selected = template.sections.find(s => s.id === activeId) ?? template.sections[0];
   const coreQuestions = coreVocationalQuestionCount(template.sections);
   const totalQuestions = template.sections.reduce((sum, s) => sum + s.questions.length, 0);
+  const matchingCandidates = template.sections.flatMap(section => section.questions
+    .filter(question => isVocationalMatchingCandidate(section, question))
+    .map(question => ({ section, question })));
+  const suggestedMappings = matchingCandidates.flatMap(({ section, question }) => {
+    const suggestedField = suggestVocationalMatchingField(section, question);
+    return suggestedField ? [{ section, question, suggestedField }] : [];
+  });
+  const proposedMappings = suggestedMappings.filter(({ question }) => !isVocationalMatchingField(question.standardField));
+  const unmappedMatchingCandidates = matchingCandidates.filter(({ question }) => !isVocationalMatchingField(question.standardField));
+  const conflictingMappings = template.sections.flatMap(section => section.questions.flatMap(question => {
+    if (!isVocationalMatchingField(question.standardField)) return [];
+    const suggestedField = suggestVocationalMatchingField(section, question);
+    const prohibited = isVocationalEvidenceMappingProhibited(section, question);
+    return prohibited || (suggestedField !== null && suggestedField !== question.standardField)
+      ? [{ section, question, currentField: question.standardField, suggestedField }]
+      : [];
+  }));
   const errors = validateVocationalTemplate(template);
 
   return (
@@ -391,6 +412,39 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         <input className={field} value={template.title} disabled={availabilityBusy || availabilityUncertain || template.status === 'published' || busy || Boolean(pending) || recoveryBlocked} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
       </label>
       {coreQuestions === 0 && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This questionnaire has no core employment questions. Employment Specialists cannot complete a core profile from it. {template.status === 'published' ? 'Choose Edit questionnaire to review suggested questions, then Save and make available.' : 'Add core employment questions before publishing. Optional or restricted support questions do not count as core questions.'}</p>}
+      <div className={`rounded-lg border p-3 text-sm ${unmappedMatchingCandidates.length || conflictingMappings.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-green-200 bg-green-50 text-green-900'}`} aria-label="Set up job matching">
+        <p className="font-semibold">Set up job matching</p>
+        {template.status === 'published' && (unmappedMatchingCandidates.length > 0 || conflictingMappings.length > 0)
+          ? <p>Choose Edit questionnaire to create a revision and review suggested mappings. Nothing changes until you save and publish that revision.</p>
+          : unmappedMatchingCandidates.length > 0 || conflictingMappings.length > 0
+            ? <>
+              {proposedMappings.length > 0 && <>
+                <p className="mt-2 font-medium">Proposed corrections for approval</p>
+                <ul className="list-disc pl-5">{proposedMappings.map(({ question, suggestedField }) =>
+                  <li key={question.id}>{question.label} → {vocationalMatchingFieldLabels[suggestedField]}</li>)}</ul>
+                <button type="button" className={`${button} mt-2`} onClick={() => {
+                  const suggestions = new Map(proposedMappings.map(({ question, suggestedField }) => [question.id, suggestedField]));
+                  update(current => ({ ...current, sections: current.sections.map(section => ({
+                    ...section, questions: section.questions.map(question => suggestions.has(question.id)
+                      ? { ...question, standardField: suggestions.get(question.id) }
+                      : question),
+                  })), updatedAt: new Date().toISOString() }));
+                }}>Approve proposed corrections</button>
+                <p className="mt-1">Approval updates this unsaved draft only. It does not change question types, participant answer options or saved answers.</p>
+              </>}
+              {conflictingMappings.length > 0 && <div role="alert" className="mt-2">
+                <p className="font-medium">Conflicting draft mappings need review</p>
+                <ul className="list-disc pl-5">{conflictingMappings.map(({ question, currentField, suggestedField }) =>
+                  <li key={question.id}>{question.label}: currently {vocationalMatchingFieldLabels[currentField]}
+                    {suggestedField ? `; proposed ${vocationalMatchingFieldLabels[suggestedField]}` : '; this question should not be matching evidence'}.</li>)}</ul>
+                <p>Nothing has been changed. Open that question's More options to correct or remove the mapping.</p>
+              </div>}
+              {unmappedMatchingCandidates.length > proposedMappings.length && <p className="mt-2">Some eligible questions have no confident proposed correction. Ambiguous wording is not inferred; review the question's More options only when its meaning is clear.</p>}
+            </>
+            : <p>{matchingCandidates.length ? 'Job matching fields are set up for the eligible questions.' : 'No clear employment-evidence questions have been identified.'}</p>}
+        <p className="mt-2"><strong>Matching categories</strong> describe how REV uses an answer. They are separate from the participant answer options shown in the questionnaire.</p>
+        <p className="mt-2">A published revision requires Service users to answer that revision. Existing answers stay with the questionnaire version where they were recorded and are never copied.</p>
+      </div>
       {errors.length > 0 && <div role="status" className="text-sm text-amber-700">{errors.slice(0, 3).map((message, i) => <p key={i}>{message}</p>)}</div>}
       {preview || template.status === 'published' ? (
         <div className="space-y-4"><h3 className="text-lg font-semibold">{template.title || 'Untitled profile'} - Participant preview</h3><p className="text-sm text-slate-500">Preview only. Answers are not recorded.</p>
@@ -436,32 +490,53 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
                 <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={template.sections[0]?.id === selected.id} onClick={() => { const i = template.sections.findIndex(s => s.id === selected.id); const list = [...template.sections]; [list[i - 1], list[i]] = [list[i], list[i - 1]]; changeSections(list); }}>Move up</button><button type="button" className={button} disabled={template.sections[template.sections.length - 1]?.id === selected.id} onClick={() => { const i = template.sections.findIndex(s => s.id === selected.id); const list = [...template.sections]; [list[i + 1], list[i]] = [list[i], list[i + 1]]; changeSections(list); }}>Move down</button><button type="button" className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700" onClick={() => { if (!window.confirm(`Delete section "${selected.title}" and its questions?`)) return; const list = template.sections.filter(s => s.id !== selected.id); changeSections(list); setActiveId(list[0]?.id ?? ''); }}>Delete section</button></div>
               </div>
               <div className="space-y-3 border-t border-slate-200 pt-4"><h3 className="font-semibold">Questions in this section</h3>{selected.questions.length === 0 && <p className="text-sm text-slate-500">No questions yet. Add the first one below.</p>}
-                {selected.questions.map(q => <div key={q.id} className="space-y-2 rounded-lg border border-slate-200 p-3"><input aria-label="Question wording" className={field} value={q.label} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, label: e.target.value } : item) } : s))} /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-slate-600">{types.find(t => t.value === q.type)?.label}</span><label className="text-xs"><input type="checkbox" checked={q.required} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, required: e.target.checked } : item) } : s))} /> Required</label><button type="button" className="text-xs text-red-700" onClick={() => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.filter(item => item.id !== q.id).map((item, order) => ({ ...item, order })) } : s))}>Remove question</button></div>
-                 <label className="block space-y-1 text-xs">Job-matching field (optional)
-                   <select className={field} aria-label={`Job-matching field for ${q.label}`} value={q.standardField ?? ''}
-                     disabled={isRestrictedVocationalQuestion(selected.title, q)}
-                     onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, standardField: (e.target.value || undefined) as VocationalStandardField | undefined } : item) } : s))}>
-                     <option value="">Not used for job matching</option>
-                     {vocationalStandardFields.map(value => <option key={value} value={value}>{value.replace(/_/g, ' ')}</option>)}
-                   </select>
-                   {isRestrictedVocationalQuestion(selected.title, q) && <span className="text-amber-800">Restricted content cannot be mapped.</span>}
-                 </label></div>)}
+                {selected.questions.map(q => {
+                  const matchingCandidate = isVocationalMatchingCandidate(selected, q);
+                  const mappedField = isVocationalMatchingField(q.standardField) ? q.standardField : null;
+                  const suggestedField = suggestVocationalMatchingField(selected, q);
+                  const mappingConflict = mappedField !== null
+                    && (isVocationalEvidenceMappingProhibited(selected, q)
+                      || (suggestedField !== null && suggestedField !== mappedField));
+                  const showMappingControls = matchingCandidate || q.standardField !== undefined;
+                  return <div key={q.id} className="space-y-2 rounded-lg border border-slate-200 p-3"><input aria-label="Question wording" className={field} value={q.label} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, label: e.target.value } : item) } : s))} /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-slate-600">{types.find(t => t.value === q.type)?.label}</span><label className="text-xs"><input type="checkbox" checked={q.required} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, required: e.target.checked } : item) } : s))} /> Required</label><button type="button" className="text-xs text-red-700" onClick={() => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.filter(item => item.id !== q.id).map((item, order) => ({ ...item, order })) } : s))}>Remove question</button></div>
+                   {matchingCandidate && <p className="text-xs text-slate-600">{mappedField
+                     ? `Job matching category: ${vocationalMatchingFieldLabels[mappedField]}`
+                     : 'Job matching is not set. Review the proposal above or open More options for this question.'}</p>}
+                   {mappingConflict && <p role="alert" className="text-xs font-medium text-amber-800">This draft mapping conflicts with the question wording and needs manager review.</p>}
+                   {showMappingControls && <details className="rounded border border-slate-200 p-2 text-xs">
+                     <summary className="cursor-pointer font-medium">More options</summary>
+                     <div className="mt-2 space-y-2">
+                       <p><strong>Matching category:</strong> how REV may use the answer as evidence. This does not change the participant answer options.</p>
+                       <label className="block space-y-1">Matching category
+                         <select className={field} aria-label={`Opportunity matching field for ${q.label}`} value={q.standardField ?? ''}
+                           onChange={event => changeSections(template.sections.map(section => section.id === selected.id ? {
+                             ...section, questions: section.questions.map(question => question.id === q.id
+                               ? { ...question, standardField: (event.target.value || undefined) as VocationalStandardField | undefined }
+                               : question),
+                           } : section))}>
+                           <option value="">Not used for opportunity matching</option>
+                           {vocationalMatchingFields.map(value => <option key={value} value={value}>{vocationalMatchingFieldLabels[value]}</option>)}
+                           {q.standardField && !mappedField && <option value={q.standardField}>{q.standardField.replace(/_/g, ' ')} (not currently supported)</option>}
+                         </select>
+                       </label>
+                       {mappedField && (q.type === 'short_text' || q.type === 'long_text') && <>
+                         <p><strong>Supported terms:</strong> {vocationalMatchingOptions[mappedField].join(', ')}</p>
+                         <p>Unsupported wording stays saved but is not used as matching evidence.</p>
+                       </>}
+                     </div>
+                   </details>}
+                  </div>;
+                })}
                </div>
               <div className="space-y-3 rounded-lg bg-slate-50 p-4"><h3 className="font-semibold">Add question</h3><label className="block space-y-1 text-sm">Question wording<input className={field} value={questionLabel} onChange={e => setQuestionLabel(e.target.value)} placeholder="e.g. What type of work interests you?" /></label><label className="block space-y-1 text-sm">Answer type<select className={field} value={questionType} onChange={e => setQuestionType(e.target.value as VocationalFieldType)}>{types.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></label>
                 {(questionType === 'single_select' || questionType === 'multi_select') && <label className="block space-y-1 text-sm">Options (one per line)<textarea className={field} rows={4} value={optionsText} onChange={e => setOptionsText(e.target.value)} placeholder={'Construction\nRetail\nHospitality'} /></label>}
                 <label className="block text-sm"><input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)} /> Required question</label>
-                 <label className="block space-y-1 text-sm">Job-matching field (optional)
-                   <select className={field} value={standardField} disabled={isRestrictedVocationalQuestion(selected.title, { label: questionLabel, sensitive: false })} onChange={e => setStandardField(e.target.value as VocationalStandardField | '')}>
-                     <option value="">Not used for job matching</option>
-                     {vocationalStandardFields.map(value => <option key={value} value={value}>{value.replace(/_/g, ' ')}</option>)}
-                   </select>
-                 </label>
                 <button type="button" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => {
                   if (!questionLabel.trim()) { setError('Enter the question wording'); return; }
                   if (update(t => {
                     const added = addVocationalQuestion(t, selected.id, questionLabel, questionType, optionsText.split(/\r?\n/));
-                    return { ...added, sections: added.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map((q, i) => i === s.questions.length - 1 ? { ...q, required, standardField: standardField && !isRestrictedVocationalQuestion(s.title, q) ? standardField : undefined } : q) } : s) };
-                  })) { setQuestionLabel(''); setOptionsText(''); setRequired(false); setStandardField(''); setMessage('Question added. Choose Save and make available when ready.'); }
+                    return { ...added, sections: added.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map((q, i) => i === s.questions.length - 1 ? { ...q, required } : q) } : s) };
+                  })) { setQuestionLabel(''); setOptionsText(''); setRequired(false); setMessage('Question added. Choose Save and make available when ready.'); }
                 }}>+ Add question</button>
               </div>
             </>}
