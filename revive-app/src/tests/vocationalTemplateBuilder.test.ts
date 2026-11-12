@@ -109,6 +109,7 @@ it('suggests only clear existing evidence and preference mappings', () => {
   expect(suggestVocationalMatchingField(section, question('What are your preferred job roles?'))).toBe('employment_goal');
   expect(suggestVocationalMatchingField(section, question('Which sectors are you interested in?'))).toBe('preferred_sector');
   expect(suggestVocationalMatchingField(section, question('Which skills would you like to learn?'))).toBeNull();
+  expect(suggestVocationalMatchingField(section, question('What is your employment status?'))).toBeNull();
   expect(suggestVocationalMatchingField(section, question('What work interests you?'))).toBeNull();
   expect(suggestVocationalMatchingField(section, question('What employment support would help?'))).toBeNull();
   expect(suggestVocationalMatchingField(section, question('How should an employer contact you?'))).toBeNull();

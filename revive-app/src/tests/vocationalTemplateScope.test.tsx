@@ -27,9 +27,10 @@ vi.mock('@/data/supabaseClient', () => ({ supabaseClient: {
 } }));
 const props = { workspaceId: 'workspace', userId: 'user', programmeId: 'alice' };
 function advanced(name: string) {
-  const summary = screen.getByText('More options', {selector:'summary'});
-  if (!summary.closest('details')?.open) fireEvent.click(summary);
-  return screen.getByRole('button',{name});
+  const action = screen.getByText(name, {selector:'button'});
+  const details = action.closest('details');
+  if (!details?.open) fireEvent.click(details!.querySelector('summary')!);
+  return action;
 }
 
 function deferred() {
@@ -149,14 +150,16 @@ it('maps eligible employment questions through a new questionnaire revision', as
   await screen.findByLabelText('Questionnaire name');
   expect(screen.getByLabelText('Set up job matching')).toHaveTextContent('Choose Edit questionnaire to create a revision');
   fireEvent.click(screen.getByRole('button',{name:'Edit questionnaire'}));
-  expect(await screen.findByLabelText('Set up job matching')).toHaveTextContent('No confident suggestions were found');
-  fireEvent.click(screen.getByText('More options',{selector:'summary'}));
+  expect(await screen.findByLabelText('Set up job matching')).toHaveTextContent('no confident proposed correction');
+  const questionCard=screen.getByDisplayValue('What work interests you?').closest('div.space-y-2');
+  fireEvent.click(questionCard!.querySelector('summary')!);
   const mapping=screen.getByLabelText('Opportunity matching field for What work interests you?');
   expect(mapping).toHaveValue('');
   fireEvent.change(mapping,{target:{value:'skills'}});
   expect(screen.getByLabelText('Set up job matching')).toHaveTextContent('Job matching fields are set up');
-  expect(screen.getByText('Supported terms for this text question')).toBeInTheDocument();
-  expect(screen.getByLabelText('Advanced job matching controls')).toHaveTextContent('Unsupported wording stays saved but is not used as matching evidence');
+  expect(questionCard).toHaveTextContent('Supported terms:');
+  expect(questionCard).toHaveTextContent('Unsupported wording stays saved but is not used as matching evidence');
+  expect(screen.getByText('Save draft',{selector:'button'}).closest('details')).not.toHaveTextContent('What work interests you?');
   fireEvent.click(advanced('Save draft'));
   await screen.findByText('Draft saved.');
   const saved=mocks.rpc.mock.calls.find(([name])=>name==='save_rev_vocational_template')![1];
@@ -187,7 +190,7 @@ it('offers only unambiguous suggested mappings and applies them to the unsaved d
   expect(setup).not.toHaveTextContent('employment support');
   expect(setup).not.toHaveTextContent('employer contact');
   expect(mocks.rpc).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button',{name:'Apply suggested mappings'}));
+  fireEvent.click(screen.getByRole('button',{name:'Approve proposed corrections'}));
   expect(mocks.rpc).not.toHaveBeenCalled();
   fireEvent.click(advanced('Save draft'));
   await screen.findByText('Draft saved.');
@@ -197,6 +200,24 @@ it('offers only unambiguous suggested mappings and applies them to the unsaved d
     ['learning',undefined],['support',undefined],['contact',undefined],['restricted',undefined],
   ]);
   expect(saved.every((question:{type:string})=>['long_text','short_text'].includes(question.type))).toBe(true);
+});
+it('flags conflicting draft mappings without silently changing employment status or learning goals', async()=>{
+  mocks.questions=[
+    {id:'roles',sectionId:'section',label:'What are your preferred job roles?',type:'long_text',required:false,sensitive:false,order:0,standardField:'skills'},
+    {id:'learning',sectionId:'section',label:'Which skills would you like to learn?',type:'long_text',required:false,sensitive:false,order:1,standardField:'skills'},
+    {id:'status',sectionId:'section',label:'What is your employment status?',type:'single_select',options:['Employed','Unemployed'],required:false,sensitive:false,order:2,standardField:'employment_goal'},
+  ];
+  render(<VocationalProfileBuilder {...props}/>);
+  await screen.findByLabelText('Questionnaire name');
+  const setup=screen.getByLabelText('Set up job matching');
+  expect(setup).toHaveTextContent('Conflicting draft mappings need review');
+  expect(setup).toHaveTextContent('What are your preferred job roles?: currently Skills; proposed Employment goals.');
+  expect(setup).toHaveTextContent('Which skills would you like to learn?: currently Skills; this question should not be matching evidence.');
+  expect(setup).toHaveTextContent('What is your employment status?: currently Employment goals; this question should not be matching evidence.');
+  expect(screen.queryByRole('button',{name:'Approve proposed corrections'})).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Opportunity matching field for Which skills would you like to learn?')).toHaveValue('skills');
+  expect(screen.getByLabelText('Opportunity matching field for What is your employment status?')).toHaveValue('employment_goal');
+  expect(mocks.rpc).not.toHaveBeenCalled();
 });
 it('creates a separate unsaved questionnaire after publishing without changing the existing one',async()=>{
   mocks.published=true;render(<VocationalProfileBuilder {...props}/>);
@@ -219,7 +240,7 @@ it('saves and makes available in one action using the confirmed saved version, w
   fireEvent.click(action);fireEvent.click(action);
   expect(mocks.rpc).toHaveBeenCalledTimes(1);
   expect(screen.getByLabelText('Questionnaire name')).toBeDisabled();
-  expect(screen.getByText('More options',{selector:'summary'}).closest('details')).not.toHaveAttribute('open');
+  expect(screen.getByText('Publish template',{selector:'button'}).closest('details')).not.toHaveAttribute('open');
   await act(async()=>saving.resolve({data:{id:'template-alice',version:2,status:'draft'},error:null}));
   expect(mocks.rpc).toHaveBeenCalledTimes(2);
   expect(mocks.rpc.mock.calls[1]).toEqual(['publish_rev_vocational_template',{

@@ -3,7 +3,7 @@ import { coreVocationalQuestionCount } from '../domain/vocationalCore';
 import { supabaseClient } from '@/data/supabaseClient';
 import { createVocationalTemplate, addVocationalSection, addVocationalQuestion, addCoreVocationalQuestions } from '../domain/vocationalTemplateBuilder';
 import {
-  isVocationalMatchingCandidate, isVocationalMatchingField,
+  isVocationalEvidenceMappingProhibited, isVocationalMatchingCandidate, isVocationalMatchingField,
   suggestVocationalMatchingField, validateVocationalTemplate, vocationalMatchingFieldLabels,
   vocationalMatchingFields, vocationalMatchingOptions,
   type VocationalStandardField, type VocationalFieldType, type VocationalProfileTemplate, type VocationalQuestion,
@@ -349,11 +349,20 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
   const matchingCandidates = template.sections.flatMap(section => section.questions
     .filter(question => isVocationalMatchingCandidate(section, question))
     .map(question => ({ section, question })));
-  const matchingSetupNeeded = matchingCandidates.filter(({ question }) => !isVocationalMatchingField(question.standardField));
-  const suggestedMappings = matchingSetupNeeded.flatMap(({ section, question }) => {
+  const suggestedMappings = matchingCandidates.flatMap(({ section, question }) => {
     const suggestedField = suggestVocationalMatchingField(section, question);
     return suggestedField ? [{ section, question, suggestedField }] : [];
   });
+  const proposedMappings = suggestedMappings.filter(({ question }) => !isVocationalMatchingField(question.standardField));
+  const unmappedMatchingCandidates = matchingCandidates.filter(({ question }) => !isVocationalMatchingField(question.standardField));
+  const conflictingMappings = template.sections.flatMap(section => section.questions.flatMap(question => {
+    if (!isVocationalMatchingField(question.standardField)) return [];
+    const suggestedField = suggestVocationalMatchingField(section, question);
+    const prohibited = isVocationalEvidenceMappingProhibited(section, question);
+    return prohibited || (suggestedField !== null && suggestedField !== question.standardField)
+      ? [{ section, question, currentField: question.standardField, suggestedField }]
+      : [];
+  }));
   const errors = validateVocationalTemplate(template);
 
   return (
@@ -379,35 +388,6 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
           savedId.current = null; setTemplate(created); setActiveId(created.sections.find(section => coreVocationalQuestionCount([section]) > 0)?.id ?? created.sections[0]?.id ?? '');
           setPreview(false); setDirty(true); setError(''); setMessage('New questionnaire ready to edit. Choose Save and make available when ready.');
         }}>Create another questionnaire</button>
-        {template.status === 'draft' && <div className="mt-4 space-y-3 border-t border-slate-200 pt-3" aria-label="Advanced job matching controls">
-          <h3 className="font-medium">Advanced job matching controls</h3>
-          <p className="text-sm text-slate-600">Use these controls only when the question clearly records existing employment evidence or preferences.</p>
-          {matchingCandidates.length === 0 && <p className="text-sm text-slate-600">No eligible employment-evidence questions identified.</p>}
-          {matchingCandidates.map(({ section, question }) => {
-            const mappedField = isVocationalMatchingField(question.standardField) ? question.standardField : null;
-            return <div key={question.id} className="space-y-1 rounded-lg border border-slate-200 p-3">
-              <p className="text-sm font-medium">{question.label}</p>
-              <p className="text-xs text-slate-600">{section.title}</p>
-              <label className="block space-y-1 text-xs">Opportunity matching field
-                <select className={field} aria-label={`Opportunity matching field for ${question.label}`} value={question.standardField ?? ''}
-                  onChange={event => changeSections(template.sections.map(item => item.id === section.id ? {
-                    ...item, questions: item.questions.map(candidate => candidate.id === question.id
-                      ? { ...candidate, standardField: (event.target.value || undefined) as VocationalStandardField | undefined }
-                      : candidate),
-                  } : item))}>
-                  <option value="">Not used for opportunity matching</option>
-                  {vocationalMatchingFields.map(value => <option key={value} value={value}>{vocationalMatchingFieldLabels[value]}</option>)}
-                  {question.standardField && !mappedField && <option value={question.standardField}>{question.standardField.replace(/_/g, ' ')} (not currently supported)</option>}
-                </select>
-              </label>
-              {mappedField && (question.type === 'short_text' || question.type === 'long_text') && <details className="text-xs text-slate-700">
-                <summary className="cursor-pointer font-medium">Supported terms for this text question</summary>
-                <p className="mt-1">{vocationalMatchingOptions[mappedField].join(', ')}</p>
-                <p className="mt-1">Each comma, semicolon or line-separated answer must match a supported term. Unsupported wording stays saved but is not used as matching evidence.</p>
-              </details>}
-            </div>;
-          })}
-        </div>}
       </details>
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
         {template.status === 'published' ? <p>Staff can use this questionnaire. Choose Edit questionnaire to change the questions. More options lets you start a separate questionnaire. Existing published versions and participant answers remain available.</p> : <p>Review your questions, then choose Save and make available. REV takes care of saving and making the changes available to assigned Employment Specialists. Optional support questions are separate from core profile progress.</p>}
@@ -432,27 +412,37 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
         <input className={field} value={template.title} disabled={availabilityBusy || availabilityUncertain || template.status === 'published' || busy || Boolean(pending) || recoveryBlocked} onChange={e => update(t => ({ ...t, title: e.target.value, updatedAt: new Date().toISOString() }))} />
       </label>
       {coreQuestions === 0 && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This questionnaire has no core employment questions. Employment Specialists cannot complete a core profile from it. {template.status === 'published' ? 'Choose Edit questionnaire to review suggested questions, then Save and make available.' : 'Add core employment questions before publishing. Optional or restricted support questions do not count as core questions.'}</p>}
-      <div className={`rounded-lg border p-3 text-sm ${matchingSetupNeeded.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-green-200 bg-green-50 text-green-900'}`} aria-label="Set up job matching">
+      <div className={`rounded-lg border p-3 text-sm ${unmappedMatchingCandidates.length || conflictingMappings.length ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-green-200 bg-green-50 text-green-900'}`} aria-label="Set up job matching">
         <p className="font-semibold">Set up job matching</p>
-        {template.status === 'published' && matchingSetupNeeded.length > 0
+        {template.status === 'published' && (unmappedMatchingCandidates.length > 0 || conflictingMappings.length > 0)
           ? <p>Choose Edit questionnaire to create a revision and review suggested mappings. Nothing changes until you save and publish that revision.</p>
-          : matchingSetupNeeded.length > 0
-            ? <><p>{matchingSetupNeeded.length} employment {matchingSetupNeeded.length === 1 ? 'question is' : 'questions are'} available for review.</p>
-              {suggestedMappings.length > 0 ? <>
-                <p className="mt-2 font-medium">Suggested mappings for manager review</p>
-                <ul className="list-disc pl-5">{suggestedMappings.map(({ question, suggestedField }) =>
+          : unmappedMatchingCandidates.length > 0 || conflictingMappings.length > 0
+            ? <>
+              {proposedMappings.length > 0 && <>
+                <p className="mt-2 font-medium">Proposed corrections for approval</p>
+                <ul className="list-disc pl-5">{proposedMappings.map(({ question, suggestedField }) =>
                   <li key={question.id}>{question.label} → {vocationalMatchingFieldLabels[suggestedField]}</li>)}</ul>
                 <button type="button" className={`${button} mt-2`} onClick={() => {
-                  const suggestions = new Map(suggestedMappings.map(({ question, suggestedField }) => [question.id, suggestedField]));
+                  const suggestions = new Map(proposedMappings.map(({ question, suggestedField }) => [question.id, suggestedField]));
                   update(current => ({ ...current, sections: current.sections.map(section => ({
                     ...section, questions: section.questions.map(question => suggestions.has(question.id)
                       ? { ...question, standardField: suggestions.get(question.id) }
                       : question),
                   })), updatedAt: new Date().toISOString() }));
-                }}>Apply suggested mappings</button>
-                <p className="mt-1">Review the suggestions before saving. No question types or answers are changed.</p>
-              </> : <p className="mt-1">No confident suggestions were found. Ambiguous questions are not mapped automatically; use More options only when the meaning is clear.</p>}</>
+                }}>Approve proposed corrections</button>
+                <p className="mt-1">Approval updates this unsaved draft only. It does not change question types, participant answer options or saved answers.</p>
+              </>}
+              {conflictingMappings.length > 0 && <div role="alert" className="mt-2">
+                <p className="font-medium">Conflicting draft mappings need review</p>
+                <ul className="list-disc pl-5">{conflictingMappings.map(({ question, currentField, suggestedField }) =>
+                  <li key={question.id}>{question.label}: currently {vocationalMatchingFieldLabels[currentField]}
+                    {suggestedField ? `; proposed ${vocationalMatchingFieldLabels[suggestedField]}` : '; this question should not be matching evidence'}.</li>)}</ul>
+                <p>Nothing has been changed. Open that question's More options to correct or remove the mapping.</p>
+              </div>}
+              {unmappedMatchingCandidates.length > proposedMappings.length && <p className="mt-2">Some eligible questions have no confident proposed correction. Ambiguous wording is not inferred; review the question's More options only when its meaning is clear.</p>}
+            </>
             : <p>{matchingCandidates.length ? 'Job matching fields are set up for the eligible questions.' : 'No clear employment-evidence questions have been identified.'}</p>}
+        <p className="mt-2"><strong>Matching categories</strong> describe how REV uses an answer. They are separate from the participant answer options shown in the questionnaire.</p>
         <p className="mt-2">A published revision requires Service users to answer that revision. Existing answers stay with the questionnaire version where they were recorded and are never copied.</p>
       </div>
       {errors.length > 0 && <div role="status" className="text-sm text-amber-700">{errors.slice(0, 3).map((message, i) => <p key={i}>{message}</p>)}</div>}
@@ -502,10 +492,39 @@ export default function VocationalProfileBuilder({ workspaceId, userId, programm
               <div className="space-y-3 border-t border-slate-200 pt-4"><h3 className="font-semibold">Questions in this section</h3>{selected.questions.length === 0 && <p className="text-sm text-slate-500">No questions yet. Add the first one below.</p>}
                 {selected.questions.map(q => {
                   const matchingCandidate = isVocationalMatchingCandidate(selected, q);
+                  const mappedField = isVocationalMatchingField(q.standardField) ? q.standardField : null;
+                  const suggestedField = suggestVocationalMatchingField(selected, q);
+                  const mappingConflict = mappedField !== null
+                    && (isVocationalEvidenceMappingProhibited(selected, q)
+                      || (suggestedField !== null && suggestedField !== mappedField));
+                  const showMappingControls = matchingCandidate || q.standardField !== undefined;
                   return <div key={q.id} className="space-y-2 rounded-lg border border-slate-200 p-3"><input aria-label="Question wording" className={field} value={q.label} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, label: e.target.value } : item) } : s))} /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-slate-600">{types.find(t => t.value === q.type)?.label}</span><label className="text-xs"><input type="checkbox" checked={q.required} onChange={e => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.map(item => item.id === q.id ? { ...item, required: e.target.checked } : item) } : s))} /> Required</label><button type="button" className="text-xs text-red-700" onClick={() => changeSections(template.sections.map(s => s.id === selected.id ? { ...s, questions: s.questions.filter(item => item.id !== q.id).map((item, order) => ({ ...item, order })) } : s))}>Remove question</button></div>
-                   {matchingCandidate && <p className="text-xs text-slate-600">{isVocationalMatchingField(q.standardField)
-                     ? `Job matching: ${vocationalMatchingFieldLabels[q.standardField]}`
-                     : 'Job matching is not set. Suggested and advanced controls are above.'}</p>}
+                   {matchingCandidate && <p className="text-xs text-slate-600">{mappedField
+                     ? `Job matching category: ${vocationalMatchingFieldLabels[mappedField]}`
+                     : 'Job matching is not set. Review the proposal above or open More options for this question.'}</p>}
+                   {mappingConflict && <p role="alert" className="text-xs font-medium text-amber-800">This draft mapping conflicts with the question wording and needs manager review.</p>}
+                   {showMappingControls && <details className="rounded border border-slate-200 p-2 text-xs">
+                     <summary className="cursor-pointer font-medium">More options</summary>
+                     <div className="mt-2 space-y-2">
+                       <p><strong>Matching category:</strong> how REV may use the answer as evidence. This does not change the participant answer options.</p>
+                       <label className="block space-y-1">Matching category
+                         <select className={field} aria-label={`Opportunity matching field for ${q.label}`} value={q.standardField ?? ''}
+                           onChange={event => changeSections(template.sections.map(section => section.id === selected.id ? {
+                             ...section, questions: section.questions.map(question => question.id === q.id
+                               ? { ...question, standardField: (event.target.value || undefined) as VocationalStandardField | undefined }
+                               : question),
+                           } : section))}>
+                           <option value="">Not used for opportunity matching</option>
+                           {vocationalMatchingFields.map(value => <option key={value} value={value}>{vocationalMatchingFieldLabels[value]}</option>)}
+                           {q.standardField && !mappedField && <option value={q.standardField}>{q.standardField.replace(/_/g, ' ')} (not currently supported)</option>}
+                         </select>
+                       </label>
+                       {mappedField && (q.type === 'short_text' || q.type === 'long_text') && <>
+                         <p><strong>Supported terms:</strong> {vocationalMatchingOptions[mappedField].join(', ')}</p>
+                         <p>Unsupported wording stays saved but is not used as matching evidence.</p>
+                       </>}
+                     </div>
+                   </details>}
                   </div>;
                 })}
                </div>
